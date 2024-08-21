@@ -88,7 +88,7 @@ usage: Options
  -h                      Help
 ```
 
-#### *In silico* spectral library generation using Carafe
+#### Experiment specific *in silico* spectral library generation using Carafe
 
 The following example shows how to generate a spectral library for yeast proteome (**UP000002311_559292.fasta**). The training DIA data (**train_dia_file.mzML**) is a human DIA file and peptide identification is performed using DIA-NN (**diann/report.tsv**).
 
@@ -112,6 +112,17 @@ _KLWWDC[UniMod:4]YWWDR_  KLWWDCYWWDR      571.9258823279321  3                11
 _KLWWDC[UniMod:4]YWWDR_  KLWWDCYWWDR      571.9258823279321  3                117.52           sp|P39961|TOG1_YEAST  0      614.3449    0.0437             b             4               1               noloss
 </code>
 </pre>
+
+
+#### *In silico* spectral library generation using Carafe with pretrained DDA models
+
+The following example shows how to generate a spectral library for yeast proteome (**UP000002311_559292.fasta**) **without fine-tuning pretrained models using DIA data**. No DIA data is required.
+
+```shell
+java -jar carafe-0.0.1.jar -db UP000002311_559292.fasta -fixMod 1 -varMod 0 -maxVar 1 -o test_ai_all -min_mz 200 -maxLength 35 -min_pep_mz 400 -max_pep_mz 1000 -enzyme 2 -miss_c 1 -mode general -minLength 7 -lf_type diann -lf_top_n_frag 20 -lf_frag_n_min 2 -nce 27 -ms_instrument QE -seed 2000
+```
+
+The output spectral library is in a tsv format compatible with DIA-NN.
 
 ## How to cite:
 
