@@ -1,5 +1,5 @@
-# [Carafe](https://github.com/Noble-Lab/Carafe)
-**Carafe** is a tool for experimental specific *in silico* spectral library generation for DIA data analysis.
+# [Carafe](https://doi.org/10.1101/2024.10.15.618504)
+**Carafe** is a tool for experimental specific *in silico* spectral library generation using deep learning for DIA data analysis.
 
 ![Downloads](https://img.shields.io/github/downloads/Noble-Lab/Carafe/total.svg) ![Release](https://img.shields.io/github/release/Noble-Lab/Carafe.svg)![Downloads](https://img.shields.io/github/downloads/Noble-Lab/Carafe/latest/total)
 
@@ -9,7 +9,11 @@ Carafe is written using Java and can be run on Windows, Mac OS and Linux. Both J
 
 ### Install AlphaPeptDeep-DIA
 
-Carafe uses a customized version of AlphaPeptDeep (AlphaPeptDeep-DIA) for model training using DIA data. Please follow the instruction at https://github.com/wenbostar/alphapeptdeep_dia to install AlphaPeptDeep-DIA.
+Carafe uses a customized version of AlphaPeptDeep (AlphaPeptDeep-DIA) for model training using DIA data. Please follow the instruction at https://github.com/wenbostar/alphapeptdeep_dia to install AlphaPeptDeep-DIA. In default, the python package will be installed into a conda environment named "carafe". To run the Carafe java program, the conda environment "carafe" should be activated by using the following command:
+
+```shell
+conda activate carafe
+```
 
 ## Usage
 
@@ -18,12 +22,11 @@ $ java -jar carafe.jar
 usage: Options
  -i <arg>                PSM file
  -ms <arg>               MS file in mzML format
- -fixMod <arg>           Fixed modification, the format is like : 1,2,3. Use '-printPTM' to show all
-                         supported modifications. Default is 1 (Carbamidomethylation(C)[57.02]). If
-                         there is no fixed modification, set it as '-fixMod no' or '-fixMod 0'.
+ -fixMod <arg>           Fixed modification, the format is like : 1,2,3. Default is 1 (Carbamidomethylation(C)[57.02]). 
+                         If there is no fixed modification, set it as '-fixMod no' or '-fixMod 0'.
  -varMod <arg>           Variable modification, the format is the same with -fixMod. Default is 2
                          (Oxidation(M)[15.99]). If there is no variable modification, set it as
-                         '-varMod no' or '-varMod 0'.
+                         '-varMod no' or '-varMod 0'. For phosphorylation, the code is "7,8,9".
  -maxVar <arg>           Max number of variable modifications, default is 1
  -db <arg>               Protein database
  -o <arg>                Output directory
@@ -57,7 +60,8 @@ usage: Options
  -max_pep_mz <arg>       The maximum mz of peptide to consider, default is 1000
  -min_pep_charge <arg>   The minimum precursor charge to consider, default is 2
  -max_pep_charge <arg>   The maximum precursor charge to consider, default is 4
- -lf_type <arg>          Spectral library format: DIA-NN (default) or EncyclopeDIA
+ -lf_type <arg>          Spectral library format: DIA-NN (default), EncyclopeDIA, Skyline (blib) or
+                         mzSpecLib
  -lf_format <arg>        Spectral library file format: tsv (default) or parquet
  -lf_frag_mz_min <arg>   The minimum mz of fragment to consider for library generation, default is
                          200
@@ -65,8 +69,10 @@ usage: Options
                          1800
  -lf_top_n_frag <arg>    The maximum number of fragment ions to consider for library generation,
                          default is 20
- -lf_frag_n_min <arg>    The minimum number of fragment ions to consider for library generation,
+ -lf_min_n_frag <arg>    The minimum number of fragment ions to consider for library generation,
                          default is 2
+ -lf_frag_n_min <arg>    The minimum fragment ion number to consider for library generation, default
+                         is 2
  -rf                     Refine peak boundary or not
  -rf_rt_win <arg>        RT window for refine peak boundary, default is 3 minutes
  -rt_win_offset <arg>    RT window offset for XIC extraction, default is 1 minute
@@ -90,10 +96,10 @@ usage: Options
 
 #### Experiment specific *in silico* spectral library generation using Carafe
 
-The following example shows how to generate a spectral library for yeast proteome (**UP000002311_559292.fasta**). The training DIA data (**train_dia_file.mzML**) is a human DIA file and peptide identification is performed using DIA-NN (**diann/report.tsv**).
+The following example shows how to generate a spectral library for yeast proteome ([UP000002311_559292.fasta](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/SupplementaryFiles/ProteinDatabases/UP000002311_559292.fasta)). The training DIA data ([Crucios_20240320_CH_15_HeLa_CID_27NCE_01.mzML](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/RawFiles/Lumos/8mz_staggered_reCID/Crucios_20240320_CH_15_HeLa_CID_27NCE_01.mzML)) is a human cell line DIA file and peptide identification is performed using DIA-NN ([report.tsv](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/SupplementaryFiles/SearchResults/Lumos_8mz_staggered_reCID_human/report.tsv)).
 
 ```shell
-java -jar carafe-0.0.1.jar -db UP000002311_559292.fasta -fixMod 1 -varMod 0 -maxVar 1 -o test_ai_all -min_mz 200 -maxLength 35 -min_pep_mz 400 -max_pep_mz 1000 -i diann/report.tsv -ms train_dia_file.mzML -itol 20 -itolu ppm -nm -nf 4 -ez -skyline -valid -enzyme 2 -miss_c 1 -se "DIA-NN" -mode general -minLength 7 -lf_type diann -rf -tf all -na 0 -cor 0.8 -lf_top_n_frag 20 -lf_frag_n_min 2 -rf_rt_win 1 -n_ion_min 2 -c_ion_min 2 -seed 2000
+java -jar carafe-0.0.1.jar -db UP000002311_559292.fasta -fixMod 1 -varMod 0 -maxVar 1 -o test_ai_all -min_mz 200 -maxLength 35 -min_pep_mz 400 -max_pep_mz 1000 -i report.tsv -ms Crucios_20240320_CH_15_HeLa_CID_27NCE_01.mzML -itol 20 -itolu ppm -nm -nf 4 -ez -skyline -valid -enzyme 2 -miss_c 1 -se DIA-NN -mode general -minLength 7 -lf_type diann -rf -tf all -na 0 -cor 0.8 -lf_top_n_frag 20 -lf_frag_n_min 0 -rf_rt_win 1.5 -n_ion_min 2 -c_ion_min 2 -seed 2000 -lf_min_n_frag 2
 ```
 
 The output spectral library is in a tsv format compatible with DIA-NN. The content looks like below:
@@ -114,15 +120,37 @@ _KLWWDC[UniMod:4]YWWDR_  KLWWDCYWWDR      571.9258823279321  3                11
 </pre>
 
 
+The above example command line took about 8 minutes on a Linux server (CPU: 36 threads, 128G RAM) using GPU (one Nvidia Quadro RTX4000): set parameter **-device gpu**. It took less than 14 minutes using CPU only on the same server: set parameter **-device cpu**.
+
+
 #### *In silico* spectral library generation using Carafe with pretrained DDA models
 
-The following example shows how to generate a spectral library for yeast proteome (**UP000002311_559292.fasta**) **without fine-tuning pretrained models using DIA data**. No DIA data is required.
+The following example shows how to generate a spectral library for yeast proteome ([UP000002311_559292.fasta](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/SupplementaryFiles/ProteinDatabases/UP000002311_559292.fasta)) **without fine-tuning pretrained models using DIA data**. No DIA data is required.
 
 ```shell
-java -jar carafe-0.0.1.jar -db UP000002311_559292.fasta -fixMod 1 -varMod 0 -maxVar 1 -o test_ai_all -min_mz 200 -maxLength 35 -min_pep_mz 400 -max_pep_mz 1000 -enzyme 2 -miss_c 1 -mode general -minLength 7 -lf_type diann -lf_top_n_frag 20 -lf_frag_n_min 2 -nce 27 -ms_instrument QE -seed 2000
+java -jar carafe-0.0.1.jar -db UP000002311_559292.fasta -fixMod 1 -varMod 0 -maxVar 1 -o test_ai_all -min_mz 200 -maxLength 35 -min_pep_mz 400 -max_pep_mz 1000 -enzyme 2 -miss_c 1 -mode general -minLength 7 -lf_type diann -lf_top_n_frag 20 -lf_frag_n_min 2 -nce 27 -ms_instrument Lumos -seed 2000
 ```
 
 The output spectral library is in a tsv format compatible with DIA-NN.
 
+The above example command line took about 3 minutes on a Linux server (CPU: 36 threads, 128G RAM) using GPU (one Nvidia Quadro RTX4000): set parameter **-device gpu**. It took about 6 minutes using CPU only on the same server: set parameter **-device cpu**.
+
+#### An end-to-end workflow for *in silico* spectral library generation using Carafe
+
+An end-to-end workflow is also available to run Carafe for *in silico* spectral library generation. The workflow is available at https://nf-carafe-ai-ms.readthedocs.io. The workflow is built using [Nextflow](https://www.nextflow.io/) and [Docker](https://www.docker.com/). It is developed to go from a DIA RAW MS/MS file to an experiment-specific *in silico* spectral library for DIA data analysis. The following input files are typically required to run the workflow:
+
+```
+1. A DIA MS/MS file generated using an experiment setting of interest. Both ".raw" and 
+2. A protein database in FASTA format used for peptide detection on the DIA file;
+3. A protein database in FASTA format used for *in silico* spectral library generation.
+4. A parameter file.
+```
+
+The workflow can be run on both Windows and Linux systems. It can also be run on both local computer and cloud computer ([AWS](https://aws.amazon.com/)). GPU is not needed to run this workflow.
+
+Details are available at https://nf-carafe-ai-ms.readthedocs.io.
+
 ## How to cite:
+
+Wen, Bo, Chris Hsu, Wen-Feng Zeng, Michael Riffle, Alexis Chang, Miranda Mudge, Brook L. Nunn, et al. “[Carafe Enables High Quality in Silico Spectral Library Generation for Data-Independent Acquisition Proteomics](https://doi.org/10.1101/2024.10.15.618504).” **bioRxiv**, 2024.10.15.618504.
 
