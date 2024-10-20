@@ -122,6 +122,12 @@ _KLWWDC[UniMod:4]YWWDR_  KLWWDCYWWDR      571.9258823279321  3                11
 
 The above example command line took about 8 minutes on a Linux server (CPU: 36 threads, 128G RAM) using GPU (one Nvidia Quadro RTX4000): set parameter **-device gpu**. It took less than 14 minutes using CPU only on the same server: set parameter **-device cpu**.
 
+##### Modifications supported in Carafe
+
+The following modifications have been tested in Carafe:
+Carbamidomethylation(C) as fixed modification and Oxidation(M), Phosphorylation (STY) as variable modifications.
+
+Add parameter setting ``-fixMod 1`` to set **Carbamidomethylation(C)** as the fixed modification in Carafe. Add parameter setting ``-varMod 2`` to set **Oxidation(M)** as a variable modification. Add parameter setting ``-varMod 7,8,9`` to set **Phosphorylation(STY)** as a variable modification. When variable modification is considered, ``-maxVar`` is recommended to set as ``-maxVar 1``: the max number of variable modifications allowed for each peptide is 1.
 
 #### *In silico* spectral library generation using Carafe with pretrained DDA models
 
