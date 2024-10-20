@@ -1,7 +1,10 @@
 # [Carafe](https://doi.org/10.1101/2024.10.15.618504)
-**Carafe** is a tool for experimental specific *in silico* spectral library generation using deep learning for DIA data analysis.
 
 ![Downloads](https://img.shields.io/github/downloads/Noble-Lab/Carafe/total.svg) ![Release](https://img.shields.io/github/release/Noble-Lab/Carafe.svg)![Downloads](https://img.shields.io/github/downloads/Noble-Lab/Carafe/latest/total)
+
+**Carafe** is a tool for experimental specific *in silico* spectral library generation using deep learning for DIA data analysis. Carafe generates an experimental specific *in silico* spectral library by directly training both RT and fragment ion intensity prediction models on DIA data generated from a specific DIA experiment setting of interest. More details about how Carafe works can be found in the following manuscript:
+
+Wen, Bo, Chris Hsu, Wen-Feng Zeng, Michael Riffle, Alexis Chang, Miranda Mudge, Brook L. Nunn, et al. “[Carafe Enables High Quality in Silico Spectral Library Generation for Data-Independent Acquisition Proteomics](https://doi.org/10.1101/2024.10.15.618504).” **bioRxiv**, 2024.10.15.618504.
 
 ## Installation
 
@@ -96,7 +99,7 @@ usage: Options
 
 #### Experiment specific *in silico* spectral library generation using Carafe
 
-The following example shows how to generate a spectral library for yeast proteome ([UP000002311_559292.fasta](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/SupplementaryFiles/ProteinDatabases/UP000002311_559292.fasta)). The training DIA data ([Crucios_20240320_CH_15_HeLa_CID_27NCE_01.mzML](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/RawFiles/Lumos/8mz_staggered_reCID/Crucios_20240320_CH_15_HeLa_CID_27NCE_01.mzML)) is a human cell line DIA file and peptide identification is performed using DIA-NN ([report.tsv](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/SupplementaryFiles/SearchResults/Lumos_8mz_staggered_reCID_human/report.tsv)).
+The following example shows how to generate a spectral library for yeast proteome ([UP000002311_559292.fasta](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/SupplementaryFiles/ProteinDatabases/UP000002311_559292.fasta)). The training DIA data ([Crucios_20240320_CH_15_HeLa_CID_27NCE_01.mzML](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/RawFiles/Lumos/8mz_staggered_reCID/Crucios_20240320_CH_15_HeLa_CID_27NCE_01.mzML)) is a human cell line DIA file and peptide identification is performed using DIA-NN ([report.tsv](https://panoramaweb.org/_webdav/Panorama%20Public/2024/MacCoss%20-%20Carafe/%40files/SupplementaryFiles/SearchResults/Lumos_8mz_staggered_reCID_human/report.tsv)). Carafe has been tested on using peptide identification result from DIA-NN search for model training.
 
 ```shell
 java -jar carafe-0.0.1.jar -db UP000002311_559292.fasta -fixMod 1 -varMod 0 -maxVar 1 -o test_ai_all -min_mz 200 -maxLength 35 -min_pep_mz 400 -max_pep_mz 1000 -i report.tsv -ms Crucios_20240320_CH_15_HeLa_CID_27NCE_01.mzML -itol 20 -itolu ppm -nm -nf 4 -ez -skyline -valid -enzyme 2 -miss_c 1 -se DIA-NN -mode general -minLength 7 -lf_type diann -rf -tf all -na 0 -cor 0.8 -lf_top_n_frag 20 -lf_frag_n_min 0 -rf_rt_win 1.5 -n_ion_min 2 -c_ion_min 2 -seed 2000 -lf_min_n_frag 2
