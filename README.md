@@ -149,7 +149,7 @@ The above example command line took about 3 minutes on a Linux server (CPU: 36 t
 An end-to-end workflow is also available to run Carafe for *in silico* spectral library generation. The workflow is available at https://nf-carafe-ai-ms.readthedocs.io. The workflow is built using [Nextflow](https://www.nextflow.io/) and [Docker](https://www.docker.com/). It is developed to go from a DIA RAW MS/MS file to an experiment-specific *in silico* spectral library for DIA data analysis. The following input files are typically required to run the workflow:
 
 ```
-1. A DIA MS/MS file generated using an experiment setting of interest. Both ".raw" and 
+1. A DIA MS/MS file generated using an experiment setting of interest. Both ".raw" and ".mzML" formats are supported.
 2. A protein database in FASTA format used for peptide detection on the DIA file;
 3. A protein database in FASTA format used for *in silico* spectral library generation.
 4. A parameter file.
