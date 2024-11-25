@@ -1,0 +1,6 @@
+
+*.jar
+*.class
+
+target/*
+settings.json
