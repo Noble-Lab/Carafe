@@ -131,7 +131,7 @@ The above example command line took about 8 minutes on a Linux server (CPU: 36 t
 The following modifications have been tested in Carafe:
 Carbamidomethylation(C) as fixed modification and Oxidation(M), Phosphorylation (STY) as variable modifications.
 
-Add parameter setting ``-fixMod 1`` to set **Carbamidomethylation(C)** as the fixed modification in Carafe. Add parameter setting ``-varMod 2`` to set **Oxidation(M)** as a variable modification. Add parameter setting ``-varMod 7,8,9`` to set **Phosphorylation(STY)** as a variable modification. When variable modification is considered, ``-maxVar`` is recommended to set as ``-maxVar 1``: the max number of variable modifications allowed for each peptide is 1.
+Add parameter setting ``-fixMod 1`` to set **Carbamidomethylation(C)** as the fixed modification in Carafe. Add parameter setting ``-varMod 2`` to set **Oxidation(M)** as a variable modification. Add parameter setting ``-varMod 7,8,9`` to set **Phosphorylation(STY)** as a variable modification. Add parameter setting ``-varMod 2,7,8,9`` to set both **Phosphorylation(STY)** and **Oxidation(M)** as variable modifications. When variable modification is considered, ``-maxVar`` is recommended to set as ``-maxVar 1``: the max number of variable modifications allowed for each peptide is 1. For **phosphorylation**, the command line parameter ``-mode`` needs to set as ``-mode phosphorylation``.
 
 #### *In silico* spectral library generation using Carafe with pretrained DDA models
 
