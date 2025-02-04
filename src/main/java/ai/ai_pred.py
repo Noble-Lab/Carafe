@@ -156,6 +156,62 @@ def predict_rt(model_dir:str,
         out_file = os.path.join(out_dir,out_prefix+"_rt_pred.tsv")
         pred_res.to_csv(out_file,sep="\t",index=False)
 
+
+def predict_ccs(model_dir:str,
+               pred_file:str,
+               out_dir="./",
+               out_prefix="ccs_pred",
+               device='gpu',
+               mode_type='general',
+               fast_mode=False):
+    import pandas as pd
+    from peptdeep.pretrained_models import ModelManager
+    if mode_type == 'general':
+        model_mgr = ModelManager(mask_modloss=True, device=device)
+    elif mode_type == 'phosphorylation':
+        model_mgr = ModelManager(mask_modloss=False, device=device)
+
+    if model_dir == "generic":
+        if mode_type == 'general':
+            print("Load generic model!")
+            model_mgr.load_installed_models('generic')
+        elif mode_type == 'phosphorylation':
+            print("Load generic model!")
+            model_mgr.load_installed_models('phos')
+    else:
+        if os.path.exists(model_dir+"/ccs_model.pt"):
+            model_mgr.load_external_models(ccs_model_file=model_dir+"/ccs_model.pt")
+        else:
+            print("Load generic model!")
+            model_mgr.load_installed_models('generic')
+
+    # model_mgr.instrument = "Eclipse"
+    model_mgr.out_dir = out_dir
+    model_mgr.verbose = False
+    pd.options.mode.chained_assignment = None  # default=‘warn’
+    if fast_mode:
+        a = pd.read_parquet(pred_file)
+    else:
+        a = pd.read_csv(pred_file,sep="\t",low_memory=False)
+    #a.drop('charge', axis=1, inplace=True)
+    #a.drop_duplicates(inplace=True)
+    a['mod_sites'] = a['mod_sites'].fillna("")
+    a['mods'] = a['mods'].fillna("")
+    if device == 'cpu':
+        ## get the number of cpus
+        n_cpu = os.cpu_count()
+        torch.set_num_threads(n_cpu)
+    pred_res = model_mgr.predict_mobility(a)
+    #pred_res = model_mgr.rt_model.add_irt_column_to_precursor_df(pred_res)
+
+    if fast_mode:
+        out_file = os.path.join(out_dir,out_prefix+"_ccs_pred.parquet")
+        pred_res.to_parquet(out_file, compression='zstd')
+    else:
+        out_file = os.path.join(out_dir,out_prefix+"_ccs_pred.tsv")
+        pred_res.to_csv(out_file,sep="\t",index=False)
+
+
 def check_models_from_docker():
     model_zip = os.path.join(global_settings['PEPTDEEP_HOME'], "pretrained_models/pretrained_models.zip")
     if os.path.exists(model_zip):
@@ -165,6 +221,14 @@ def check_models_from_docker():
         print("The pre-trained models: /data/peptdeep/pretrained_models/pretrained_models.zip")
     else:
         print("Will download pre-trained models from github.")
+
+
+def set_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 if __name__ == "__main__":
@@ -182,9 +246,12 @@ if __name__ == "__main__":
     ## add log transform for intensity data
     parser.add_argument('--log_transform', action='store_true', help='log transform intensity data')
     parser.add_argument('--fast', action='store_true', help='Save data in parquet format to speed up reading and writing')
+    parser.add_argument('--ccs', action='store_true', help='Predict CCS')
 
 
     args = parser.parse_args()
+
+    set_seed(2024)
 
     if args.device == 'cpu':
         ## get the number of cpus
@@ -221,6 +288,14 @@ if __name__ == "__main__":
                            device=args.device,
                            mode_type=args.mode,
                            fast_mode=args.fast)
+        if args.ccs:
+            model_mgr_ccs = predict_ccs(model_dir=args.model_dir,
+                                       pred_file=args.in_file,
+                                       out_dir=args.out_dir,
+                                       out_prefix=args.out_prefix,
+                                       device=args.device,
+                                       mode_type=args.mode,
+                                       fast_mode=args.fast)
     elif args.tf_type == "rt":
         model_mgr = predict_rt(model_dir=args.model_dir, 
                            pred_file=args.in_file, 

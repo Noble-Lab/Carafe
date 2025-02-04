@@ -20,6 +20,7 @@ public final  class AIWorker implements Runnable{
     public double nce;
     public String ai_mode = "-";
     public static boolean fast_mode = false;
+    public static boolean ccs_enabled = false;
 
     public AIWorker(String model_dir, String input_file, String out_dir, String out_prefix, String device, String ms_instrument, double nce, String ai_mode){
 
@@ -54,6 +55,9 @@ public final  class AIWorker implements Runnable{
                 " --mode " + mode;
         if(fast_mode){
             cmd += " --fast";
+        }
+        if(ccs_enabled){
+            cmd += " --ccs";
         }
         run_cmd(cmd);
     }

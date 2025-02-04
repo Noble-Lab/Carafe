@@ -57,6 +57,8 @@ public class PeptideMatch {
 
     public double rt_apex = -1;
 
+    public double im = -1;
+
     public double max_fragment_ion_intensity = -1;
     public int max_fragment_ion_row_index = -1;
     public int max_fragment_ion_column_index = -1;

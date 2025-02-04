@@ -66,7 +66,8 @@ def train_ms2(in_dir:str,
     if log_transform:
         print("log transform intensity data ...")
         b = b.apply(lambda x: np.log10(x+1)/np.log10(2))
-    if use_valid:
+    if use_valid and os.path.exists(in_dir+"/fragment_intensity_valid.tsv"):
+        print("Use valid intensity data ...")
         valid = pd.read_csv(in_dir+"/fragment_intensity_valid.tsv",sep="\t",engine="pyarrow")
     else:
         valid = pd.DataFrame(0, index=range(b.shape[0]), columns=b.columns)
@@ -123,6 +124,55 @@ def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
     model_mgr.rt_model.save(out_dir+"/rt_model.pt")
     return model_mgr
 
+def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
+    import pandas as pd
+    import numpy as np
+    import math
+    from peptdeep.pretrained_models import ModelManager
+    pd.options.mode.chained_assignment = None  # default=‘warn’
+    a = pd.read_csv(in_dir+"/ccs_train_data.tsv",sep="\t")
+    if mode_type == 'general':
+        model_mgr = ModelManager(mask_modloss=True, device=device)
+        model_mgr.load_installed_models('generic')
+    elif mode_type == 'phosphorylation':
+        model_mgr = ModelManager(mask_modloss=False, device=device)
+        model_mgr.load_installed_models('phos')
+
+    model_mgr.train_verbose = True
+    model_mgr.thread_num = 36
+    model_mgr.epoch_to_train_rt_ccs=40
+    model_mgr.warmup_epoch_to_train_rt_ccs = 10
+    #model_mgr.warmup_epoch_to_train_ms2 = 10
+    model_mgr.batch_size_to_train_rt_ccs = 1024
+    #model_mgr.lr_ms2 = 0.0001
+    model_mgr.lr_to_train_rt_ccs = 0.0001
+    model_mgr.top_n_mods_to_train = 10
+    model_mgr.psm_num_per_mod_to_train_rt_ccs = 50
+    n_test_rt = np.min([1000,int(math.ceil(a.shape[0]*0.1)-10)])
+    model_mgr.psm_num_to_train_rt_ccs = a.shape[0] - n_test_rt
+    model_mgr.psm_num_to_test_rt_ccs = n_test_rt
+    model_mgr.out_dir = out_dir
+    print("The number of peptides to train CCS model: ", model_mgr.psm_num_to_train_rt_ccs)
+    print("The number of peptides to test CCS model: ", model_mgr.psm_num_to_test_rt_ccs)
+
+    a.dtypes
+    a['mod_sites'] = a['mod_sites'].fillna("")
+    a['mods'] = a['mods'].fillna("")
+    # a['rt_norm'] = a['apex_rt']
+    if device == 'cpu':
+        ## get the number of cpus
+        n_cpu = os.cpu_count()
+        torch.set_num_threads(n_cpu)
+
+    #from alphabase.peptide.precursor import (
+    #    refine_precursor_df,
+    #    update_precursor_mz
+    #)
+    #if 'precursor_mz' not in a.columns:
+    #    update_precursor_mz(a)
+    model_mgr.train_ccs_model(psm_df=a)
+    model_mgr.ccs_model.save(out_dir+"/ccs_model.pt")
+    return model_mgr
 
 def set_seed(seed):
     np.random.seed(seed)
@@ -157,6 +207,7 @@ if __name__ == "__main__":
     ## add log transform for intensity data
     parser.add_argument('--log_transform', action='store_true', help='log transform intensity data')
     parser.add_argument('--seed', default=2024, help='Random seed for training')
+    parser.add_argument('--no_masking', action='store_true', help='disable masking for training')
 
     args = parser.parse_args()
 
@@ -167,6 +218,11 @@ if __name__ == "__main__":
     instrument = args.instrument
     nce = float(args.nce)
     tf_type = args.tf_type
+
+    if args.no_masking:
+        use_valid = False
+    else:
+        use_valid = True
 
     set_seed(int(args.seed))
 
@@ -191,8 +247,12 @@ if __name__ == "__main__":
         if tf_type == "test":
             print("Test mode ...")
         model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device)
-        model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument)
+        if os.path.exists(os.path.join(in_dir,"ccs_train_data.tsv")):
+            ccs_data = pd.read_csv(os.path.join(in_dir,"ccs_train_data.tsv"),sep="\t")
+            if ccs_data.shape[0] >= 100:
+                model_mgr_ccs = train_ccs(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device)
+        model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid)
     elif tf_type == "rt":
         model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device)
     elif tf_type == "ms2":
-        model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument)
+        model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid)

@@ -32,6 +32,11 @@ public class CParameter {
     public static double maxPeptideMz = 2000.0;
 
     /**
+     * CCS tol for matching
+     */
+    public static double ccs_tol = 0.05;
+
+    /**
      * Any fragment ion with mz <= 200 will not be considered as valid.
      */
     public static double min_fragment_ion_mz = 200.0;

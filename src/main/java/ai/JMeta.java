@@ -12,4 +12,6 @@ public class JMeta {
     public int lf_top_n_fragment_ions = 20;
     public double rt_max = 0.0;
     public double rt_min = 0.0;
+    public double precursor_ion_mz_min = 300;
+    public double precursor_ion_mz_max = 1800.0;
 }

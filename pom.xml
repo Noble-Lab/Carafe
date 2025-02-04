@@ -192,6 +192,28 @@
         <artifactId>logback-classic</artifactId>
         <version>1.4.12</version>
     </dependency>
+    <dependency>
+        <groupId>org.testng</groupId>
+        <artifactId>testng</artifactId>
+        <version>RELEASE</version>
+        <scope>compile</scope>
+    </dependency>
+
+    <dependency>
+        <groupId>com.jerolba</groupId>
+        <artifactId>carpet-record</artifactId>
+        <version>0.2.0</version>
+    </dependency>
+
+
+    <!-- https://mvnrepository.com/artifact/org.eclipse.collections/eclipse-collections -->
+    <dependency>
+        <groupId>org.eclipse.collections</groupId>
+        <artifactId>eclipse-collections</artifactId>
+        <version>12.0.0.M3</version>
+    </dependency>
+
+
 
 </dependencies>
 
@@ -306,8 +328,14 @@
                 </execution>
             </executions>
         </plugin>
-
-
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+                <source>16</source>
+                <target>16</target>
+            </configuration>
+        </plugin>
 
 
     </plugins>

@@ -20,7 +20,6 @@ public class DBGear {
     public boolean I2L = false;
 
     public DBGear() {
-
     }
 
     public HashMap<String,String>  generate_pep2pro_from_pep_index_file(String pep_file) throws IOException {
@@ -361,7 +360,37 @@ public class DBGear {
 
     public static Enzyme getEnzymeByIndex(int ind){
 
-        ArrayList<Enzyme> enzymes = new ArrayList<>();
+        if(ind < 0 || ind > enzymes.size()){
+            System.err.println("Please provide a valid enzyme number:"+ind);
+            System.exit(0);
+        }
+        Cloger.getInstance().logger.info("Use enzyme:"+enzymes.get(ind).getName());
+
+        return(enzymes.get(ind));
+    }
+
+    public static int getEnzymeIndexByName(String enzyme_name){
+
+        int ind = -1;
+        for(int i=0;i<enzymes.size();i++){
+            if(enzymes.get(i).getName().equalsIgnoreCase(enzyme_name)){
+                ind = i;
+                break;
+            }
+        }
+        if(ind == -1){
+            System.err.println("Please provide a valid enzyme name:"+enzyme_name);
+            System.exit(0);
+        }else{
+            Cloger.getInstance().logger.info("Use enzyme:"+enzymes.get(ind).getName());
+        }
+        return ind;
+    }
+
+    private static ArrayList<Enzyme> enzymes = new ArrayList<>();
+    public static void init_enzymes(){
+
+        enzymes.clear();
         // 0 non-specific digestion
         Enzyme enzyme = new Enzyme("NoEnzyme");
         String all_aas = "ABCDEFGHIKLMNPQRSTUVWXY";
@@ -471,13 +500,9 @@ public class DBGear {
         enzyme.addAminoAcidAfter('K');
         enzymes.add(enzyme);
 
-        if(ind < 0 || ind > enzymes.size()){
-            System.err.println("Please provide a valid enzyme number:"+ind);
-            System.exit(0);
-        }
-        Cloger.getInstance().logger.info("Use enzyme:"+enzymes.get(ind).getName());
-
-        return(enzymes.get(ind));
+        enzyme = new Enzyme("NoCut");
+        enzyme.addAminoAcidAfter('X');
+        enzymes.add(enzyme);
     }
 
 }
