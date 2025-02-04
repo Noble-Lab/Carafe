@@ -3868,6 +3868,8 @@ public class AIGear {
                         peptide2rt.get(peptide_mod).scores.add(Double.parseDouble(d[hIndex.get("q_value")]));
                     }else if(hIndex.containsKey("score")){
                         peptide2rt.get(peptide_mod).scores.add(Double.parseDouble(d[hIndex.get("score")]));
+                    }else{
+                        peptide2rt.get(peptide_mod).scores.add(1.0);
                     }
                 }
 
