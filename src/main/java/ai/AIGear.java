@@ -70,7 +70,6 @@ import tech.tablesaw.io.csv.CsvWriteOptions;
 import java.io.*;
 import java.lang.management.MemoryUsage;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -240,6 +239,27 @@ public class AIGear {
     private HashMap<String,String> modification_code2modification = new HashMap<>();
 
     /**
+     * PSI modification name -> site with UniMod accession: e.g., M(UniMod:35) -> Oxidation@M
+     */
+    private HashMap<String,String> psi_name_site2site_unimod_acc = new HashMap<>();
+
+    /**
+     * PSI modification name -> site with UniMod accession: e.g., Oxidation@M -> M[Oxidation]
+     */
+    private HashMap<String,String> psi_name_site2site_psi_name = new HashMap<>();
+
+    /**
+     * PSI modification name -> EncyclopeDIA modification name: e.g., Oxidation@M -> M[Oxidation (M)]
+     */
+    private HashMap<String,String> psi_name_site2encyclopedia_mod_name = new HashMap<>();
+
+
+    /**
+     * PSI modification name -> Skyline modification name: e.g., Oxidation@M -> M[15.999]
+     */
+    private HashMap<String,String> psi_name_site2skyline_mod_name = new HashMap<>();
+
+    /**
      * For modification peptide modeling or not:
      * "-" general peptide modeling
      * "phosphorylation" phosphorylation peptide modeling
@@ -305,6 +325,7 @@ public class AIGear {
         options.addOption("varMod",true,"Variable modification, the format is the same with -fixMod. Default is 2 (Oxidation(M)[15.99]). "+
                 "If there is no variable modification, set it as '-varMod no' or '-varMod 0'.");
         options.addOption("maxVar",true,"Max number of variable modifications, default is 1");
+        options.addOption("printPTM",false,"Print all supported PTMs");
         options.addOption("db", true, "Protein database");
         options.addOption("o", true, "Output directory");
         // options.addOption("tol", true, "Fragment ion m/z tolerance in Da, default is 0.6");
@@ -2180,17 +2201,54 @@ public class AIGear {
         // AGEVLNQPM(UniMod:35)MMAAR2
         // AAAAAAAATMALAAPS(UniMod:21)SPTPESPTMLTK
         // AAAGPLDMSLPST(UniMod:21)PDLK
-        unimod2modification_code.put("C(UniMod:4)", "0");
-        unimod2modification_code.put("M(UniMod:35)", "1");
-        unimod2modification_code.put("S(UniMod:21)", "2");
-        unimod2modification_code.put("T(UniMod:21)", "3");
-        unimod2modification_code.put("Y(UniMod:21)", "4");
+        //unimod2modification_code.put("C(UniMod:4)", "0");
+        //unimod2modification_code.put("M(UniMod:35)", "1");
+        //unimod2modification_code.put("S(UniMod:21)", "2");
+        //unimod2modification_code.put("T(UniMod:21)", "3");
+        //unimod2modification_code.put("Y(UniMod:21)", "4");
 
-        modification_code2modification.put("0", "Carbamidomethylation of C");
-        modification_code2modification.put("1", "Oxidation of M");
-        modification_code2modification.put("2", "Phosphorylation of S");
-        modification_code2modification.put("3", "Phosphorylation of T");
-        modification_code2modification.put("4", "Phosphorylation of Y");
+        //modification_code2modification.put("0", "Carbamidomethylation of C");
+        //modification_code2modification.put("1", "Oxidation of M");
+        //modification_code2modification.put("2", "Phosphorylation of S");
+        //modification_code2modification.put("3", "Phosphorylation of T");
+        //modification_code2modification.put("4", "Phosphorylation of Y");
+
+        HashMap<String,Integer> ptmname2id = new HashMap<>();
+        for(int mod_id: CModification.getInstance().id2ptmname.keySet()){
+            ptmname2id.put(CModification.getInstance().id2ptmname.get(mod_id),mod_id);
+        }
+        for(String mod_name: ModificationUtils.getInstance().mod_name2JMod.keySet()) {
+            JMod jMod = ModificationUtils.getInstance().mod_name2JMod.get(mod_name);
+            // TODO: need to handle terminal modifications
+            if (jMod.position.toLowerCase().contains("term")) {
+                System.err.println("Terminal modification is not supported:" + mod_name);
+            }
+            String site_unimod_acc = jMod.site + "(" + jMod.unimod_accession + ")";
+            // take this as modification code (int)
+            int mod_id = ptmname2id.get(mod_name);
+            unimod2modification_code.put(site_unimod_acc, String.valueOf(mod_id));
+            modification_code2modification.put(String.valueOf(mod_id), mod_name);
+
+            String psi_name = ModificationUtils.getInstance().mod_name2JMod.get(mod_name).psi_ms_name;
+            String psi_name_site;
+            // TODO: need to update to handle different terminal modifications
+            String encyclopedia_mod_name;
+            String skyline_mod_name;
+            if(mod_name.contains("protein N-term")){
+                psi_name_site = psi_name + "@Protein_N-term";
+                // TODO: need to check if this works
+                skyline_mod_name = "["+jMod.mod_mass+"]";
+                encyclopedia_mod_name = "["+jMod.psi_ms_name+"]";
+            }else{
+                psi_name_site = psi_name + "@" + jMod.site;
+                skyline_mod_name = jMod.site+"["+jMod.mod_mass+"]";
+                encyclopedia_mod_name = jMod.site+"["+jMod.psi_ms_name+" ("+jMod.site+")]";
+            }
+            psi_name_site2site_unimod_acc.put(psi_name_site,site_unimod_acc);
+            psi_name_site2site_psi_name.put(psi_name_site,psi_name);
+            psi_name_site2encyclopedia_mod_name.put(psi_name_site,encyclopedia_mod_name);
+            psi_name_site2skyline_mod_name.put(psi_name_site,skyline_mod_name);
+        }
     }
 
 
@@ -5827,6 +5885,15 @@ public class AIGear {
         this.mod_map.put("Phosphorylation of S","Phospho@S");
         this.mod_map.put("Phosphorylation of T","Phospho@T");
         this.mod_map.put("Phosphorylation of Y","Phospho@Y");
+        for(String mod_name: ModificationUtils.getInstance().mod_name2JMod.keySet()){
+            String psi_name = ModificationUtils.getInstance().mod_name2JMod.get(mod_name).psi_ms_name;
+            if(mod_name.contains("protein N-term")){
+                psi_name = psi_name + "@Protein_N-term";
+            }else{
+                psi_name = psi_name + "@" + ModificationUtils.getInstance().mod_name2JMod.get(mod_name).site;
+            }
+            this.mod_map.put(mod_name,psi_name);
+        }
     }
 
 
@@ -8150,8 +8217,14 @@ public class AIGear {
                         aa[ptm_pos] = ptm_name;
                         break;
                     default:
-                        System.out.println("Modification " + names[i] + " is not supported yet!");
-                        System.exit(1);
+                        String psi_name_site = names[i]; // "Phospho@S"
+                        if(this.psi_name_site2site_psi_name.containsKey(psi_name_site)){
+                            ptm_name = this.psi_name_site2site_psi_name.get(psi_name_site);
+                            aa[ptm_pos] = ptm_name;
+                        }else {
+                            System.out.println("Error: modification " + names[i] + " is not supported yet!");
+                            System.exit(1);
+                        }
                 }
             }
             return "_"+StringUtils.join(aa,"")+"_";
@@ -8192,8 +8265,14 @@ public class AIGear {
                         aa[ptm_pos] = ptm_name;
                         break;
                     default:
-                        System.out.println("Modification " + names[i] + " is not supported yet!");
-                        System.exit(1);
+                        String psi_name_site = names[i]; // "Phospho@S"
+                        if(this.psi_name_site2site_unimod_acc.containsKey(psi_name_site)){
+                            ptm_name = this.psi_name_site2site_unimod_acc.get(psi_name_site);
+                            aa[ptm_pos] = ptm_name;
+                        }else {
+                            System.out.println("Error: modification " + names[i] + " is not supported yet!");
+                            System.exit(1);
+                        }
                 }
             }
             return "_"+StringUtils.join(aa,"")+"_";
@@ -8234,8 +8313,14 @@ public class AIGear {
                         aa[ptm_pos] = ptm_name;
                         break;
                     default:
-                        System.out.println("Modification " + names[i] + " is not supported yet!");
-                        System.exit(1);
+                        String psi_name_site = names[i]; // "Phospho@S"
+                        if(this.psi_name_site2encyclopedia_mod_name.containsKey(psi_name_site)){
+                            ptm_name = this.psi_name_site2encyclopedia_mod_name.get(psi_name_site);
+                            aa[ptm_pos] = ptm_name;
+                        }else {
+                            System.out.println("Error: modification " + names[i] + " is not supported yet!");
+                            System.exit(1);
+                        }
                 }
             }
             return "_"+StringUtils.join(aa,"")+"_";
@@ -8275,8 +8360,14 @@ public class AIGear {
                         aa[ptm_pos] = ptm_name;
                         break;
                     default:
-                        System.out.println("Modification " + names[i] + " is not supported yet!");
-                        System.exit(1);
+                        String psi_name_site = names[i]; // "Phospho@S"
+                        if(this.psi_name_site2skyline_mod_name.containsKey(psi_name_site)){
+                            ptm_name = this.psi_name_site2skyline_mod_name.get(psi_name_site);
+                            aa[ptm_pos] = ptm_name;
+                        }else {
+                            System.out.println("Error: modification " + names[i] + " is not supported yet!");
+                            System.exit(1);
+                        }
                 }
             }
             return StringUtils.join(aa,"");

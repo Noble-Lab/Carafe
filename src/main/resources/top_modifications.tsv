@@ -1,14 +1,14 @@
 mod_id	mod_name	mod_mass	mod_type	mod_category	unimod_accession
-1	Carbamidomethylation of C	57.02146372057	Particular Amino Acid	Common	UNIMOD:4
+1	Carbamidomethyl of C	57.02146372057	Particular Amino Acid	Common	UNIMOD:4
 2	Oxidation of M	15.99491461956	Particular Amino Acid	Common	UNIMOD:35
-3	Deamidation of N	0.9840155826899988	Particular Amino Acid	Common_Artifact	UNIMOD:7
-4	Deamidation of Q	0.9840155826899988	Particular Amino Acid	Common_Artifact	UNIMOD:7
-5	Acetylation of peptide N-term	42.0105646837	Peptide N-term	Common_Biological	UNIMOD:1
-6	Acetylation of K	42.0105646837	Particular Amino Acid	Common_Biological	UNIMOD:1
-7	Phosphorylation of S	79.96633052074999	Particular Amino Acid	Common_Biological	UNIMOD:21
-8	Phosphorylation of T	79.96633052074999	Particular Amino Acid	Common_Biological	UNIMOD:21
-9	Phosphorylation of Y	79.96633052074999	Particular Amino Acid	Common_Biological	UNIMOD:21
-10	Ubiquitination of K	114.04292744114	Particular Amino Acid	Less_Common	UNIMOD:121
+3	Deamidated of N	0.9840155826899988	Particular Amino Acid	Common_Artifact	UNIMOD:7
+4	Deamidated of Q	0.9840155826899988	Particular Amino Acid	Common_Artifact	UNIMOD:7
+5	Acetyl of protein N-term	42.0105646837	Peptide N-term	Common_Biological	UNIMOD:1
+6	Acetyl of K	42.0105646837	Particular Amino Acid	Common_Biological	UNIMOD:1
+7	Phospho of S	79.96633052074999	Particular Amino Acid	Common_Biological	UNIMOD:21
+8	Phospho of T	79.96633052074999	Particular Amino Acid	Common_Biological	UNIMOD:21
+9	Phospho of Y	79.96633052074999	Particular Amino Acid	Common_Biological	UNIMOD:21
+10	GG of K	114.04292744114	Particular Amino Acid	Less_Common	UNIMOD:121
 11	TMT 10-plex of K	229.16293213472	Particular Amino Acid	Labeling	UNIMOD:737
 12	TMT 10-plex of peptide N-term	229.16293213472	Peptide N-term	Labeling	UNIMOD:737
 13	TMT 11-plex of K	229.16293213472	Particular Amino Acid	Labeling	UNIMOD:737
@@ -25,5 +25,5 @@ mod_id	mod_name	mod_mass	mod_type	mod_category	unimod_accession
 24	iTRAQ 8-plex of K	304.19903946116	Particular Amino Acid	Labeling	UNIMOD:730
 25	iTRAQ 8-plex of peptide N-term	304.19903946116	Peptide N-term	Labeling	UNIMOD:730
 26	iTRAQ 8-plex of Y	304.19903946116	Particular Amino Acid	Labeling	UNIMOD:730
-27	Pyrolidone from E	-18.0105646837	Peptide N-term - Particular Amino Acid(s)	Common_Artifact	UNIMOD:27
-28	Pyrolidone from Q	-17.02654910101	Peptide N-term - Particular Amino Acid(s)	Common_Artifact	UNIMOD:28
+27	Glu->pyro-Glu of E	-18.0105646837	Peptide N-term - Particular Amino Acid(s)	Common_Artifact	UNIMOD:27
+28	Gln->pyro-Glu of Q	-17.02654910101	Peptide N-term - Particular Amino Acid(s)	Common_Artifact	UNIMOD:28

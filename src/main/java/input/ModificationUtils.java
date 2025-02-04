@@ -26,6 +26,11 @@ public class ModificationUtils {
     public static double rightMass = 250.0;
     public static String out_dir = "./";
 
+    /**
+     * Modification name to JMod
+     */
+    public final HashMap<String,JMod> mod_name2JMod = new HashMap<>();
+
     private ModificationUtils(){
         ptmFactory = ModificationFactory.getInstance();
         try {
@@ -44,6 +49,10 @@ public class ModificationUtils {
 
     public static void main(String[] args) {
 
+    }
+
+    public JMod getJModByName(String modName){
+        return mod_name2JMod.get(modName);
     }
 
     private void importModFromUnimod() throws IOException {
@@ -151,6 +160,12 @@ public class ModificationUtils {
                     if(!ptmFactory.containsModification(ptm.getName())){
                         ptmFactory.addUserModification(ptm);
                     }
+                    mod_name2JMod.put(ptm.getName(),new JMod());
+                    mod_name2JMod.get(ptm.getName()).psi_ms_name = unimodModification.getTitle();
+                    mod_name2JMod.get(ptm.getName()).unimod_accession = "UniMod:"+unimodModification.getRecordId();
+                    mod_name2JMod.get(ptm.getName()).position = position;
+                    mod_name2JMod.get(ptm.getName()).site = site;
+                    mod_name2JMod.get(ptm.getName()).mod_mass = monoMass;
                 }
                 if(!testSite.contains(site)){
                     testSite.add(site);

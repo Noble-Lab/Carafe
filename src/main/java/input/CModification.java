@@ -7,18 +7,17 @@ import org.apache.commons.io.IOUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
+import java.util.*;
 
 public final class CModification {
 
     private static CModification instance = null;
-    private final HashMap<Integer,String> id2ptmname = new HashMap<>();
+    public final Map<Integer,String> id2ptmname = new LinkedHashMap<>();
     private final ArrayList<Modification> var_Modifications = new ArrayList<>();
 
     private CModification(){
+        // the alphabetically ordered names of the user defined modifications
+        ModificationUtils.getInstance();
         ModificationFactory ptmFactory = ModificationFactory.getInstance();
         ArrayList<String> ptmNames = ptmFactory.getDefaultModificationsOrdered();
         ArrayList<String> top_mods = load_top_modifications();
@@ -34,8 +33,6 @@ public final class CModification {
                 ptm_name_list.add(name);
             }
         }
-        // the alphabetically ordered names of the user defined modifications
-        ModificationUtils.getInstance();
         ArrayList<String> usrPTMs = ptmFactory.getUserModificationsOrdered();
         for (String name: usrPTMs){
             if(ptm_name_list.contains(name)){
