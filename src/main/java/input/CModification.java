@@ -6,6 +6,7 @@ import main.java.ai.AIGear;
 import org.apache.commons.io.IOUtils;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -125,5 +126,19 @@ public final class CModification {
             System.out.println(ptm_id + "\t" + ptm.getName() + "\t" + ptm.getMass() + "\t" + ptm.getModificationType()+"\t"+ptm.getCategory().name()+"\t"+unimod_acc);
 
         }
+    }
+
+    public void change_mod_mass(int ptm_id, double mass){
+        ModificationFactory ptmFactory = ModificationFactory.getInstance();
+        Modification ptm = ptmFactory.getModification(id2ptmname.get(ptm_id));
+        try {
+            Field field = Modification.class.getDeclaredField("mass");
+            field.setAccessible(true);
+            field.set(ptm,mass);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+        System.out.println("Mass of " + ptm.getName() + " changed to " + ptm.getMass());
+
     }
 }

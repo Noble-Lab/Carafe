@@ -385,6 +385,7 @@ public class AIGear {
         options.addOption("tf", true, "Fine tune type: ms2, rt, all (default)");
         options.addOption("seed", true, "Random seed, 2024 in default");
         options.addOption("fast", false, "Save data to parquet format for speeding up reading and writing");
+        options.addOption("mod2mass",true,"Change the mass of a modification. The format is like: 2@0");
 
         options.addOption("ccs", false, "CCS training");
 
@@ -442,6 +443,14 @@ public class AIGear {
 
         if (cmd.hasOption("maxVar")) {
             CParameter.maxVarMods = Integer.parseInt(cmd.getOptionValue("maxVar"));
+        }
+
+        if(cmd.hasOption("mod2mass")){
+            // change the mass of a modification
+            for(String mod: cmd.getOptionValue("mod2mass").split(",")){
+                String[]d = mod.split("@");
+                CModification.getInstance().change_mod_mass(Integer.parseInt(d[0]), Double.parseDouble(d[1]));
+            }
         }
 
         if(cmd.hasOption("clip_n_m")){
@@ -3902,7 +3911,13 @@ public class AIGear {
                 String peptide = d[hIndex.get("peptide")];
                 String modification = d[hIndex.get("modification")];
                 int precursor_charge = Integer.parseInt(d[hIndex.get("charge")]);
-                this.add_peptide(peptide,modification);
+                try {
+                    this.add_peptide(peptide,modification);
+                } catch (NullPointerException e){
+                    System.err.println("Error: "+peptide+":"+modification+":"+d[hIndex.get("spectrum_title")]);
+                    System.exit(1);
+                }
+
                 String peptide_mod = peptide + "_" + modification;
                 String spectrum_id = d[hIndex.get("spectrum_title")];
                 if(!ms_file2spectrumID2row_index.containsKey(ms_file)){
