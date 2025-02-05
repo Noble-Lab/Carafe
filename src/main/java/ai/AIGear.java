@@ -233,33 +233,6 @@ public class AIGear {
     public boolean no_masking = false;
 
     /**
-     * Modification mapping: UniMod accession -> AI modification name
-     */
-    private HashMap<String,String> unimod2modification_code = new HashMap<>();
-    private HashMap<String,String> modification_code2modification = new HashMap<>();
-
-    /**
-     * PSI modification name -> site with UniMod accession: e.g., M(UniMod:35) -> Oxidation@M
-     */
-    private HashMap<String,String> psi_name_site2site_unimod_acc = new HashMap<>();
-
-    /**
-     * PSI modification name -> site with UniMod accession: e.g., Oxidation@M -> M[Oxidation]
-     */
-    private HashMap<String,String> psi_name_site2site_psi_name = new HashMap<>();
-
-    /**
-     * PSI modification name -> EncyclopeDIA modification name: e.g., Oxidation@M -> M[Oxidation (M)]
-     */
-    private HashMap<String,String> psi_name_site2encyclopedia_mod_name = new HashMap<>();
-
-
-    /**
-     * PSI modification name -> Skyline modification name: e.g., Oxidation@M -> M[15.999]
-     */
-    private HashMap<String,String> psi_name_site2skyline_mod_name = new HashMap<>();
-
-    /**
      * For modification peptide modeling or not:
      * "-" general peptide modeling
      * "phosphorylation" phosphorylation peptide modeling
@@ -1741,13 +1714,11 @@ public class AIGear {
             hIndex = get_column_name2index(psm_file);
             if(this.search_engine.equalsIgnoreCase("DIANN") || this.search_engine.equalsIgnoreCase("DIA-NN")) {
                 System.out.println("DIANN search engine");
-                this.load_UniMods();
                 String new_psm_file = this.out_dir + File.separator + "psm_rank_" + fdr_cutoff + ".tsv";
                 remove_interference_peptides_diann(psm_file, new_psm_file);
                 ms_file2psm = get_ms_file2psm_diann(new_psm_file, ms_file, fdr_cutoff);
             }else if(this.search_engine.equalsIgnoreCase("generic") && this.data_type.equalsIgnoreCase("DDA")){
                 System.out.println("Generic search engine format for DDA data");
-                this.load_UniMods();
                 ms_file2psm = get_ms_file2psm(psm_file, ms_file, fdr_cutoff);
             }else {
                 String new_psm_file = this.out_dir + File.separator + "psm_rank_" + fdr_cutoff + ".tsv";
@@ -2205,64 +2176,9 @@ public class AIGear {
 
     }
 
-    private void load_UniMods(){
-        // AAAAC(UniMod:4)LDK2
-        // AGEVLNQPM(UniMod:35)MMAAR2
-        // AAAAAAAATMALAAPS(UniMod:21)SPTPESPTMLTK
-        // AAAGPLDMSLPST(UniMod:21)PDLK
-        //unimod2modification_code.put("C(UniMod:4)", "0");
-        //unimod2modification_code.put("M(UniMod:35)", "1");
-        //unimod2modification_code.put("S(UniMod:21)", "2");
-        //unimod2modification_code.put("T(UniMod:21)", "3");
-        //unimod2modification_code.put("Y(UniMod:21)", "4");
-
-        //modification_code2modification.put("0", "Carbamidomethylation of C");
-        //modification_code2modification.put("1", "Oxidation of M");
-        //modification_code2modification.put("2", "Phosphorylation of S");
-        //modification_code2modification.put("3", "Phosphorylation of T");
-        //modification_code2modification.put("4", "Phosphorylation of Y");
-
-        HashMap<String,Integer> ptmname2id = new HashMap<>();
-        for(int mod_id: CModification.getInstance().id2ptmname.keySet()){
-            ptmname2id.put(CModification.getInstance().id2ptmname.get(mod_id),mod_id);
-        }
-        for(String mod_name: ModificationUtils.getInstance().mod_name2JMod.keySet()) {
-            JMod jMod = ModificationUtils.getInstance().mod_name2JMod.get(mod_name);
-            // TODO: need to handle terminal modifications
-            if (jMod.position.toLowerCase().contains("term")) {
-                System.err.println("Terminal modification is not supported:" + mod_name);
-            }
-            String site_unimod_acc = jMod.site + "(" + jMod.unimod_accession + ")";
-            // take this as modification code (int)
-            int mod_id = ptmname2id.get(mod_name);
-            unimod2modification_code.put(site_unimod_acc, String.valueOf(mod_id));
-            modification_code2modification.put(String.valueOf(mod_id), mod_name);
-
-            String psi_name = ModificationUtils.getInstance().mod_name2JMod.get(mod_name).psi_ms_name;
-            String psi_name_site;
-            // TODO: need to update to handle different terminal modifications
-            String encyclopedia_mod_name;
-            String skyline_mod_name;
-            if(mod_name.contains("protein N-term")){
-                psi_name_site = psi_name + "@Protein_N-term";
-                // TODO: need to check if this works
-                skyline_mod_name = "["+jMod.mod_mass+"]";
-                encyclopedia_mod_name = "["+jMod.psi_ms_name+"]";
-            }else{
-                psi_name_site = psi_name + "@" + jMod.site;
-                skyline_mod_name = jMod.site+"["+jMod.mod_mass+"]";
-                encyclopedia_mod_name = jMod.site+"["+jMod.psi_ms_name+" ("+jMod.site+")]";
-            }
-            psi_name_site2site_unimod_acc.put(psi_name_site,site_unimod_acc);
-            psi_name_site2site_psi_name.put(psi_name_site,psi_name);
-            psi_name_site2encyclopedia_mod_name.put(psi_name_site,encyclopedia_mod_name);
-            psi_name_site2skyline_mod_name.put(psi_name_site,skyline_mod_name);
-        }
-    }
-
 
     public void get_ms2_matches_diann() throws IOException {
-        this.load_UniMods();
+        CModification.getInstance();
         this.ion_type2column_index.clear();
         double original_fragment_ion_intensity_cutoff = CParameter.fragment_ion_intensity_cutoff;
         CParameter.fragment_ion_intensity_cutoff = 0.0001;
@@ -2487,6 +2403,9 @@ public class AIGear {
                         if (hIndex.containsKey("PTM.Site.Confidence") && mod_seq.contains("UniMod:21")) {
                             // only filtering out low confidence phosphorylation peptides
                             if (Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff) {
+                                continue;
+                            }
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
                                 continue;
                             }
                         }
@@ -2851,6 +2770,10 @@ public class AIGear {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                                n_ptm_site_low_confidence++;
+                                continue;
+                            }
                         }
                     }else{
                         System.err.println("Modification type is not supported:"+this.mod_ai);
@@ -3142,7 +3065,6 @@ public class AIGear {
      * @throws IOException
      */
     public void get_ms2_matches_diann_dda() throws IOException {
-        this.load_UniMods();
         this.ion_type2column_index.clear();
         double original_fragment_ion_intensity_cutoff = CParameter.fragment_ion_intensity_cutoff;
         CParameter.fragment_ion_intensity_cutoff = 0.0001;
@@ -3350,6 +3272,9 @@ public class AIGear {
                             if (Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff) {
                                 continue;
                             }
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                                continue;
+                            }
                         }
                     }else{
                         System.err.println("Modification type is not supported:"+this.mod_ai);
@@ -3524,6 +3449,10 @@ public class AIGear {
                         if (hIndex.containsKey("PTM.Site.Confidence") && mod_seq.contains("UniMod:21")) {
                             // only filtering out low confidence phosphorylation peptides
                             if(Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff){
+                                n_ptm_site_low_confidence++;
+                                continue;
+                            }
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
@@ -3759,7 +3688,6 @@ public class AIGear {
      * @throws IOException
      */
     public void get_ms2_matches_generic_dda() throws IOException {
-        this.load_UniMods();
         this.ion_type2column_index.clear();
         double original_fragment_ion_intensity_cutoff = CParameter.fragment_ion_intensity_cutoff;
         CParameter.fragment_ion_intensity_cutoff = 0.0001;
@@ -4106,6 +4034,10 @@ public class AIGear {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                                n_ptm_site_low_confidence++;
+                                continue;
+                            }
                         }
                     }else{
                         System.err.println("Modification type is not supported:"+this.mod_ai);
@@ -4217,7 +4149,6 @@ public class AIGear {
      * @throws IOException
      */
     public void get_ms2_matches_diann_ccs() throws IOException {
-        this.load_UniMods();
         this.ion_type2column_index.clear();
         double original_fragment_ion_intensity_cutoff = CParameter.fragment_ion_intensity_cutoff;
         CParameter.fragment_ion_intensity_cutoff = 0.0001;
@@ -4419,6 +4350,9 @@ public class AIGear {
                         if (hIndex.containsKey("PTM.Site.Confidence") && mod_seq.contains("UniMod:21")) {
                             // only filtering out low confidence phosphorylation peptides
                             if(Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff){
+                                continue;
+                            }
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
                                 continue;
                             }
                         }
@@ -4797,6 +4731,10 @@ public class AIGear {
                         if (hIndex.containsKey("PTM.Site.Confidence") && mod_seq.contains("UniMod:21")) {
                             // only filtering out low confidence phosphorylation peptides
                             if(Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff){
+                                n_ptm_site_low_confidence++;
+                                continue;
+                            }
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
@@ -5333,7 +5271,6 @@ public class AIGear {
     }
 
     public void get_ms2spectrum_index(String psm_file, String ms_file, DBGear dbGear, String out_dir){
-        this.load_UniMods();
         ArrayList<String> matches = new ArrayList<>();
         try {
             BufferedReader pReader = new BufferedReader(new FileReader(psm_file));
@@ -5358,7 +5295,6 @@ public class AIGear {
     }
 
     public void get_ms2spectrum_index_and_export_mgf(String psm_file, String ms_file, DBGear dbGear, String out_dir){
-        this.load_UniMods();
         ArrayList<String> matches = new ArrayList<>();
         try {
             BufferedReader pReader = new BufferedReader(new FileReader(psm_file));
@@ -5681,9 +5617,9 @@ public class AIGear {
         if(mod_seq.equalsIgnoreCase(peptide)){
             return "-";
         }else{
-            for(String unimod: this.unimod2modification_code.keySet()){
+            for(String unimod: CModification.getInstance().unimod2modification_code.keySet()){
                 if(mod_seq.contains(unimod)){
-                    mod_seq = mod_seq.replace(unimod,this.unimod2modification_code.get(unimod));
+                    mod_seq = mod_seq.replace(unimod,CModification.getInstance().unimod2modification_code.get(unimod));
                 }
             }
             if(mod_seq.length()!=peptide.length()){
@@ -5695,10 +5631,10 @@ public class AIGear {
             int pos;
             String mod_name;
             for (int i = 0; i < aas.length; i++) {
-                if(this.modification_code2modification.containsKey(aas[i])){
+                if(CModification.getInstance().modification_code2modification.containsKey(aas[i])){
                     // Oxidation of M@12[15.9949]
                     pos = i+1;
-                    mod_name = this.modification_code2modification.get(aas[i]);
+                    mod_name = CModification.getInstance().modification_code2modification.get(aas[i]);
                     mods.add(mod_name+"@"+pos+"["+ CModification.getInstance().getPTMbyName(mod_name).getMass()+"]");
                 }
             }
@@ -5881,8 +5817,12 @@ public class AIGear {
                     // no need to change
                     // fixed modification.
                 }else{
-                    System.out.println("Unrecognized modification found:"+peptide+" -> "+modification);
-                    unrecognized_mod_found = true;
+                    if(CModification.getInstance().ptm_name2id.containsKey(mod_name)) {
+                        aa[Integer.parseInt(pos) - 1] = String.valueOf(CModification.getInstance().ptm_name2id.get(mod_name));
+                    }else {
+                        System.out.println("Unrecognized modification found:" + peptide + " -> " + modification);
+                        unrecognized_mod_found = true;
+                    }
                 }
             }
             if (unrecognized_mod_found){
@@ -6817,7 +6757,8 @@ public class AIGear {
         if(this.mod_ai.equals("general") || this.mod_ai.equals("-")) {
             // no any neutral loss
         }else if(this.mod_ai.equals("phosphorylation")) {
-            if (ModificationUtils.getInstance().getModificationString(objPeptide).toLowerCase().contains("phosphorylation")) {
+            if (ModificationUtils.getInstance().getModificationString(objPeptide).toLowerCase().contains("phosphorylation") ||
+                    ModificationUtils.getInstance().getModificationString(objPeptide).toLowerCase().contains("phospho")) {
                 //annotationSettings.addNeutralLoss(NeutralLoss.H3PO4);
                 specificAnnotationPreferences.setNeutralLossesMap(getNeutralLossesMap(objPeptide));
                 //annotationSettings.addNeutralLoss(NeutralLoss.HPO3);
@@ -6864,7 +6805,8 @@ public class AIGear {
 
         for (ModificationMatch modMatch : modificationMatches) {
 
-            if(modMatch.getModification().equals("Phosphorylation of S") || modMatch.getModification().equals("Phosphorylation of T")) {
+            if(modMatch.getModification().equals("Phosphorylation of S") || modMatch.getModification().equals("Phosphorylation of T") ||
+                    modMatch.getModification().equals("Phospho of S") || modMatch.getModification().equals("Phospho of T")) {
                 int site = com.compomics.util.experiment.identification.utils.ModificationUtils.getSite(
                         modMatch.getSite(),
                         sequence.length()
@@ -7981,7 +7923,7 @@ public class AIGear {
                     for(int j=0;j<pos.length;j++) {
                         skylineIO.pStatementModifications.setInt(1, RefSpectraID); // RefSpectraID INTEGER
                         skylineIO.pStatementModifications.setInt(2, Integer.parseInt(pos[j])); // position INTEGER
-                        skylineIO.pStatementModifications.setDouble(3, SkylineIO.mod2mass.get(names[j])); // mass REAL
+                        skylineIO.pStatementModifications.setDouble(3, CModification.getInstance().get_mod_mass_by_psi_name_site(names[j])); // mass REAL
                         skylineIO.pStatementModifications.addBatch();
                     }
                 }
@@ -8233,8 +8175,8 @@ public class AIGear {
                         break;
                     default:
                         String psi_name_site = names[i]; // "Phospho@S"
-                        if(this.psi_name_site2site_psi_name.containsKey(psi_name_site)){
-                            ptm_name = this.psi_name_site2site_psi_name.get(psi_name_site);
+                        if(CModification.getInstance().psi_name_site2site_psi_name.containsKey(psi_name_site)){
+                            ptm_name = CModification.getInstance().psi_name_site2site_psi_name.get(psi_name_site);
                             aa[ptm_pos] = ptm_name;
                         }else {
                             System.out.println("Error: modification " + names[i] + " is not supported yet!");
@@ -8281,8 +8223,8 @@ public class AIGear {
                         break;
                     default:
                         String psi_name_site = names[i]; // "Phospho@S"
-                        if(this.psi_name_site2site_unimod_acc.containsKey(psi_name_site)){
-                            ptm_name = this.psi_name_site2site_unimod_acc.get(psi_name_site);
+                        if(CModification.getInstance().psi_name_site2site_unimod_acc.containsKey(psi_name_site)){
+                            ptm_name = CModification.getInstance().psi_name_site2site_unimod_acc.get(psi_name_site);
                             aa[ptm_pos] = ptm_name;
                         }else {
                             System.out.println("Error: modification " + names[i] + " is not supported yet!");
@@ -8329,8 +8271,8 @@ public class AIGear {
                         break;
                     default:
                         String psi_name_site = names[i]; // "Phospho@S"
-                        if(this.psi_name_site2encyclopedia_mod_name.containsKey(psi_name_site)){
-                            ptm_name = this.psi_name_site2encyclopedia_mod_name.get(psi_name_site);
+                        if(CModification.getInstance().psi_name_site2encyclopedia_mod_name.containsKey(psi_name_site)){
+                            ptm_name = CModification.getInstance().psi_name_site2encyclopedia_mod_name.get(psi_name_site);
                             aa[ptm_pos] = ptm_name;
                         }else {
                             System.out.println("Error: modification " + names[i] + " is not supported yet!");
@@ -8376,8 +8318,8 @@ public class AIGear {
                         break;
                     default:
                         String psi_name_site = names[i]; // "Phospho@S"
-                        if(this.psi_name_site2skyline_mod_name.containsKey(psi_name_site)){
-                            ptm_name = this.psi_name_site2skyline_mod_name.get(psi_name_site);
+                        if(CModification.getInstance().psi_name_site2skyline_mod_name.containsKey(psi_name_site)){
+                            ptm_name = CModification.getInstance().psi_name_site2skyline_mod_name.get(psi_name_site);
                             aa[ptm_pos] = ptm_name;
                         }else {
                             System.out.println("Error: modification " + names[i] + " is not supported yet!");

@@ -1,5 +1,6 @@
 package main.java.input;
 
+import com.compomics.util.experiment.biology.ions.NeutralLoss;
 import com.compomics.util.experiment.biology.modifications.Modification;
 import com.compomics.util.experiment.biology.modifications.ModificationCategory;
 import com.compomics.util.experiment.biology.modifications.ModificationFactory;
@@ -157,6 +158,13 @@ public class ModificationUtils {
                     CvTerm cvTerm = new CvTerm();
                     cvTerm.setAccession(unimod_accession);
                     ptm.setUnimodCvTerm(cvTerm);
+                    // This is critical for user-defined modifications with neutral losses
+                    if(ptm.getName().equalsIgnoreCase("Phospho of S") ||
+                            ptm.getName().equalsIgnoreCase("Phospho of T")){
+                        ArrayList<NeutralLoss> nl_list = new ArrayList<>();
+                        nl_list.add(NeutralLoss.H3PO4);
+                        ptm.setNeutralLosses(nl_list);
+                    }
                     if(!ptmFactory.containsModification(ptm.getName())){
                         ptmFactory.addUserModification(ptm);
                     }

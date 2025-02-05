@@ -16,6 +16,38 @@ public final class CModification {
     public final Map<Integer,String> id2ptmname = new LinkedHashMap<>();
     private final ArrayList<Modification> var_Modifications = new ArrayList<>();
 
+    /**
+     * Modification mapping: UniMod accession -> AI modification name
+     */
+    public HashMap<String,String> unimod2modification_code = new HashMap<>();
+    public HashMap<String,String> modification_code2modification = new HashMap<>();
+
+    /**
+     * PSI modification name -> site with UniMod accession: e.g., M(UniMod:35) -> Oxidation@M
+     */
+    public HashMap<String,String> psi_name_site2site_unimod_acc = new HashMap<>();
+
+    /**
+     * PSI modification name -> site with UniMod accession: e.g., Oxidation@M -> M[Oxidation]
+     */
+    public HashMap<String,String> psi_name_site2site_psi_name = new HashMap<>();
+
+    /**
+     * PSI modification name -> EncyclopeDIA modification name: e.g., Oxidation@M -> M[Oxidation (M)]
+     */
+    public HashMap<String,String> psi_name_site2encyclopedia_mod_name = new HashMap<>();
+
+
+    /**
+     * PSI modification name -> Skyline modification name: e.g., Oxidation@M -> M[15.999]
+     */
+    public HashMap<String,String> psi_name_site2skyline_mod_name = new HashMap<>();
+
+    /**
+     * PTM name -> PTM id
+     */
+    public HashMap<String,Integer> ptm_name2id = new HashMap<>();
+
     private CModification(){
         // the alphabetically ordered names of the user defined modifications
         ModificationUtils.getInstance();
@@ -47,7 +79,7 @@ public final class CModification {
         }
 
         addVarMods(CParameter.varMods);
-
+        load_UniMods();
     }
 
     public static CModification getInstance() {
@@ -55,6 +87,71 @@ public final class CModification {
             instance = new CModification();
         }
         return instance;
+    }
+
+    public String get_mod_name_by_site_unimod_acc(String site_unimod_acc){
+        return modification_code2modification.get(unimod2modification_code.get(site_unimod_acc));
+    }
+
+    public double get_mod_mass_by_psi_name_site(String psi_name_site){
+        String site_unimod_acc = psi_name_site2site_unimod_acc.get(psi_name_site);
+        String mod_code = unimod2modification_code.get(site_unimod_acc);
+        int mod_id = Integer.parseInt(mod_code);
+        return ModificationFactory.getInstance().getModification(id2ptmname.get(mod_id)).getMass();
+    }
+
+    private void load_UniMods(){
+        // AAAAC(UniMod:4)LDK2
+        // AGEVLNQPM(UniMod:35)MMAAR2
+        // AAAAAAAATMALAAPS(UniMod:21)SPTPESPTMLTK
+        // AAAGPLDMSLPST(UniMod:21)PDLK
+        //unimod2modification_code.put("C(UniMod:4)", "0");
+        //unimod2modification_code.put("M(UniMod:35)", "1");
+        //unimod2modification_code.put("S(UniMod:21)", "2");
+        //unimod2modification_code.put("T(UniMod:21)", "3");
+        //unimod2modification_code.put("Y(UniMod:21)", "4");
+
+        //modification_code2modification.put("0", "Carbamidomethylation of C");
+        //modification_code2modification.put("1", "Oxidation of M");
+        //modification_code2modification.put("2", "Phosphorylation of S");
+        //modification_code2modification.put("3", "Phosphorylation of T");
+        //modification_code2modification.put("4", "Phosphorylation of Y");
+
+        for(int mod_id: CModification.getInstance().id2ptmname.keySet()){
+            ptm_name2id.put(CModification.getInstance().id2ptmname.get(mod_id),mod_id);
+        }
+        for(String mod_name: ModificationUtils.getInstance().mod_name2JMod.keySet()) {
+            JMod jMod = ModificationUtils.getInstance().mod_name2JMod.get(mod_name);
+            // TODO: need to handle terminal modifications
+            if (jMod.position.toLowerCase().contains("term")) {
+                System.err.println("Terminal modification is not supported:" + mod_name);
+            }
+            String site_unimod_acc = jMod.site + "(" + jMod.unimod_accession + ")";
+            // take this as modification code (int)
+            int mod_id = ptm_name2id.get(mod_name);
+            unimod2modification_code.put(site_unimod_acc, String.valueOf(mod_id));
+            modification_code2modification.put(String.valueOf(mod_id), mod_name);
+
+            String psi_name = ModificationUtils.getInstance().mod_name2JMod.get(mod_name).psi_ms_name;
+            String psi_name_site;
+            // TODO: need to update to handle different terminal modifications
+            String encyclopedia_mod_name;
+            String skyline_mod_name;
+            if(mod_name.contains("protein N-term")){
+                psi_name_site = psi_name + "@Protein_N-term";
+                // TODO: need to check if this works
+                skyline_mod_name = "["+jMod.mod_mass+"]";
+                encyclopedia_mod_name = "["+jMod.psi_ms_name+"]";
+            }else{
+                psi_name_site = psi_name + "@" + jMod.site;
+                skyline_mod_name = jMod.site+"["+jMod.mod_mass+"]";
+                encyclopedia_mod_name = jMod.site+"["+jMod.psi_ms_name+" ("+jMod.site+")]";
+            }
+            psi_name_site2site_unimod_acc.put(psi_name_site,site_unimod_acc);
+            psi_name_site2site_psi_name.put(psi_name_site,psi_name);
+            psi_name_site2encyclopedia_mod_name.put(psi_name_site,encyclopedia_mod_name);
+            psi_name_site2skyline_mod_name.put(psi_name_site,skyline_mod_name);
+        }
     }
 
     public ArrayList<String> load_top_modifications() {

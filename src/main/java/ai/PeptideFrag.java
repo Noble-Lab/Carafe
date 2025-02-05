@@ -68,7 +68,8 @@ class PeptideFrag {
 
         // consider neutral loss of phosphorylation.
         if(mod_ai.equals("phosphorylation")) {
-            if (ModificationUtils.getInstance().getModificationString(objPeptide).toLowerCase().contains("phosphorylation")) {
+            if (ModificationUtils.getInstance().getModificationString(objPeptide).toLowerCase().contains("phosphorylation") ||
+                    ModificationUtils.getInstance().getModificationString(objPeptide).toLowerCase().contains("phospho")) {
                 specificAnnotationPreferences.setNeutralLossesMap(getNeutralLossesMap(objPeptide));
             }
         }

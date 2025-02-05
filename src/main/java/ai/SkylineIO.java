@@ -2,8 +2,7 @@ package main.java.ai;
 
 import com.compomics.util.experiment.biology.proteins.Peptide;
 import com.compomics.util.experiment.identification.matches.ModificationMatch;
-import main.java.input.CPTM;
-import main.java.input.CParameter;
+import main.java.input.CModification;
 import main.java.input.PeptideUtils;
 import main.java.util.Cloger;
 import org.sqlite.SQLiteConfig;
@@ -14,7 +13,6 @@ import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.sql.*;
-import java.util.ArrayList;
 import java.util.Date;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
@@ -36,6 +34,9 @@ public class SkylineIO {
     private final String skyline_db_file;
     public int numSpectra = -1;
 
+    /**
+     * This function will be deleted in a future release
+     */
     public static HashMap<String, Double> mod2mass = new HashMap<String, Double>() {{
         put("Oxidation@M", 15.994915);
         put("Carbamidomethyl@C", 57.021464);
@@ -44,6 +45,9 @@ public class SkylineIO {
         put("Phospho@Y", 79.966331);
     }};
 
+    /**
+     * This function will be deleted in a future release
+     */
     public static HashMap<String, String> unimod2mod_name = new HashMap<String, String>() {{
         put("C(unimod:4)", "Carbamidomethylation of C");
         put("M(unimod:35)", "Oxidation of M");
@@ -415,7 +419,7 @@ public class SkylineIO {
                 HashMap<Integer,String> pos2mod = get_unimod_from_peptide(mod_pep);
                 Peptide modPeptide = new Peptide(get_peptide(mod_pep));
                 for (int pos: pos2mod.keySet()) {
-                    modPeptide.addVariableModification(new ModificationMatch(unimod2mod_name.get(pos2mod.get(pos)), pos));
+                    modPeptide.addVariableModification(new ModificationMatch(CModification.getInstance().get_mod_name_by_site_unimod_acc(pos2mod.get(pos)), pos));
                 }
                 all_peptide_forms.add(modPeptide);
             }else{
