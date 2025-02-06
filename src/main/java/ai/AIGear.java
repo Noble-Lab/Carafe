@@ -2378,9 +2378,9 @@ public class AIGear {
             for(String line: this.ms_file2psm.get(ms_file)) {
                 String []d = line.split("\t");
                 // 
-                String peptide = d[hIndex.get("Stripped.Sequence")];
-                String modification = this.get_modification_diann(d[hIndex.get("Modified.Sequence")],peptide);
-                int precursor_charge = Integer.parseInt(d[hIndex.get("Precursor.Charge")]);
+                String peptide = d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)];
+                String modification = this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],peptide);
+                int precursor_charge = Integer.parseInt(d[hIndex.get(PSMConfig.precursor_charge_column_name)]);
                 this.add_peptide(peptide,modification);
                 ArrayList<String> isoWinIDs = diaMap_tmp.get_isolation_windows(dbGear.get_mz(this.get_peptide(peptide,modification).getMass(),precursor_charge));
                 if (isoWinIDs.isEmpty()){
@@ -2401,17 +2401,17 @@ public class AIGear {
                             show_mod_ai_only_one_time = false;
                         }
                     }else if(this.mod_ai.equalsIgnoreCase("phosphorylation")){
-                        String mod_seq = d[hIndex.get("Modified.Sequence")];
+                        String mod_seq = d[hIndex.get(PSMConfig.peptide_modification_column_name)];
                         if(show_mod_ai_only_one_time) {
                             Cloger.getInstance().logger.info("Training data generation for phosphorylation modeling!");
                             show_mod_ai_only_one_time = false;
                         }
-                        if (hIndex.containsKey("PTM.Site.Confidence") && mod_seq.contains("UniMod:21")) {
+                        if (hIndex.containsKey(PSMConfig.ptm_site_confidence_column_name) && mod_seq.contains("UniMod:21")) {
                             // only filtering out low confidence phosphorylation peptides
-                            if (Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff) {
+                            if (Double.parseDouble(d[hIndex.get(PSMConfig.ptm_site_confidence_column_name)]) < this.ptm_site_prob_cutoff) {
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
+                            if (Double.parseDouble(d[hIndex.get(PSMConfig.ptm_site_qvalue_column_name)]) > this.ptm_site_qvalue_cutoff) {
                                 continue;
                             }
                         }
@@ -2425,8 +2425,8 @@ public class AIGear {
                     }
                     peptide2rt.get(peptide_mod).peptide = peptide;
                     peptide2rt.get(peptide_mod).modification = modification;
-                    peptide2rt.get(peptide_mod).rts.add(Double.parseDouble(d[hIndex.get("RT")])); // Apex RT
-                    peptide2rt.get(peptide_mod).scores.add(Double.parseDouble(d[hIndex.get("Q.Value")]));
+                    peptide2rt.get(peptide_mod).rts.add(Double.parseDouble(d[hIndex.get(PSMConfig.rt_column_name)])); // Apex RT
+                    peptide2rt.get(peptide_mod).scores.add(Double.parseDouble(d[hIndex.get(PSMConfig.qvalue_column_name)]));
 
                     // for CCS
                     if(ccs_enabled){
@@ -2437,8 +2437,8 @@ public class AIGear {
                         peptide2ccs.get(peptide_mode_charge).peptide = peptide;
                         peptide2ccs.get(peptide_mode_charge).modification = modification;
                         // In DIA-NN, iIM refers to the reference ion mobility in the spectral library, IM refers to the empirically measured.
-                        peptide2ccs.get(peptide_mode_charge).ccs_values.add(Double.parseDouble(d[hIndex.get("IM")]));
-                        peptide2ccs.get(peptide_mode_charge).scores.add(Double.parseDouble(d[hIndex.get("Q.Value")]));
+                        peptide2ccs.get(peptide_mode_charge).ccs_values.add(Double.parseDouble(d[hIndex.get(PSMConfig.im_column_name)]));
+                        peptide2ccs.get(peptide_mode_charge).scores.add(Double.parseDouble(d[hIndex.get(PSMConfig.qvalue_column_name)]));
                     }
                 }
             }
@@ -2459,14 +2459,14 @@ public class AIGear {
                     index2peptideMatch.put(row_i, new PeptideMatch());
                     index2peptideMatch.get(row_i).id = String.valueOf(psm_id);
                     String[] d = line.split("\t");
-                    String peptide = d[hIndex.get("Stripped.Sequence")];
-                    String modification = this.get_modification_diann(d[hIndex.get("Modified.Sequence")],peptide);
-                    int precursor_charge = Integer.parseInt(d[hIndex.get("Precursor.Charge")]);
+                    String peptide = d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)];
+                    String modification = this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],peptide);
+                    int precursor_charge = Integer.parseInt(d[hIndex.get(PSMConfig.precursor_charge_column_name)]);
                     // double apex_rt = Double.parseDouble(d[hIndex.get("apex_rt")]);
-                    double rt_start = Double.parseDouble(d[hIndex.get("RT.Start")]);
-                    double rt_end = Double.parseDouble(d[hIndex.get("RT.Stop")]);
+                    double rt_start = Double.parseDouble(d[hIndex.get(PSMConfig.rt_start_column_name)]);
+                    double rt_end = Double.parseDouble(d[hIndex.get(PSMConfig.rt_end_column_name)]);
 
-                    int apex_scan = global_index2scan_num.get(Integer.parseInt(d[hIndex.get("MS2.Scan")])); // index
+                    int apex_scan = global_index2scan_num.get(Integer.parseInt(d[hIndex.get(PSMConfig.ms2_scan_column_name)])); // index
                     Spectrum spectrum = diaIndex.get_spectrum_by_scan(apex_scan);
                     this.add_peptide(peptide, modification);
                     Peptide peptideObj = this.get_peptide(peptide, modification);
@@ -2480,10 +2480,10 @@ public class AIGear {
                     index2peptideMatch.get(row_i).scan = apex_scan;
                     index2peptideMatch.get(row_i).rt_start = rt_start;
                     index2peptideMatch.get(row_i).rt_end = rt_end;
-                    index2peptideMatch.get(row_i).rt_apex = Double.parseDouble(d[hIndex.get("RT")]);
+                    index2peptideMatch.get(row_i).rt_apex = Double.parseDouble(d[hIndex.get(PSMConfig.rt_column_name)]);
                     index2peptideMatch.get(row_i).peptide_length = peptide.length();
                     index2peptideMatch.get(row_i).precursor_charge = precursor_charge;
-                    index2peptideMatch.get(row_i).index = Integer.parseInt(d[hIndex.get("MS2.Scan")]);
+                    index2peptideMatch.get(row_i).index = Integer.parseInt(d[hIndex.get(PSMConfig.ms2_scan_column_name)]);
                     index2peptideMatch.get(row_i).peptide = peptideObj;
 
                     // for testing
@@ -2666,8 +2666,8 @@ public class AIGear {
                     String []d = line.split("\t");
                     row_i = row_i + 1;
                     // only need to return +1 fragment ion here
-                    HashMap<Integer, ArrayList<Ion>> theoretical_ions = this.generate_theoretical_fragment_ions(this.get_peptide(d[hIndex.get("Stripped.Sequence")],
-                                    this.get_modification_diann(d[hIndex.get("Modified.Sequence")],d[hIndex.get("Stripped.Sequence")])),
+                    HashMap<Integer, ArrayList<Ion>> theoretical_ions = this.generate_theoretical_fragment_ions(this.get_peptide(d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)],
+                                    this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)])),
                                     //index2peptideMatch.get(row_i).precursor_charge);
                                     1);
                     HashSet<Integer> possible_fragment_ion_charges = this.getPossibleFragmentIonCharges(index2peptideMatch.get(row_i).precursor_charge);
@@ -2769,14 +2769,14 @@ public class AIGear {
                     if(this.mod_ai.equalsIgnoreCase("-") || this.mod_ai.equalsIgnoreCase("general")){
                         // nothing to do
                     }else if(this.mod_ai.equalsIgnoreCase("phosphorylation")){
-                        String mod_seq = d[hIndex.get("Modified.Sequence")];
-                        if (hIndex.containsKey("PTM.Site.Confidence") && mod_seq.contains("UniMod:21")) {
+                        String mod_seq = d[hIndex.get(PSMConfig.peptide_modification_column_name)];
+                        if (hIndex.containsKey(PSMConfig.ptm_site_confidence_column_name) && mod_seq.contains("UniMod:21")) {
                             // only filtering out low confidence phosphorylation peptides
-                            if(Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff){
+                            if(Double.parseDouble(d[hIndex.get(PSMConfig.ptm_site_confidence_column_name)]) < this.ptm_site_prob_cutoff){
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
+                            if (Double.parseDouble(d[hIndex.get(PSMConfig.ptm_site_qvalue_column_name)]) > this.ptm_site_qvalue_cutoff) {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
@@ -2790,7 +2790,7 @@ public class AIGear {
                     if(index2peptideMatch.get(row_i).max_fragment_ion_intensity>0 && index2peptideMatch.get(row_i).matched_ions.size()>=this.min_n_fragment_ions) {
                         boolean fragment_export = false;
 
-                        String [] out_mod = convert_modification(this.get_modification_diann(d[hIndex.get("Modified.Sequence")],d[hIndex.get("Stripped.Sequence")]));
+                        String [] out_mod = convert_modification(this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)]));
                         int n_valid_fragment_ions = get_n_valid_fragment_ions(index2peptideMatch.get(row_i).ion_intensity_matrix,index2peptideMatch.get(row_i).ion_matrix);
                         int n_total_fragment_ions = get_n_matched_fragment_ions(index2peptideMatch.get(row_i).ion_intensity_matrix);
                         if(n_valid_fragment_ions >= this.min_n_high_quality_fragment_ions) {
@@ -2803,12 +2803,12 @@ public class AIGear {
                                 // continue;
                             }
 
-                            String spectrum_title = d[hIndex.get("MS2.Scan")];
-                            double pdv_precursor_mz = dbGear.get_mz(this.get_peptide(d[hIndex.get("Stripped.Sequence")], this.get_modification_diann(d[hIndex.get("Modified.Sequence")],d[hIndex.get("Stripped.Sequence")])).getMass(),
-                                    Integer.parseInt(d[hIndex.get("Precursor.Charge")]));
-                            String pdv_precursor_charge = d[hIndex.get("Precursor.Charge")];
-                            String pdv_peptide = d[hIndex.get("Stripped.Sequence")];
-                            String pdv_modification = this.get_modification_diann(d[hIndex.get("Modified.Sequence")],d[hIndex.get("Stripped.Sequence")]);
+                            String spectrum_title = d[hIndex.get(PSMConfig.ms2_scan_column_name)];
+                            double pdv_precursor_mz = dbGear.get_mz(this.get_peptide(d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)], this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)])).getMass(),
+                                    Integer.parseInt(d[hIndex.get(PSMConfig.precursor_charge_column_name)]));
+                            String pdv_precursor_charge = d[hIndex.get(PSMConfig.precursor_charge_column_name)];
+                            String pdv_peptide = d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)];
+                            String pdv_modification = this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)]);
                             // true || true
                             if (index2peptideMatch.get(row_i).is_max_fragment_ion_intensity_valid() || use_all_peaks) {
                                 n_total_matches_valid++;
@@ -2849,11 +2849,11 @@ public class AIGear {
                                 }
                             }
 
-                            int apex_scan = global_index2scan_num.get(Integer.parseInt(d[hIndex.get("MS2.Scan")]));
+                            int apex_scan = global_index2scan_num.get(Integer.parseInt(d[hIndex.get(PSMConfig.ms2_scan_column_name)]));
                             // String spectrum_title = d[hIndex.get("MS2.Scan")];
                             if (!save_spectra.contains(spectrum_title)) {
                                 Spectrum spectrum = diaIndex.get_spectrum_by_scan(apex_scan);
-                                int charge = Integer.parseInt(d[hIndex.get("Precursor.Charge")]);
+                                int charge = Integer.parseInt(d[hIndex.get(PSMConfig.precursor_charge_column_name)]);
                                 if(this.export_spectra_to_mgf) {
                                     msWriter.write(MgfUtils.asMgf(spectrum, spectrum_title, charge, String.valueOf(apex_scan)) + "\n");
                                 }
@@ -2959,16 +2959,16 @@ public class AIGear {
                                 // for skyline
                                 if (this.export_skyline_transition_list_file && tbWriter != null && tfWriter != null) {
 
-                                    double precursor_mz = dbGear.get_mz(this.get_peptide(d[hIndex.get("Stripped.Sequence")], this.get_modification_diann(d[hIndex.get("Modified.Sequence")],d[hIndex.get("Stripped.Sequence")])).getMass(),
-                                            Integer.parseInt(d[hIndex.get("Precursor.Charge")]));
+                                    double precursor_mz = dbGear.get_mz(this.get_peptide(d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)], this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)])).getMass(),
+                                            Integer.parseInt(d[hIndex.get(PSMConfig.precursor_charge_column_name)]));
 
                                     tbWriter.write(index2peptideMatch.get(row_i).rt_start + "\t" + index2peptideMatch.get(row_i).rt_end + "\t" + ms_file + "\t" +
-                                            ModificationUtils.getInstance().getSkylineFormatPeptide(this.get_peptide(d[hIndex.get("Stripped.Sequence")], this.get_modification_diann(d[hIndex.get("Modified.Sequence")],d[hIndex.get("Stripped.Sequence")]))) + "\t" + d[hIndex.get("Precursor.Charge")] + "\n");
+                                            ModificationUtils.getInstance().getSkylineFormatPeptide(this.get_peptide(d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)], this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)]))) + "\t" + d[hIndex.get(PSMConfig.precursor_charge_column_name)] + "\n");
 
                                     PeptideMatch peptideMatch = index2peptideMatch.get(row_i);
                                     for (double mz : peptideMatch.mz2cor.keySet()) {
                                         int[] ind_mz = peptideMatch.mz2index.get(mz);
-                                        tfWriter.write(ModificationUtils.getInstance().getSkylineFormatPeptide(this.get_peptide(d[hIndex.get("Stripped.Sequence")], this.get_modification_diann(d[hIndex.get("Modified.Sequence")],d[hIndex.get("Stripped.Sequence")]))) +
+                                        tfWriter.write(ModificationUtils.getInstance().getSkylineFormatPeptide(this.get_peptide(d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)], this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)]))) +
                                                 "\t" +
                                                 precursor_mz + // may change the column name ot precursor_mz
                                                 "\t" +
@@ -7164,16 +7164,19 @@ public class AIGear {
             n_total_row = n_total_row + 1;
             String []d = line.split("\t");
 
-            if(hIndex.containsKey("Q.Value")){
-                double q_value = Double.parseDouble(d[hIndex.get("Q.Value")]);
+            // if(hIndex.containsKey("Q.Value")){
+            if(hIndex.containsKey(PSMConfig.qvalue_column_name)){
+                // double q_value = Double.parseDouble(d[hIndex.get("Q.Value")]);
+                double q_value = Double.parseDouble(d[hIndex.get(PSMConfig.qvalue_column_name)]);
                 if(q_value>fdr_cutoff){
                     continue;
                 }
             }
 
 
-            if(hIndex.containsKey("File.Name")){
-                cur_ms_file = d[hIndex.get("File.Name")];
+            // if(hIndex.containsKey("File.Name")){
+            if(hIndex.containsKey(PSMConfig.ms_file_column_name)){
+                cur_ms_file = d[hIndex.get(PSMConfig.ms_file_column_name)];
                 File F = new File(cur_ms_file);
                 if(!F.exists()){
                     // ms_file should be a folder

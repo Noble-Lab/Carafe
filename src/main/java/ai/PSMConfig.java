@@ -1,0 +1,56 @@
+package main.java.ai;
+
+public class PSMConfig {
+
+    /**
+     * The search engine name, DIA-NN, Skyline or generic
+     */
+    public static String search_engine_name = "DIA-NN";
+
+    /**
+     * The column name of stripped peptide sequence in the input file
+     */
+    public static String stripped_peptide_sequence_column_name = "Stripped.Sequence";
+
+    /**
+     * The column name of peptide modification in the input file
+     */
+    public static String peptide_modification_column_name = "Modified.Sequence";
+
+    /**
+     * The column name of precursor charge in the input file
+     */
+    public static String precursor_charge_column_name = "Precursor.Charge";
+
+
+    /**
+     * The column name of apex RT in the input file
+     */
+    public static String rt_column_name = "RT";
+
+    /**
+     * The column name of RT start in the input file
+     */
+    public static String rt_start_column_name = "RT.Start";
+
+    /**
+     * The column name of RT end in the input file
+     */
+    public static String rt_end_column_name = "RT.Stop";
+
+    /**
+     * The column name of apex MS2 scan in the input file
+     */
+    public static String ms2_scan_column_name = "MS2.Scan";
+
+    public static String ptm_site_confidence_column_name = "PTM.Site.Confidence";
+
+    public static String ptm_site_qvalue_column_name = "PTM.Q.Value";
+
+    public static String qvalue_column_name = "Q.Value";
+
+    public static String im_column_name = "IM";
+
+    public static String ms_file_column_name = "File.Name";
+
+}
