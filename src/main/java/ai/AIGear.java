@@ -260,6 +260,7 @@ public class AIGear {
     public double isolation_win_mz_max = -1;
     private boolean export_xic = false;
     private double ptm_site_prob_cutoff = 0.75;
+    private double ptm_site_qvalue_cutoff = 1.0;
     private int n_ion_min = 0;
     private int c_ion_min = 0;
     private int global_random_seed = 2024;
@@ -316,6 +317,7 @@ public class AIGear {
         options.addOption("fdr", true, "The minimum FDR cutoff to consider, default is 0.01");
         options.addOption("cor", true, "The minimum correlation cutoff to consider, default is 0.75");
         options.addOption("ptm_site_prob", true, "The minimum PTM site score to consider, default is 0.75");
+        options.addOption("ptm_site_qvalue", true, "The threshold of PTM site qvalue, default is 1 (no filtering)");
         options.addOption("use_all_peaks", false, "Use all peaks for training");
         options.addOption("min_mz", true, "The minimum fragment ion m/z to consider, default is 200.0");
         options.addOption("min_n", true, "The minimum high quality fragment ion number to consider, default is 4");
@@ -584,6 +586,10 @@ public class AIGear {
 
         if(cmd.hasOption("ptm_site_prob")){
             aiGear.ptm_site_prob_cutoff = Double.parseDouble(cmd.getOptionValue("ptm_site_prob"));
+        }
+
+        if(cmd.hasOption("ptm_site_qvalue")){
+            aiGear.ptm_site_qvalue_cutoff = Double.parseDouble(cmd.getOptionValue("ptm_site_qvalue"));
         }
 
         if(cmd.hasOption("seed")){
@@ -2405,7 +2411,7 @@ public class AIGear {
                             if (Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff) {
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
                                 continue;
                             }
                         }
@@ -2770,7 +2776,7 @@ public class AIGear {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
@@ -3272,7 +3278,7 @@ public class AIGear {
                             if (Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff) {
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
                                 continue;
                             }
                         }
@@ -3452,7 +3458,7 @@ public class AIGear {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
@@ -4034,7 +4040,7 @@ public class AIGear {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
@@ -4352,7 +4358,7 @@ public class AIGear {
                             if(Double.parseDouble(d[hIndex.get("PTM.Site.Confidence")]) < this.ptm_site_prob_cutoff){
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
                                 continue;
                             }
                         }
@@ -4734,7 +4740,7 @@ public class AIGear {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
-                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > 0.01) {
+                            if (Double.parseDouble(d[hIndex.get("PTM.Q.Value")]) > this.ptm_site_qvalue_cutoff) {
                                 n_ptm_site_low_confidence++;
                                 continue;
                             }
@@ -8355,6 +8361,7 @@ public class AIGear {
             sBuilder.append("FDR threshold: ").append(fdr_cutoff).append("\n");
             if (!mod_ai.equalsIgnoreCase("general")) {
                 sBuilder.append("PTM site probability cutoff: ").append(ptm_site_prob_cutoff).append("\n");
+                sBuilder.append("PTM site qvalue cutoff: ").append(ptm_site_qvalue_cutoff).append("\n");
             }
             // sBuilder.append("Precursor mass tolerance: ").append(CParameter.tol).append("\n");
             // sBuilder.append("Precursor ion mass tolerance unit: ").append(tol_unit).append("\n");

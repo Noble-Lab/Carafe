@@ -117,8 +117,8 @@ public final class CModification {
         //modification_code2modification.put("3", "Phosphorylation of T");
         //modification_code2modification.put("4", "Phosphorylation of Y");
 
-        for(int mod_id: CModification.getInstance().id2ptmname.keySet()){
-            ptm_name2id.put(CModification.getInstance().id2ptmname.get(mod_id),mod_id);
+        for(int mod_id: id2ptmname.keySet()){
+            ptm_name2id.put(id2ptmname.get(mod_id),mod_id);
         }
         for(String mod_name: ModificationUtils.getInstance().mod_name2JMod.keySet()) {
             JMod jMod = ModificationUtils.getInstance().mod_name2JMod.get(mod_name);
@@ -206,6 +206,7 @@ public final class CModification {
             String[] d = mod.split(",");
             for (int i = 0; i < d.length; i++) {
                 this.var_Modifications.add(ptmFactory.getModification(this.id2ptmname.get(Integer.valueOf(d[i]))));
+                System.out.println("Adding variable modification: " + this.id2ptmname.get(Integer.valueOf(d[i])) + " (" + d[i] + ")");
             }
         }
 
