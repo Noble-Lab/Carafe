@@ -85,11 +85,11 @@ def predict_ms2(model_dir:str,
         a.to_csv(out_file,sep="\t",index=False)
 
     if mode_type == 'general':
-        mz_df = fragment.create_fragment_mz_dataframe(a['sequence,mods,mod_sites,charge'.split(',')], 
+        mz_df = fragment.create_fragment_mz_dataframe(a['sequence,mods,mod_sites,charge,nAA'.split(',')],
                                                       ['b_z1','b_z2','y_z1','y_z2'], 
                                                       reference_fragment_df=None)
     elif mode_type == 'phosphorylation':
-        mz_df = fragment.create_fragment_mz_dataframe(a['sequence,mods,mod_sites,charge'.split(',')], 
+        mz_df = fragment.create_fragment_mz_dataframe(a['sequence,mods,mod_sites,charge,nAA'.split(',')],
                                                       ['b_z1','b_z2','y_z1','y_z2','b_modloss_z1','b_modloss_z2','y_modloss_z1','y_modloss_z2'],
                                                       reference_fragment_df=None)
 
