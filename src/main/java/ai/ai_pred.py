@@ -88,11 +88,16 @@ def predict_ms2(model_dir:str,
     if mod2mass is not None:
         from alphabase.constants.modification import MOD_MASS
         for mod in mod2mass.split(","):
+            ## remove the first and last " when present
+            if mod[0] == '"':
+                mod = mod[1:]
+            if mod[-1] == '"':
+                mod = mod[:-1]
             mod = mod.split("=")
-            print("Change the mass of modification: ", mod[0], " to ", mod[1])
-            print("Before change: ", MOD_MASS[mod[0]])
+            print("Change the mass of modification: " + mod[0] + " to " + str(mod[1]))
+            print("Before change:", MOD_MASS[mod[0]])
             MOD_MASS[mod[0]] = float(mod[1])
-            print("After change: ", MOD_MASS[mod[0]])
+            print("After change:", MOD_MASS[mod[0]])
 
     if mode_type == 'general':
         mz_df = fragment.create_fragment_mz_dataframe(a['sequence,mods,mod_sites,charge,nAA'.split(',')],

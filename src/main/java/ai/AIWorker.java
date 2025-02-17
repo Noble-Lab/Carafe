@@ -62,7 +62,7 @@ public final  class AIWorker implements Runnable{
             cmd += " --ccs";
         }
         if(!mod2mass.equals("-")){
-            cmd += " --mod2mass '" + mod2mass + "'";
+            cmd += " --mod2mass \"" + mod2mass + "\"";
         }
         run_cmd(cmd);
     }
