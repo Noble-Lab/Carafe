@@ -21,7 +21,8 @@ def predict_ms2(model_dir:str,
                 nce=27.0,
                 mode_type='general',
                 log_transform=False,
-                fast_mode=False):
+                fast_mode=False,
+                mod2mass=None):
     import pandas as pd
     from peptdeep.pretrained_models import ModelManager
     if mode_type == 'general':
@@ -83,6 +84,15 @@ def predict_ms2(model_dir:str,
     else:
         out_file = os.path.join(out_dir,out_prefix+"_ms2_df.tsv")
         a.to_csv(out_file,sep="\t",index=False)
+
+    if mod2mass is not None:
+        from alphabase.constants.modification import MOD_MASS
+        for mod in mod2mass.split(","):
+            mod = mod.split("=")
+            print("Change the mass of modification: ", mod[0], " to ", mod[1])
+            print("Before change: ", MOD_MASS[mod[0]])
+            MOD_MASS[mod[0]] = float(mod[1])
+            print("After change: ", MOD_MASS[mod[0]])
 
     if mode_type == 'general':
         mz_df = fragment.create_fragment_mz_dataframe(a['sequence,mods,mod_sites,charge,nAA'.split(',')],
@@ -247,6 +257,7 @@ if __name__ == "__main__":
     parser.add_argument('--log_transform', action='store_true', help='log transform intensity data')
     parser.add_argument('--fast', action='store_true', help='Save data in parquet format to speed up reading and writing')
     parser.add_argument('--ccs', action='store_true', help='Predict CCS')
+    parser.add_argument('--mod2mass', default=None, help='Change the mass of modifications, e.g., Deamidated@N=0')
 
 
     args = parser.parse_args()
@@ -280,7 +291,8 @@ if __name__ == "__main__":
                                nce=float(args.nce),
                                mode_type=args.mode,
                                log_transform=args.log_transform,
-                               fast_mode=args.fast)
+                               fast_mode=args.fast,
+                               mod2mass=args.mod2mass)
         model_mgr = predict_rt(model_dir=args.model_dir, 
                            pred_file=args.in_file, 
                            out_dir=args.out_dir, 
@@ -312,7 +324,8 @@ if __name__ == "__main__":
                                 instrument=args.instrument,
                                 nce=float(args.nce),
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                mod2mass=args.mod2mass)
     elif args.tf_type == "ms2":
         model_mgr = predict_rt(model_dir="generic", 
                                 pred_file=args.in_file, 
@@ -330,7 +343,8 @@ if __name__ == "__main__":
                                 nce=float(args.nce),
                                 mode_type=args.mode,
                                 log_transform=args.log_transform,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                mod2mass=args.mod2mass)
     elif args.tf_type == "test":
         print("Test mode ...")
         model_mgr_rt = predict_ms2(model_dir=args.model_dir, 
@@ -342,7 +356,8 @@ if __name__ == "__main__":
                                nce=float(args.nce),
                                mode_type=args.mode,
                                log_transform=args.log_transform,
-                               fast_mode=args.fast)
+                               fast_mode=args.fast,
+                               mod2mass=args.mod2mass)
         model_mgr = predict_rt(model_dir=args.model_dir, 
                            pred_file=args.in_file, 
                            out_dir=args.out_dir, 
@@ -368,7 +383,8 @@ if __name__ == "__main__":
                                 instrument=args.instrument,
                                 nce=float(args.nce),
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                mod2mass=args.mod2mass)
     else:
         model_mgr = predict_rt(model_dir="generic", 
                                 pred_file=args.in_file, 
@@ -385,7 +401,8 @@ if __name__ == "__main__":
                                 instrument=args.instrument,
                                 nce=float(args.nce),
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                mod2mass=args.mod2mass)
     
     
 

@@ -420,14 +420,6 @@ public class AIGear {
             CParameter.maxVarMods = Integer.parseInt(cmd.getOptionValue("maxVar"));
         }
 
-        if(cmd.hasOption("mod2mass")){
-            // change the mass of a modification
-            for(String mod: cmd.getOptionValue("mod2mass").split(",")){
-                String[]d = mod.split("@");
-                CModification.getInstance().change_mod_mass(Integer.parseInt(d[0]), Double.parseDouble(d[1]));
-            }
-        }
-
         if(cmd.hasOption("clip_n_m")){
             CParameter.clip_nTerm_M = true;
         }else{
@@ -474,6 +466,20 @@ public class AIGear {
 
         AIGear aiGear = new AIGear();
         aiGear.load_mod_map();
+
+        if(cmd.hasOption("mod2mass")){
+            // change the mass of a modification
+            ArrayList<String> mod2mass_list = new ArrayList<>();
+            for(String mod: cmd.getOptionValue("mod2mass").split(",")){
+                String[]d = mod.split("@");
+                CModification.getInstance().change_mod_mass(Integer.parseInt(d[0]), Double.parseDouble(d[1]));
+                String mod_name = CModification.getInstance().id2ptmname.get(Integer.parseInt(d[0]));
+                String psi_name_site = aiGear.mod_map.get(mod_name);
+                mod2mass_list.add(psi_name_site+"="+d[1]);
+            }
+            AIWorker.mod2mass = StringUtils.join(mod2mass_list,',');
+        }
+
         if (cmd.hasOption("sg")) {
             aiGear.sg_smoothing_data_points = Integer.parseInt(cmd.getOptionValue("sg"));
         }
