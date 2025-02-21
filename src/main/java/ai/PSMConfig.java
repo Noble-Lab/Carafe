@@ -53,4 +53,19 @@ public class PSMConfig {
 
     public static String ms_file_column_name = "File.Name";
 
+    public static void use_skyline_report_column_names(){
+        stripped_peptide_sequence_column_name = "Peptide";
+        peptide_modification_column_name = "Peptide Modified Sequence Unimod Ids";
+        precursor_charge_column_name = "Precursor Charge";
+        rt_column_name = "Best Retention Time";
+        rt_start_column_name = "Min Start Time";
+        rt_end_column_name = "Max End Time";
+        ms2_scan_column_name = "Apex Spectrum ID Fragment";
+        ptm_site_confidence_column_name = "-";
+        ptm_site_qvalue_column_name = "-";
+        qvalue_column_name = "Detection Q Value";
+        im_column_name = "Ion Mobility MS1";
+        ms_file_column_name = "File Name";
+        search_engine_name = "skyline";
+    }
 }
