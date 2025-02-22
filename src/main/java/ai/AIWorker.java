@@ -1,6 +1,5 @@
 package main.java.ai;
 
-import main.java.input.CModification;
 import main.java.input.CParameter;
 import main.java.util.StreamLog;
 import main.java.util.Cloger;
@@ -23,6 +22,7 @@ public final  class AIWorker implements Runnable{
     public static boolean fast_mode = false;
     public static boolean ccs_enabled = false;
     public static String mod2mass = "-";
+    public static String user_mod = "";
 
     public AIWorker(String model_dir, String input_file, String out_dir, String out_prefix, String device, String ms_instrument, double nce, String ai_mode){
 
@@ -64,6 +64,10 @@ public final  class AIWorker implements Runnable{
         if(!mod2mass.equals("-")){
             cmd += " --mod2mass \"" + mod2mass + "\"";
         }
+        if(!user_mod.isEmpty()){
+            cmd += " --user_mod \"" + user_mod + "\"";
+        }
+        System.out.println("cmd: "+cmd);
         run_cmd(cmd);
     }
 

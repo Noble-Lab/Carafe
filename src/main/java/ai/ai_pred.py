@@ -8,9 +8,10 @@ import numpy as np
 import argparse
 import sys
 import alphabase.peptide.fragment as fragment
-from peptdeep.settings import global_settings
+from peptdeep.settings import global_settings,add_user_defined_modifications
 import importlib.util
 import sys
+import re
 
 def predict_ms2(model_dir:str,
                 pred_file:str,
@@ -263,6 +264,7 @@ if __name__ == "__main__":
     parser.add_argument('--fast', action='store_true', help='Save data in parquet format to speed up reading and writing')
     parser.add_argument('--ccs', action='store_true', help='Predict CCS')
     parser.add_argument('--mod2mass', default=None, help='Change the mass of modifications, e.g., Deamidated@N=0')
+    parser.add_argument('--user_mod', default=None, help='User defined modification')
 
 
     args = parser.parse_args()
@@ -285,6 +287,23 @@ if __name__ == "__main__":
         print(f"The {package_name} package is not installed.")
 
     check_models_from_docker()
+
+    user_mod = args.user_mod
+    if user_mod is not None:
+        user_mod = re.sub(r'^\"',"",user_mod)
+        user_mod = re.sub(r'\"$',"",user_mod)
+        umods = user_mod.split(";")
+        mod_dict = {}
+        for umod in umods:
+            um = umod.split(",")
+            mod_name = um[0]+"@"+um[1]
+            mod_dict[mod_name] = {}
+            mod_dict[mod_name]["composition"] = um[3]
+            mod_dict[mod_name]["modloss_composition"] = ""
+
+        print("User defined modifications:")
+        print(mod_dict)
+        add_user_defined_modifications(mod_dict)
 
     if args.tf_type == "all":
         model_mgr_rt = predict_ms2(model_dir=args.model_dir, 

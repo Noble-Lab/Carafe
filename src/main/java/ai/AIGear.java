@@ -8,6 +8,7 @@ import com.compomics.util.experiment.biology.ions.Ion;
 import com.compomics.util.experiment.biology.ions.NeutralLoss;
 import com.compomics.util.experiment.biology.ions.impl.ElementaryIon;
 import com.compomics.util.experiment.biology.ions.impl.PeptideFragmentIon;
+import com.compomics.util.experiment.biology.modifications.Modification;
 import com.compomics.util.experiment.biology.proteins.Peptide;
 import com.compomics.util.experiment.identification.matches.IonMatch;
 import com.compomics.util.experiment.identification.matches.ModificationMatch;
@@ -361,6 +362,9 @@ public class AIGear {
         options.addOption("seed", true, "Random seed, 2024 in default");
         options.addOption("fast", false, "Save data to parquet format for speeding up reading and writing");
         options.addOption("mod2mass",true,"Change the mass of a modification. The format is like: 2@0");
+        // Format: mod_name@aa[mass][composition];mod_name@aa[mass][composition]
+        // These modifications will be treated as variable modifications and add to the analysis
+        options.addOption("user_var_mods",true,"User defined variable modifications");
 
         options.addOption("ccs", false, "CCS training");
 
@@ -380,6 +384,10 @@ public class AIGear {
             return;
         }
 
+        if(cmd.hasOption("user_var_mods")){
+            CParameter.user_var_mods = cmd.getOptionValue("user_var_mods");
+        }
+
         // Print modification list
         if (cmd.hasOption("printPTM")) {
             ModificationUtils.save_mod2file = false;
@@ -391,15 +399,44 @@ public class AIGear {
             CParameter.fixMods = cmd.getOptionValue("fixMod");
         }
 
-        HashMap<Integer,Integer>mod_index2code = new HashMap<>();
+        //HashMap<Integer,Integer>mod_index2code = new HashMap<>();
         if(cmd.hasOption("varMod")){
             CParameter.varMods = cmd.getOptionValue("varMod");
             for(String mod: cmd.getOptionValue("varMod").split(",")){
                 String[]d = mod.split(":");
-                if(d.length>=2) {
-                    mod_index2code.put(Integer.parseInt(d[0]), Integer.parseInt(d[1]));
+                // if(d.length>=2) {
+                //    mod_index2code.put(Integer.parseInt(d[0]), Integer.parseInt(d[1]));
+                //}
+            }
+        }
+
+        if(cmd.hasOption("user_var_mods")){
+            AIWorker.user_mod = cmd.getOptionValue("user_var_mods");
+            String[] user_mods = cmd.getOptionValue("user_var_mods").split(";");
+            int i=0;
+            ArrayList<Integer> mod_i = new ArrayList<>();
+            for(String m: user_mods) {
+                i++;
+                // mod_name,aa,mass,composition
+                String[] d = m.split(",");
+                String mod_name = d[0];
+                String aa = d[1];
+                double mass = Double.parseDouble(d[2]);
+                Modification ptm = null;
+                String ptmName;
+                if(CParameter.varMods.matches("^[1-9].*$")){
+                    int mi = CModification.getInstance().ptm_name2id.get(mod_name + " of " + aa);
+                    mod_i.add(mi);
                 }
             }
+            String use_var_mod_str = StringUtils.join(mod_i,',');
+            if(!CParameter.varMods.isEmpty() && !CParameter.varMods.equals("0") && !CParameter.varMods.equals("no")){
+                CParameter.varMods = CParameter.varMods + "," + use_var_mod_str;
+            }else{
+                CParameter.varMods = use_var_mod_str;
+            }
+            CModification.getInstance().addVarMods(use_var_mod_str);
+            Cloger.getInstance().logger.info(" -varMods "+CParameter.varMods);
         }
 
         if(cmd.hasOption("miss_c")){
@@ -463,6 +500,7 @@ public class AIGear {
         String psm_file = cmd.getOptionValue("i");
         CParameter.init();
         ModificationUtils.getInstance();
+
 
         AIGear aiGear = new AIGear();
         aiGear.load_mod_map();
@@ -1696,6 +1734,9 @@ public class AIGear {
                 " --mode " + mode;
         if(this.no_masking){
             cmd = cmd + " --no_masking";
+        }
+        if(!CParameter.user_var_mods.isEmpty() && !CParameter.user_var_mods.equalsIgnoreCase("-")){
+            cmd = cmd + " --user_mod \""+CParameter.user_var_mods + "\"";
         }
         run_cmd(cmd);
     }

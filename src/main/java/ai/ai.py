@@ -6,8 +6,9 @@ import sys
 import pandas as pd
 import numpy as np
 import importlib.util
-from peptdeep.settings import global_settings
+from peptdeep.settings import global_settings,add_user_defined_modifications
 import sys
+import re
 
 
 #torch.set_num_threads(36)
@@ -208,6 +209,7 @@ if __name__ == "__main__":
     parser.add_argument('--log_transform', action='store_true', help='log transform intensity data')
     parser.add_argument('--seed', default=2024, help='Random seed for training')
     parser.add_argument('--no_masking', action='store_true', help='disable masking for training')
+    parser.add_argument('--user_mod', default=None, help='User defined modification')
 
     args = parser.parse_args()
 
@@ -218,6 +220,7 @@ if __name__ == "__main__":
     instrument = args.instrument
     nce = float(args.nce)
     tf_type = args.tf_type
+    user_mod = args.user_mod
 
     if args.no_masking:
         use_valid = False
@@ -240,6 +243,22 @@ if __name__ == "__main__":
         print(f"The path of the {package_name} package is: {spec.origin}")
     else:
         print(f"The {package_name} package is not installed.")
+
+    if user_mod is not None:
+        user_mod = re.sub(r'^\"',"",user_mod)
+        user_mod = re.sub(r'\"$',"",user_mod)
+        umods = user_mod.split(";")
+        mod_dict = {}
+        for umod in umods:
+            um = umod.split(",")
+            mod_name = um[0]+"@"+um[1]
+            mod_dict[mod_name] = {}
+            mod_dict[mod_name]["composition"] = um[3]
+            mod_dict[mod_name]["modloss_composition"] = ""
+
+        print("User defined modifications:")
+        print(mod_dict)
+        add_user_defined_modifications(mod_dict)
 
     check_models_from_docker()
 

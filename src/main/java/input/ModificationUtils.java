@@ -36,6 +36,10 @@ public class ModificationUtils {
         ptmFactory = ModificationFactory.getInstance();
         try {
             importModFromUnimod();
+            if(!CParameter.user_var_mods.equals("-") && !CParameter.user_var_mods.isEmpty()){
+                Cloger.getInstance().logger.info("Added user-defined variable modifications: "+CParameter.user_var_mods);
+                add_user_modifications(CParameter.user_var_mods);
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -194,6 +198,43 @@ public class ModificationUtils {
                 bw.write(line+"\n");
             }
             bw.close();
+        }
+    }
+
+    private void add_user_modifications(String mod){
+        String[] user_mods = mod.split(";");
+        int i=0;
+        for(String m: user_mods){
+            i++;
+            // mod_name,aa,mass,composition
+            String[]d = m.split(",");
+            String mod_name = d[0];
+            String aa = d[1];
+            double mass = Double.parseDouble(d[2]);
+            Modification ptm = null;
+            String ptmName;
+
+            ArrayList<String> residues = new ArrayList<>();
+            residues.add(aa);
+            ptmName = mod_name + " of " + aa;
+            ptm = new Modification(ModificationType.modaa, ptmName, mass, residues,ModificationCategory.Other);
+            ptm.setShortName(mod_name);
+            ModificationFactory ptmFactory = ModificationFactory.getInstance();
+
+            CvTerm cvTerm = new CvTerm();
+            String unimod_accession = "UNIMOD:u"+i;
+            cvTerm.setAccession(unimod_accession);
+            ptm.setUnimodCvTerm(cvTerm);
+            if(!ptmFactory.containsModification(ptm.getName())){
+                ptmFactory.addUserModification(ptm);
+            }
+            mod_name2JMod.put(ptm.getName(),new JMod());
+            mod_name2JMod.get(ptm.getName()).psi_ms_name = mod_name;
+            mod_name2JMod.get(ptm.getName()).unimod_accession = mod_name;
+            mod_name2JMod.get(ptm.getName()).position = "Anywhere";
+            mod_name2JMod.get(ptm.getName()).site = aa;
+            mod_name2JMod.get(ptm.getName()).mod_mass = mass;
+            Cloger.getInstance().logger.info("Added modification: "+mod_name+"\t"+aa+"\t"+mass);
         }
     }
 

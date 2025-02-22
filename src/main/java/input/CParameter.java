@@ -84,6 +84,8 @@ public class CParameter {
      */
     public static String varMods = "2";
 
+    public static String user_var_mods = "-";
+
     /**
      * This parameter is used to control whether add the AA substitution modifications when performing the modification
      * filtering. In default, it's false. But when performing missing protein identification, we can set it as true.
