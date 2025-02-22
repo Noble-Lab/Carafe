@@ -675,8 +675,9 @@ public class AIGear {
                 test_mode = true;
             }
             Cloger.getInstance().set_job_start_time();
-            aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
+            // aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
             if (aiGear.search_engine.equalsIgnoreCase("DIA-NN") || aiGear.search_engine.equalsIgnoreCase("DIANN")) {
+                aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
                 if (aiGear.data_type.equalsIgnoreCase("dia")) {
                     if (aiGear.ccs_enabled) {
                         aiGear.get_ms2_matches_diann_ccs();
@@ -688,8 +689,16 @@ public class AIGear {
                 }
 
             }else if(aiGear.search_engine.equalsIgnoreCase("generic") && aiGear.data_type.equalsIgnoreCase("dda")){
+                File F = new File(ms_file);
+                if(ms_file.endsWith(".mzML") || ms_file.endsWith(".mzml") || F.isDirectory()){
+                    String mgf_file = aiGear.out_dir + File.separator + "temp.mgf";
+                    FileIO.generate_mgf_for_PSMs(psm_file, ms_file, mgf_file);
+                    ms_file = mgf_file;
+                }
+                aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
                 aiGear.get_ms2_matches_generic_dda();
             } else {
+                aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
                 // TODO: need to update for CCS
                 if (aiGear.ccs_enabled) {
                     System.out.println("CCS is not supported using user-defined input!");
