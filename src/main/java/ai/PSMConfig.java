@@ -22,6 +22,10 @@ public class PSMConfig {
      */
     public static String precursor_charge_column_name = "Precursor.Charge";
 
+    /**
+     * The column name of precursor m/z in the input file
+     */
+    public static String precursor_mz_column_name = "Precursor.MZ";
 
     /**
      * The column name of apex RT in the input file
@@ -39,9 +43,9 @@ public class PSMConfig {
     public static String rt_end_column_name = "RT.Stop";
 
     /**
-     * The column name of apex MS2 scan in the input file
+     * The column name of apex MS2 index in the input file
      */
-    public static String ms2_scan_column_name = "MS2.Scan";
+    public static String ms2_index_column_name = "MS2.Scan"; // this is index not scan for DIA-NN
 
     public static String ptm_site_confidence_column_name = "PTM.Site.Confidence";
 
@@ -60,7 +64,7 @@ public class PSMConfig {
         rt_column_name = "Best Retention Time";
         rt_start_column_name = "Min Start Time";
         rt_end_column_name = "Max End Time";
-        ms2_scan_column_name = "Apex Spectrum ID Fragment";
+        ms2_index_column_name = "ms2index";
         ptm_site_confidence_column_name = "-";
         ptm_site_qvalue_column_name = "-";
         qvalue_column_name = "Detection Q Value";

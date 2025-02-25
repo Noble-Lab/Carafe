@@ -53,6 +53,7 @@ import org.apache.commons.math3.stat.StatUtils;
 import org.apache.commons.math3.stat.correlation.SpearmansCorrelation;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.parquet.avro.AvroParquetReader;
 import org.apache.parquet.avro.AvroParquetWriter;
 import org.apache.avro.generic.GenericData;
@@ -726,15 +727,22 @@ public class AIGear {
                     aiGear.get_ms2_matches_diann_dda();
                 }
 
-            }else if(aiGear.search_engine.equalsIgnoreCase("generic") && aiGear.data_type.equalsIgnoreCase("dda")){
+            }else if(aiGear.search_engine.equalsIgnoreCase("generic") && aiGear.data_type.equalsIgnoreCase("dda")) {
                 File F = new File(ms_file);
-                if(ms_file.endsWith(".mzML") || ms_file.endsWith(".mzml") || F.isDirectory()){
+                if (ms_file.endsWith(".mzML") || ms_file.endsWith(".mzml") || F.isDirectory()) {
                     String mgf_file = aiGear.out_dir + File.separator + "temp.mgf";
                     FileIO.generate_mgf_for_PSMs(psm_file, ms_file, mgf_file);
                     ms_file = mgf_file;
                 }
                 aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
                 aiGear.get_ms2_matches_generic_dda();
+            }else if(aiGear.search_engine.equalsIgnoreCase("skyline") && aiGear.data_type.equalsIgnoreCase("dia")) {
+                // DIA skyline
+                CModification.getInstance();
+                PSMConfig.use_skyline_report_column_names();
+                String new_psm_file = aiGear.add_ms2spectrum_index(psm_file, ms_file);
+                aiGear.load_data(new_psm_file, ms_file, aiGear.fdr_cutoff);
+                aiGear.get_ms2_matches_diann();
             } else {
                 aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
                 // TODO: need to update for CCS
@@ -2522,7 +2530,7 @@ public class AIGear {
                     double rt_start = Double.parseDouble(d[hIndex.get(PSMConfig.rt_start_column_name)]);
                     double rt_end = Double.parseDouble(d[hIndex.get(PSMConfig.rt_end_column_name)]);
 
-                    int apex_scan = global_index2scan_num.get(Integer.parseInt(d[hIndex.get(PSMConfig.ms2_scan_column_name)])); // index
+                    int apex_scan = global_index2scan_num.get(Integer.parseInt(d[hIndex.get(PSMConfig.ms2_index_column_name)])); // index
                     Spectrum spectrum = diaIndex.get_spectrum_by_scan(apex_scan);
                     this.add_peptide(peptide, modification);
                     Peptide peptideObj = this.get_peptide(peptide, modification);
@@ -2539,7 +2547,7 @@ public class AIGear {
                     index2peptideMatch.get(row_i).rt_apex = Double.parseDouble(d[hIndex.get(PSMConfig.rt_column_name)]);
                     index2peptideMatch.get(row_i).peptide_length = peptide.length();
                     index2peptideMatch.get(row_i).precursor_charge = precursor_charge;
-                    index2peptideMatch.get(row_i).index = Integer.parseInt(d[hIndex.get(PSMConfig.ms2_scan_column_name)]);
+                    index2peptideMatch.get(row_i).index = Integer.parseInt(d[hIndex.get(PSMConfig.ms2_index_column_name)]);
                     index2peptideMatch.get(row_i).peptide = peptideObj;
 
                     // for testing
@@ -2859,7 +2867,7 @@ public class AIGear {
                                 // continue;
                             }
 
-                            String spectrum_title = d[hIndex.get(PSMConfig.ms2_scan_column_name)];
+                            String spectrum_title = d[hIndex.get(PSMConfig.ms2_index_column_name)];
                             double pdv_precursor_mz = dbGear.get_mz(this.get_peptide(d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)], this.get_modification_diann(d[hIndex.get(PSMConfig.peptide_modification_column_name)],d[hIndex.get(PSMConfig.stripped_peptide_sequence_column_name)])).getMass(),
                                     Integer.parseInt(d[hIndex.get(PSMConfig.precursor_charge_column_name)]));
                             String pdv_precursor_charge = d[hIndex.get(PSMConfig.precursor_charge_column_name)];
@@ -2905,7 +2913,7 @@ public class AIGear {
                                 }
                             }
 
-                            int apex_scan = global_index2scan_num.get(Integer.parseInt(d[hIndex.get(PSMConfig.ms2_scan_column_name)]));
+                            int apex_scan = global_index2scan_num.get(Integer.parseInt(d[hIndex.get(PSMConfig.ms2_index_column_name)]));
                             // String spectrum_title = d[hIndex.get("MS2.Scan")];
                             if (!save_spectra.contains(spectrum_title)) {
                                 Spectrum spectrum = diaIndex.get_spectrum_by_scan(apex_scan);
@@ -5202,6 +5210,144 @@ public class AIGear {
         return index2index;
     }
 
+    /**
+     * Add apex MS2 index and scan numbers to the psm file.
+     * @param psm_file A PSM table file from DIA search
+     * @param ms_file A MS spectrum file in mzML format
+     * @return A map of PSM to ApexMatch
+     * @throws IOException
+     */
+    public String add_ms2spectrum_index(String psm_file, String ms_file) throws IOException {
+        ConcurrentHashMap<Integer, ApexMatch> row2index = new ConcurrentHashMap<>();
+        // only need to save information from MS2 spectra
+        // index -> rt and isolation_mz
+        // Extract MS2 spectra index and MS2 spectra RT and isolation win from mzML
+        HashMap<Integer, HashMap<String, Double>> index = new HashMap<>();
+        DIAMeta meta = new DIAMeta();
+        meta.load_ms_data(ms_file);
+        int global_index = 0;
+        for(int scan_num: meta.num2scanMap.keySet()){
+            if(meta.num2scanMap.get(scan_num).getMsLevel()==2) {
+                index.put(global_index, new HashMap<>());
+                index.get(global_index).put("rt",meta.num2scanMap.get(scan_num).getRt());
+                index.get(global_index).put("scan_number", (double) scan_num);
+                index.get(global_index).put("isolation_mz_start",meta.num2scanMap.get(scan_num).getPrecursor().getMzRangeStart());
+                index.get(global_index).put("isolation_mz_end",meta.num2scanMap.get(scan_num).getPrecursor().getMzRangeEnd());
+                global_index++;
+            }
+        }
+        File F = new File(psm_file);
+        String out_prefix = F.getName();
+        if(out_prefix.endsWith(".csv")){
+            out_prefix = out_prefix.replaceAll(".csv","");
+        }else if(out_prefix.endsWith(".tsv")){
+            out_prefix = out_prefix.replaceAll(".tsv","");
+        }else if(out_prefix.endsWith(".txt")){
+            out_prefix = out_prefix.replaceAll(".txt","");
+        }
+        String out_file = out_dir + File.separator + out_prefix + "_added_ms2index.tsv";
+        BufferedWriter writer = new BufferedWriter(new FileWriter(out_file));
+        Cloger.getInstance().logger.info("Add Apex MS2 information to file: "+out_file);
+        BufferedReader psmReader = new BufferedReader(new FileReader(psm_file));
+        String head_line = psmReader.readLine();
+        head_line = head_line.trim();
+        HashMap<String, Integer>cIndex = this.get_column_name2index_from_head_line(head_line);
+        String line;
+        ArrayList<String> matches = new ArrayList<>();
+        while((line = psmReader.readLine())!=null){
+            line = line.trim();
+            String []d= line.split("\t");
+            if(d[cIndex.get(PSMConfig.peptide_modification_column_name)].contains("unimod:")){
+                d[cIndex.get(PSMConfig.peptide_modification_column_name)] = d[cIndex.get(PSMConfig.peptide_modification_column_name)].replaceAll("unimod:","UniMod:");
+                matches.add(StringUtils.join(d,"\t"));
+            }else{
+                matches.add(line);
+            }
+
+        }
+        psmReader.close();
+        DBGear dbGear = new DBGear();
+        IntStream.range(0,matches.size()).parallel().forEach(k -> {
+            String[] d = matches.get(k).split("\t");
+            double rt = Double.parseDouble(d[cIndex.get(PSMConfig.rt_column_name)]);
+            double precursor_mz;
+            if(cIndex.containsKey(PSMConfig.precursor_mz_column_name)) {
+                precursor_mz = Double.parseDouble(d[cIndex.get(PSMConfig.precursor_mz_column_name)]);
+            }else{
+                String peptide = d[cIndex.get(PSMConfig.stripped_peptide_sequence_column_name)];
+                String modification = this.get_modification_diann(d[cIndex.get(PSMConfig.peptide_modification_column_name)], peptide);
+                synchronized (this) {
+                    this.add_peptide(peptide, modification);
+                }
+
+                precursor_mz = dbGear.get_mz(this.get_peptide(d[cIndex.get(PSMConfig.stripped_peptide_sequence_column_name)],
+                                this.get_modification_diann(d[cIndex.get(PSMConfig.peptide_modification_column_name)], d[cIndex.get(PSMConfig.stripped_peptide_sequence_column_name)])).getMass(),
+                        Integer.parseInt(d[cIndex.get(PSMConfig.precursor_charge_column_name)]));
+            }
+
+            double delta_rt = Double.POSITIVE_INFINITY;
+            int matched_index = -1;
+
+            for (Integer i : index.keySet()) {
+                if (index.get(i).get("isolation_mz_start") <= precursor_mz && precursor_mz <= index.get(i).get("isolation_mz_end" )){
+                    if (Math.abs(index.get(i).get("rt") - rt) < delta_rt) {
+                    // if (Math.abs(index.get(i).get("rt") - rt) < delta_rt && Math.abs(index.get(i).get("ccs") - ccs) < ccs_cutoff) {
+                        delta_rt = Math.abs(index.get(i).get("rt") - rt);
+                        // delta_ccs = Math.abs(index.get(i).get("ccs") - ccs);
+                        matched_index = i;
+                    } else if (index.get(i).get("rt") > rt + 2) {
+                        break;
+                    }
+                }
+            }
+            if(matched_index==-1){
+                for (int i : index.keySet()) {
+                    if (index.get(i).get("isolation_mz_start") <= precursor_mz && precursor_mz <= index.get(i).get("isolation_mz_end")){
+                        if (Math.abs(index.get(i).get("rt") - rt) < delta_rt) {
+                            delta_rt = Math.abs(index.get(i).get("rt") - rt);
+                            matched_index = i;
+                        } else if (index.get(i).get("rt") > rt + 2) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            synchronized(this) {
+                if(index.containsKey(matched_index)) {
+                    ApexMatch apexMatch = new ApexMatch();
+                    apexMatch.ms2index = matched_index;
+                    apexMatch.apex_rt = index.get(matched_index).get("rt");
+                    apexMatch.delta_rt = index.get(matched_index).get("rt") - rt;
+                    apexMatch.scan_number = index.get(matched_index).get("scan_number").intValue();
+                    row2index.put(k,apexMatch);
+                }else{
+                    System.out.println("No apex scan found: "+matches.get(k));
+                }
+            }
+        });
+        if(!cIndex.containsKey(PSMConfig.qvalue_column_name)){
+            writer.write(head_line+"\tDetection Q Value\tapex_rt\tms2index_delta_rt\tms2index\tscan\tisolation_mz_start\tisolation_mz_end\n");
+        }else{
+            writer.write(head_line+"\tapex_rt\tms2index_delta_rt\tms2index\tscan\tisolation_mz_start\tisolation_mz_end\n");
+        }
+
+        IntStream.range(0,matches.size()).forEach(k -> {
+            try {
+                if(!cIndex.containsKey(PSMConfig.qvalue_column_name)){
+                    writer.write(matches.get(k)+"\t0\t"+row2index.get(k).apex_rt+"\t"+row2index.get(k).delta_rt+"\t"+row2index.get(k).ms2index+"\t"+row2index.get(k).scan_number+"\t"+index.get(row2index.get(k).ms2index).get("isolation_mz_start")+"\t"+index.get(row2index.get(k).ms2index).get("isolation_mz_end")+"\n");
+                }else{
+                    writer.write(matches.get(k)+"\t"+row2index.get(k).apex_rt+"\t"+row2index.get(k).delta_rt+"\t"+row2index.get(k).ms2index+"\t"+row2index.get(k).scan_number+"\t"+index.get(row2index.get(k).ms2index).get("isolation_mz_start")+"\t"+index.get(row2index.get(k).ms2index).get("isolation_mz_end")+"\n");
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        writer.close();
+        PSMConfig.rt_column_name = "apex_rt";
+        return(out_file);
+    }
+
     private boolean is_within_isolation_win(double mz, double iso_mz, double width){
         return mz >= (iso_mz - width / 2.0) && mz <= (iso_mz + width / 2.0);
     }
@@ -6922,7 +7068,7 @@ public class AIGear {
                 .header(true);
         CsvReadOptions options = builder.build();
         Table psmTable = Table.read().usingOptions(options);
-        if(search_engine.equalsIgnoreCase("DIA-NN") || search_engine.equalsIgnoreCase("DIANN")){
+        if(search_engine.equalsIgnoreCase("DIA-NN") || search_engine.equalsIgnoreCase("DIANN") || search_engine.equalsIgnoreCase("skyline")){
             // psmTable = psmTable.sortOn("File.Name","Q.Value","");
             // TODO
         }else{

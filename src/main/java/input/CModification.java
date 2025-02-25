@@ -126,7 +126,7 @@ public final class CModification {
             if (jMod.position.toLowerCase().contains("term")) {
                 System.err.println("Terminal modification is not supported:" + mod_name);
             }
-            String site_unimod_acc = jMod.site + "[" + jMod.unimod_accession + "]";
+            String site_unimod_acc = jMod.site + "(" + jMod.unimod_accession + ")";
             // take this as modification code (int)
             int mod_id = ptm_name2id.get(mod_name);
             unimod2modification_code.put(site_unimod_acc, String.valueOf(mod_id));
