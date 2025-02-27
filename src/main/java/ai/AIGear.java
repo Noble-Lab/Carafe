@@ -728,6 +728,7 @@ public class AIGear {
                 }
 
             }else if(aiGear.search_engine.equalsIgnoreCase("generic") && aiGear.data_type.equalsIgnoreCase("dda")) {
+                aiGear.rt_merge_method = "mean";
                 File F = new File(ms_file);
                 if (ms_file.endsWith(".mzML") || ms_file.endsWith(".mzml") || F.isDirectory()) {
                     String mgf_file = aiGear.out_dir + File.separator + "temp.mgf";
