@@ -31,7 +31,7 @@ def train_ms2(in_dir:str,
     import pandas as pd
     import math
     pd.options.mode.chained_assignment = None  # default=‘warn’
-    a = pd.read_csv(in_dir+"/psm_pdv.txt",sep="\t")
+    a = pd.read_csv(in_dir+"/psm_pdv.txt",sep="\t",dtype={'mod_sites': str})
 
     if mode_type == 'general':
         model_mgr = ModelManager(mask_modloss=True, device=device)
@@ -61,8 +61,8 @@ def train_ms2(in_dir:str,
     a["sequence"] = a["peptide"]
     a["nAA"] = a["sequence"].str.len()
     a.dtypes
-    a['mod_sites'] = a['mod_sites'].fillna("")
-    a['mods'] = a['mods'].fillna("")
+    a['mod_sites'] = a['mod_sites'].fillna("").astype(str)
+    a['mods'] = a['mods'].fillna("").astype(str)
     b = pd.read_csv(in_dir+"/fragment_intensity_df.tsv",sep="\t",engine="pyarrow")
     if log_transform:
         print("log transform intensity data ...")
