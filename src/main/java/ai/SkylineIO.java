@@ -416,6 +416,7 @@ public class SkylineIO {
             mod_pep = row.getString("Peptide Modified Sequence Unimod Ids");
             if(mod_pep.contains("unimod")){
                 // modification
+                mod_pep = mod_pep.replaceAll("unimod","UniMod");
                 HashMap<Integer,String> pos2mod = get_unimod_from_peptide(mod_pep);
                 Peptide modPeptide = new Peptide(get_peptide(mod_pep));
                 for (int pos: pos2mod.keySet()) {
@@ -430,7 +431,7 @@ public class SkylineIO {
         all_peptide_forms.forEach(pep -> pep.getMass(PeptideUtils.modificationParameters,PeptideUtils.sequenceProvider,PeptideUtils.sequenceMatchingParameters));
     }
 
-    static Pattern pattern = Pattern.compile("(.?)\\(unimod:(\\d+)\\)");
+    static Pattern pattern = Pattern.compile("(.?)\\(UniMod:(\\d+)\\)");
     private static HashMap<Integer,String> get_unimod_from_peptide(String peptide){
         HashMap<Integer,String> pos2mod = new HashMap<>();
         Matcher matcher = pattern.matcher(peptide);
@@ -439,7 +440,7 @@ public class SkylineIO {
         String mod_aa;
         while (matcher.find()) {
             String aminoAcid = matcher.group(1);
-            String modificationName = "unimod:" + matcher.group(2);
+            String modificationName = "UniMod:" + matcher.group(2);
             if(aminoAcid.isEmpty()){
                 sequencePosition = 0;
                 mod_aa = modificationName;
@@ -455,6 +456,6 @@ public class SkylineIO {
     }
 
     private static String get_peptide(String unimod_pep){
-        return unimod_pep.replaceAll("\\(unimod:\\d+\\)", "");
+        return unimod_pep.replaceAll("\\(UniMod:\\d+\\)", "");
     }
 }
