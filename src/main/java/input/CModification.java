@@ -64,6 +64,16 @@ public final class CModification {
                 i++;
                 id2ptmname.put(i, name);
                 ptm_name_list.add(name);
+                // for the common PTMs, use the mod mass values from ptmFactory
+                if(name.equalsIgnoreCase("Carbamidomethyl of C")){
+                    this.change_mod_mass(i,ptmFactory.getModification("Carbamidomethylation of C").getMass());
+                } else if (name.equalsIgnoreCase("Phospho of S")) {
+                    this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of S").getMass());
+                } else if (name.equalsIgnoreCase("Phospho of T")) {
+                    this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of T").getMass());
+                } else if (name.equalsIgnoreCase("Phospho of Y")) {
+                    this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of Y").getMass());
+                }
             }
         }
         ArrayList<String> usrPTMs = ptmFactory.getUserModificationsOrdered();
