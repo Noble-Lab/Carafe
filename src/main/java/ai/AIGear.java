@@ -53,7 +53,6 @@ import org.apache.commons.math3.stat.StatUtils;
 import org.apache.commons.math3.stat.correlation.SpearmansCorrelation;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.parquet.avro.AvroParquetReader;
 import org.apache.parquet.avro.AvroParquetWriter;
 import org.apache.avro.generic.GenericData;
@@ -63,6 +62,7 @@ import org.apache.parquet.hadoop.ParquetWriter;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.io.LocalInputFile;
 import org.apache.parquet.io.LocalOutputFile;
+import tech.tablesaw.aggregate.AggregateFunctions;
 import tech.tablesaw.api.DoubleColumn;
 import tech.tablesaw.api.IntColumn;
 import tech.tablesaw.api.Table;
@@ -77,6 +77,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -757,7 +758,11 @@ public class AIGear {
 
             Cloger.getInstance().set_job_start_time();
             HashMap<String, String> paraMap = new HashMap<>();
-            aiGear.train_ms2_and_rt(paraMap, aiGear.out_dir, aiGear.out_dir, "test");
+            if(CParameter.tf_type.equalsIgnoreCase("nce")){
+                aiGear.nce = aiGear.select_best_nce(aiGear.out_dir,20,40);
+            }else{
+                aiGear.train_ms2_and_rt(paraMap, aiGear.out_dir, aiGear.out_dir, "test");
+            }
             Cloger.getInstance().logger.info("Time used for model training: " + Cloger.getInstance().get_job_run_time());
             if (cmd.hasOption("db")) {
                 aiGear.db = cmd.getOptionValue("db");
@@ -7943,12 +7948,12 @@ public class AIGear {
         skylineIO.create_RefSpectra();
         skylineIO.create_Modifications();
         skylineIO.create_RetentionTimes();
-        skylineIO.pStatementRefSpectra.setNull(5, java.sql.Types.CHAR);
-        skylineIO.pStatementRefSpectra.setNull(6, java.sql.Types.CHAR);
-        skylineIO.pStatementRefSpectra.setNull(8, java.sql.Types.DOUBLE);
-        skylineIO.pStatementRefSpectra.setNull(9, java.sql.Types.DOUBLE);
-        skylineIO.pStatementRefSpectra.setNull(10, java.sql.Types.DOUBLE);
-        skylineIO.pStatementRefSpectra.setNull(13, java.sql.Types.VARCHAR);
+        skylineIO.pStatementRefSpectra.setNull(5, Types.CHAR);
+        skylineIO.pStatementRefSpectra.setNull(6, Types.CHAR);
+        skylineIO.pStatementRefSpectra.setNull(8, Types.DOUBLE);
+        skylineIO.pStatementRefSpectra.setNull(9, Types.DOUBLE);
+        skylineIO.pStatementRefSpectra.setNull(10, Types.DOUBLE);
+        skylineIO.pStatementRefSpectra.setNull(13, Types.VARCHAR);
         skylineIO.create_RefSpectraPeaks();
         skylineIO.connection.setAutoCommit(false);
 
@@ -8643,6 +8648,364 @@ public class AIGear {
         BufferedWriter bWriter = new BufferedWriter(new FileWriter(para_file));
         bWriter.write(sBuilder.toString());
         bWriter.close();
+    }
+
+    public int select_best_nce(String in_dir, int min_nce, int max_nce) throws IOException {
+        int best_nce = 0;
+        double best_cor = Double.NEGATIVE_INFINITY;
+        // digest proteins and generate peptide forms
+        // need to consider for both small and large databases
+        long startTime = System.currentTimeMillis();
+
+        Map<String,HashMap<String,String>> res_files = new LinkedHashMap<>();
+
+        AIWorker.fast_mode = this.use_parquet;
+
+        String input_pred_file = in_dir + File.separator + "psm_pdv.txt";
+        String i_out_dir = this.out_dir + File.separator + "nce";
+        // create the output directory
+        File OD = new File(i_out_dir);
+        if(!OD.exists()){
+            OD.mkdirs();
+        }
+
+        HashMap<String,Integer> hIndex = FileIO.get_column_name2index(input_pred_file);
+        // add sequence column and nAA column if they are not present in the file
+        if(!hIndex.containsKey("sequence") || !hIndex.containsKey("nAA")){
+
+            String new_input_pred_file = i_out_dir + File.separator + "psm_pdv_with_sequence_nAA.txt";
+            BufferedWriter bWriter = new BufferedWriter(new FileWriter(new_input_pred_file));
+
+            BufferedReader reader = new BufferedReader(new FileReader(input_pred_file));
+            String head_line = reader.readLine().trim();
+            if(!hIndex.containsKey("sequence")){
+                head_line = head_line + "\t" + "sequence";
+            }
+            if(!hIndex.containsKey("nAA")){
+                head_line = head_line + "\t" + "nAA";
+            }
+            if(!hIndex.containsKey("pepID")){
+                head_line = head_line + "\t" + "pepID";
+            }
+            if(!hIndex.containsKey("protein")){
+                head_line = head_line + "\t" + "protein";
+            }
+            if(!hIndex.containsKey("decoy")){
+                head_line = head_line + "\t" + "decoy";
+            }
+            bWriter.write(head_line + "\n");
+            String line;
+            HashMap<String,Integer> pep_mod2pepID = new HashMap<>();
+            int pepID = -1;
+            while((line = reader.readLine()) != null){
+                line = line.trim();
+                String [] d = line.split("\t");
+                if(!hIndex.containsKey("sequence")){
+                    line = line + "\t" + d[hIndex.get("peptide")];
+                }
+                if(!hIndex.containsKey("nAA")){
+                    line = line + "\t" + d[hIndex.get("peptide")].length();
+                }
+                String pep_mod = d[hIndex.get("peptide")] + "_" + d[hIndex.get("modification")];
+                if(!pep_mod2pepID.containsKey(pep_mod)){
+                    pepID++;
+                    pep_mod2pepID.put(pep_mod,pepID);
+                }
+
+                if(!hIndex.containsKey("pepID")){
+                    line = line + "\t" + pep_mod2pepID.get(pep_mod);
+                }
+                // use peptide to fill this column if it is not present
+                if(!hIndex.containsKey("protein")){
+                    line = line + "\t" + d[hIndex.get("peptide")];
+                }
+                if(!hIndex.containsKey("decoy")){
+                    line = line + "\t" + "No";
+                }
+                bWriter.write(line + "\n");
+            }
+            reader.close();
+            bWriter.close();
+            input_pred_file = new_input_pred_file;
+        }
+
+        if(this.device.toLowerCase().contains("cpu")){
+            // only use 1 cpu for now
+            ExecutorService fixedThreadPool = Executors.newFixedThreadPool(1);
+            Cloger.getInstance().logger.info("Number of CPU jobs "+1);
+            AIWorker.python_bin = this.python_bin;
+            // perform spectrum and rt prediction.
+            String mode = this.mod_ai.equalsIgnoreCase("-")?"general":this.mod_ai;
+            for(int i_nce=min_nce;i_nce <= max_nce;i_nce++){
+                System.out.println("NCE: "+i_nce);
+                // prediction
+                if(this.use_user_provided_ms_instrument) {
+                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.user_provided_ms_instrument, i_nce, this.mod_ai));
+                }else{
+                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.ms_instrument, i_nce, this.mod_ai));
+                }
+                String nce_str = String.valueOf(i_nce);
+                res_files.put(nce_str,new HashMap<>());
+                res_files.get(nce_str).put("ms2", i_out_dir + File.separator + nce_str + "_ms2_df.tsv");
+                res_files.get(nce_str).put("ms2_mz", i_out_dir + File.separator + nce_str + "_ms2_mz_df.tsv");
+                res_files.get(nce_str).put("ms2_intensity", i_out_dir + File.separator + nce_str + "_ms2_pred.tsv");
+                res_files.get(nce_str).put("rt", i_out_dir + File.separator + nce_str + "_rt_pred.tsv");
+            }
+
+            fixedThreadPool.shutdown();
+
+            try {
+                fixedThreadPool.awaitTermination(Long.MAX_VALUE, TimeUnit.HOURS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }else{
+            ExecutorService fixedThreadPool = Executors.newFixedThreadPool(1);
+            Cloger.getInstance().logger.info("Number of GPU jobs "+1);
+            AIWorker.python_bin = this.python_bin;
+            // perform spectrum and rt prediction.
+            String mode = this.mod_ai.equalsIgnoreCase("-")?"general":this.mod_ai;
+            for(int i_nce=min_nce;i_nce <= max_nce;i_nce++){
+                System.out.println("NCE: "+i_nce);
+                // prediction
+                if(this.use_user_provided_ms_instrument) {
+                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.user_provided_ms_instrument, i_nce, this.mod_ai));
+                }else{
+                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.ms_instrument, i_nce, this.mod_ai));
+                }
+                String nce_str = String.valueOf(i_nce);
+                res_files.put(nce_str,new HashMap<>());
+                res_files.get(nce_str).put("ms2", i_out_dir + File.separator + nce_str + "_ms2_df.tsv");
+                res_files.get(nce_str).put("ms2_mz", i_out_dir + File.separator + nce_str + "_ms2_mz_df.tsv");
+                res_files.get(nce_str).put("ms2_intensity", i_out_dir + File.separator + nce_str + "_ms2_pred.tsv");
+                res_files.get(nce_str).put("rt", i_out_dir + File.separator + nce_str + "_rt_pred.tsv");
+            }
+
+            fixedThreadPool.shutdown();
+
+            try {
+                fixedThreadPool.awaitTermination(Long.MAX_VALUE, TimeUnit.HOURS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        String mz_df_file = "";
+        String rt_pred_file = "";
+        for(String i_nce:res_files.keySet()){
+            // generate a hash map for just i_nce and its value
+            Map<String,HashMap<String,String>> res_files_nce = new LinkedHashMap<>();
+            res_files_nce.put(i_nce,res_files.get(i_nce));
+            try {
+                generate_spectral_library(res_files_nce, i_out_dir, i_nce+"_carafe_spectral_library.tsv");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            mz_df_file = res_files.get(i_nce).get("ms2_mz");
+            rt_pred_file = res_files.get(i_nce).get("rt");
+        }
+
+        // library for observed data
+        Map<String,HashMap<String,String>> res_files_ob = new LinkedHashMap<>();
+        res_files_ob.put("observed",new HashMap<>());
+        res_files_ob.get("observed").put("ms2", input_pred_file);
+        res_files_ob.get("observed").put("ms2_mz", mz_df_file);
+        res_files_ob.get("observed").put("ms2_intensity", this.out_dir + File.separator + "fragment_intensity_df.tsv");
+        res_files_ob.get("observed").put("rt", rt_pred_file);
+        try {
+            generate_spectral_library(res_files_ob, i_out_dir, "experiment_carafe_spectral_library.tsv");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        //
+        String observed_ms2_intensity_file = this.out_dir + File.separator + "fragment_intensity_df.tsv";
+        String valid_file = this.out_dir + File.separator + "fragment_intensity_valid.tsv";
+        Table observed_ms2_intensity_table = read_table(observed_ms2_intensity_file);
+        Table valid_table = read_table(valid_file);
+        Table psmTable = read_table(input_pred_file);
+        for(String i_nce:res_files.keySet()){
+            String ms2_intensity_file = res_files.get(i_nce).get("ms2_intensity");
+            Table ms2_intensity_table = read_table(ms2_intensity_file);
+            // add a new column to the psmTable
+            String nce_col = "nce_"+i_nce;
+            String cor_n_col = "cor_n_"+i_nce;
+            psmTable.addColumns(DoubleColumn.create(nce_col,psmTable.rowCount()));
+            psmTable.addColumns(IntColumn.create(cor_n_col,psmTable.rowCount()));
+            for(int i=0;i<psmTable.rowCount();i++) {
+                int frag_start_idx = psmTable.row(i).getInt("frag_start_idx");
+                int frag_stop_idx = psmTable.row(i).getInt("frag_stop_idx");
+                Table a = ms2_intensity_table.inRange(frag_start_idx,frag_stop_idx);
+                Table b = observed_ms2_intensity_table.inRange(frag_start_idx,frag_stop_idx);
+                Table c = valid_table.inRange(frag_start_idx,frag_stop_idx);
+                ArrayList<Double> aList = new ArrayList<>();
+                ArrayList<Double> bList = new ArrayList<>();
+                for(int j=0;j<a.rowCount();j++){
+                    for(int k=0;k<a.columnCount();k++){
+                        if(c.row(j).getInt(k)<=0){
+                            // valid
+                            if(a.row(j).getDouble(k)> 0 || b.row(j).getDouble(k) > 0) {
+                                aList.add(a.row(j).getDouble(k));
+                                bList.add(b.row(j).getDouble(k));
+                            }
+                        }
+                    }
+                }
+                // calculate the correlation between the predicted and observed fragment ion intensity
+                if(aList.size()>=4){
+                    double [] a_array = aList.stream().mapToDouble(Double::doubleValue).toArray();
+                    double [] b_array = bList.stream().mapToDouble(Double::doubleValue).toArray();
+                    if(StatUtils.max(a_array) == 0 || StatUtils.max(b_array) == 0) {
+                        psmTable.row(i).setDouble(nce_col,Double.NaN);
+                    }else{
+                        double cor = calc_unweighted_spectral_entropy(a_array, b_array);
+                        psmTable.row(i).setDouble(nce_col, cor);
+
+                        if(cor> 1){
+                            System.out.println(nce_col);
+                            System.out.println(psmTable.row(i).getString("peptide"));
+                            System.out.println(psmTable.row(i).getInt("charge"));
+                            System.out.println(psmTable.row(i).getString("modification"));
+                            System.out.println(StringUtils.join(aList,","));
+                            System.out.println(StringUtils.join(bList,","));
+                            a.print();
+                            b.print();
+                            System.out.println(cor);
+                            System.out.println();
+                            psmTable.row(i).setDouble(nce_col,Double.NaN);
+                        }
+                    }
+
+                    // use spearman correlation
+                    // SpearmansCorrelation spc = new SpearmansCorrelation();
+                    // double cor = spc.correlation(aList.stream().mapToDouble(Double::doubleValue).toArray(), bList.stream().mapToDouble(Double::doubleValue).toArray());
+                    // psmTable.row(i).setDouble(nce_col, cor);
+                }else{
+                    psmTable.row(i).setDouble(nce_col,Double.NaN);
+                }
+                psmTable.row(i).setInt(cor_n_col,aList.size());
+            }
+            double median_cor = AggregateFunctions.percentile(psmTable.doubleColumn(nce_col),50.0);
+            if(best_cor <= median_cor){
+                best_cor = median_cor;
+                best_nce = Integer.parseInt(i_nce);
+            }
+            System.out.println("NCE: "+i_nce+" Median correlation: "+median_cor);
+        }
+        System.out.println("Best NCE:"+best_nce);
+        // save the data to a file
+        String out_psm_file = this.out_dir + File.separator + "psm_pdv_with_correlation.txt";
+        CsvWriteOptions writeOptions = CsvWriteOptions.builder(out_psm_file)
+                .separator('\t')
+                .header(true)
+                .build();
+        // Write the table to a TSV file
+        psmTable.write().usingOptions(writeOptions);
+        long bTime = System.currentTimeMillis();
+        Cloger.getInstance().logger.info("Time used for NCE calibration:" + (bTime - startTime) / 1000 + " s.");
+        // return res_files;
+        return best_nce;
+    }
+
+    private Table read_table(String file){
+        CsvReadOptions.Builder builder = CsvReadOptions.builder(file)
+                .maxCharsPerColumn(10000000)
+                .separator('\t')
+                .header(true);
+        CsvReadOptions options = builder.build();
+        return(Table.read().usingOptions(options));
+    }
+
+    public static double calc_spectral_angle(double[] a, double[] b) {
+        if (a.length != b.length) {
+            throw new IllegalArgumentException("Vectors must have the same length");
+        }
+
+        // 1) Compute dot product and norms
+        double dot   = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            dot   += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+
+        // 2) Compute magnitudes
+        normA = Math.sqrt(normA);
+        normB = Math.sqrt(normB);
+
+        // 3) Compute cos(theta) = (a dot b) / (|a| * |b|)
+        double cosTheta = dot / (normA * normB);
+
+        // 4) Clamp possible floating-point errors
+        if (cosTheta > 1.0)  cosTheta = 1.0;
+        if (cosTheta < -1.0) cosTheta = -1.0;
+
+        // 5) Angle = arccos(cosTheta)
+        double angle = Math.acos(cosTheta);
+
+        // 6) Normalized spectral angle
+        return 1.0 - 2.0 * angle / Math.PI;
+    }
+
+    /**
+     * Calculate the unweighted spectral entropy similarity between two spectra.
+     *
+     * @param a the first spectrum (array of intensities)
+     * @param b the second spectrum (array of intensities)
+     * @return the unweighted spectral entropy similarity
+     * @throws IllegalArgumentException if the input arrays have different lengths or are empty
+     */
+    public static double calc_unweighted_spectral_entropy(double[] a, double[] b) {
+        // reference: https://www.nature.com/articles/s41592-021-01331-z#Sec9
+        // 1. Compute sums to normalize
+        double sumA = 0.0;
+        double sumB = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            sumA += a[i];
+            sumB += b[i];
+        }
+
+        // 2. Normalize each spectrum so their sums are 1
+        double[] aNorm = new double[a.length];
+        double[] bNorm = new double[b.length];
+        for (int i = 0; i < a.length; i++) {
+            aNorm[i] = a[i] / sumA;
+            bNorm[i] = b[i] / sumB;
+        }
+
+        // 3. Compute individual entropies S_A and S_B
+        double sA = 0.0;
+        double sB = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            if (aNorm[i] > 0.0) {
+                sA -= aNorm[i] * Math.log(aNorm[i]);
+            }
+            if (bNorm[i] > 0.0) {
+                sB -= bNorm[i] * Math.log(bNorm[i]);
+            }
+        }
+
+        // 4. Create combined spectrum c = 0.5 * (aNorm + bNorm)
+        double[] c = new double[a.length];
+        for (int i = 0; i < a.length; i++) {
+            c[i] = 0.5 * (aNorm[i] + bNorm[i]);
+        }
+
+        // 5. Compute the combined entropy S_AB
+        double sAB = 0.0;
+        for (int i = 0; i < c.length; i++) {
+            if (c[i] > 0.0) {
+                sAB -= c[i] * Math.log(c[i]);
+            }
+        }
+
+        // 6. Compute the unweighted entropy similarity
+        //    Similarity = 1 - (2 * S_AB - S_A - S_B) / ln(4)
+        double similarity = 1.0 - (2.0 * sAB - sA - sB) / Math.log(4.0);
+
+        return similarity;
     }
 
 }
