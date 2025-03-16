@@ -5535,32 +5535,34 @@ public class AIGear {
 
     private String get_xic_json(String id, PeptideMatch pMatch){
         JXIC xic = new JXIC();
-        xic.fragment_ion_mzs = pMatch.peak.fragment_ions_mz
-                .stream()
-                .mapToDouble(Double::doubleValue)
-                .toArray();
-        xic.smoothed_fragment_intensities = pMatch.smoothed_fragment_intensities.getData();
-        xic.raw_fragment_intensities = pMatch.raw_fragment_intensities;
-        xic.xic_rt_values = pMatch.xic_rt_values;
-        xic.fragment_ion_skewness = pMatch.skewed_peaks;
+        if(pMatch.peak.fragment_ions_mz!=null) {
+            xic.fragment_ion_mzs = pMatch.peak.fragment_ions_mz
+                    .stream()
+                    .mapToDouble(Double::doubleValue)
+                    .toArray();
+            xic.smoothed_fragment_intensities = pMatch.smoothed_fragment_intensities.getData();
+            xic.raw_fragment_intensities = pMatch.raw_fragment_intensities;
+            xic.xic_rt_values = pMatch.xic_rt_values;
+            xic.fragment_ion_skewness = pMatch.skewed_peaks;
 
-        xic.fragment_ion_cors = new double[xic.fragment_ion_mzs.length];
-        for(int i=0;i<xic.fragment_ion_mzs.length;i++){
-            if(pMatch.mz2cor.containsKey(xic.fragment_ion_mzs[i])) {
-                xic.fragment_ion_cors[i] = pMatch.mz2cor.get(xic.fragment_ion_mzs[i]);
-            }else{
-                System.err.println("Error: missing fragment ion correlation:"+xic.fragment_ion_mzs[i]);
-                System.exit(1);
+            xic.fragment_ion_cors = new double[xic.fragment_ion_mzs.length];
+            for (int i = 0; i < xic.fragment_ion_mzs.length; i++) {
+                if (pMatch.mz2cor.containsKey(xic.fragment_ion_mzs[i])) {
+                    xic.fragment_ion_cors[i] = pMatch.mz2cor.get(xic.fragment_ion_mzs[i]);
+                } else {
+                    System.err.println("Error: missing fragment ion correlation:" + xic.fragment_ion_mzs[i]);
+                    System.exit(1);
+                }
             }
-        }
 
-        xic.peptide = pMatch.peptide.getSequence();
-        xic.charge = pMatch.precursor_charge;
-        xic.modification = ModificationUtils.getInstance().getModificationString(pMatch.peptide);
-        xic.rt_apex = pMatch.rt_apex;
-        xic.rt_start = pMatch.rt_start;
-        xic.rt_end = pMatch.rt_end;
-        xic.id = id;
+            xic.peptide = pMatch.peptide.getSequence();
+            xic.charge = pMatch.precursor_charge;
+            xic.modification = ModificationUtils.getInstance().getModificationString(pMatch.peptide);
+            xic.rt_apex = pMatch.rt_apex;
+            xic.rt_start = pMatch.rt_start;
+            xic.rt_end = pMatch.rt_end;
+            xic.id = id;
+        }
         return(JSON.toJSONString(xic));
     }
 
