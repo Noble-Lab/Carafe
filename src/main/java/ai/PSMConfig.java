@@ -53,6 +53,8 @@ public class PSMConfig {
 
     public static String qvalue_column_name = "Q.Value";
 
+    public static String PEP_column_name = "PEP";
+
     public static String im_column_name = "IM";
 
     public static String ms_file_column_name = "File.Name";

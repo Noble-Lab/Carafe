@@ -41,6 +41,7 @@ import main.java.xic.SGFilter;
 import main.java.xic.SGFilter3points;
 import main.java.xic.SGFilter5points;
 import main.java.xic.SGFilter7points;
+import net.tlabs.tablesaw.parquet.TablesawParquetReader;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.reflect.ReflectData;
@@ -66,6 +67,7 @@ import tech.tablesaw.aggregate.AggregateFunctions;
 import tech.tablesaw.api.DoubleColumn;
 import tech.tablesaw.api.IntColumn;
 import tech.tablesaw.api.Table;
+import tech.tablesaw.io.Source;
 import tech.tablesaw.io.csv.CsvReadOptions;
 import tech.tablesaw.io.csv.CsvWriteOptions;
 
@@ -1787,11 +1789,18 @@ public class AIGear {
     public void load_data(String psm_file, String ms_file, double fdr_cutoff) {
         System.out.println("FDR cutoff:"+fdr_cutoff);
         try {
-            hIndex = get_column_name2index(psm_file);
+            if(!psm_file.endsWith(".parquet")) {
+                // If the psm_file is not in parquet format, it is a text file
+                hIndex = get_column_name2index(psm_file);
+            }
             if(this.search_engine.equalsIgnoreCase("DIANN") || this.search_engine.equalsIgnoreCase("DIA-NN")) {
                 System.out.println("DIANN search engine");
                 String new_psm_file = this.out_dir + File.separator + "psm_rank_" + fdr_cutoff + ".tsv";
                 remove_interference_peptides_diann(psm_file, new_psm_file);
+                if(psm_file.endsWith(".parquet")) {
+                    // need to get the column index from the new text file
+                    hIndex = get_column_name2index(new_psm_file);
+                }
                 ms_file2psm = get_ms_file2psm_diann(new_psm_file, ms_file, fdr_cutoff);
             }else if(this.search_engine.equalsIgnoreCase("generic") && this.data_type.equalsIgnoreCase("DDA")){
                 System.out.println("Generic search engine format for DDA data");
@@ -7173,12 +7182,34 @@ public class AIGear {
     }
 
     public void remove_interference_peptides_diann(String psm_file, String new_psm_file){
-        CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
-                .maxCharsPerColumn(10000000)
-                .separator('\t')
-                .header(true);
-        CsvReadOptions options = builder.build();
-        Table psmTable = Table.read().usingOptions(options);
+
+        Table psmTable;
+        if(psm_file.endsWith(".parquet")){
+            System.out.println("The input file format is DIA-NN parquet format:" + psm_file);
+            // There is no File.Name column in the parquet file
+            psmTable = new TablesawParquetReader().read(new Source(new File(psm_file)));
+            // if "File.Name" column is not in the parquet file, then we need to use "Run"
+            if(!psmTable.columnNames().contains(PSMConfig.ms_file_column_name)){
+                if(psmTable.columnNames().contains("Run")){
+                    PSMConfig.ms_file_column_name = "Run";
+                }
+            }
+            if(!psmTable.columnNames().contains(PSMConfig.ms2_index_column_name)){
+                if(psmTable.columnNames().contains("Ms2.Scan")){
+                    PSMConfig.ms2_index_column_name = "Ms2.Scan";
+                }
+            }
+            for (String columnName : psmTable.columnNames()) {
+                System.out.println(columnName);
+            }
+        }else{
+            CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
+                    .maxCharsPerColumn(10000000)
+                    .separator('\t')
+                    .header(true);
+            CsvReadOptions options = builder.build();
+            psmTable = Table.read().usingOptions(options);
+        }
 
         String peptide;
         double mz;
@@ -7191,28 +7222,37 @@ public class AIGear {
 
         DoubleColumn mz_column = DoubleColumn.create("mz",psmTable.rowCount());
         for(int i=0;i<psmTable.rowCount();i++) {
-            peptide = psmTable.getString(i, "Stripped.Sequence");
-            charge = psmTable.getString(i, "Precursor.Charge");
-            mod_seq = psmTable.getString(i, "Modified.Sequence");
+            //peptide = psmTable.getString(i, "Stripped.Sequence");
+            peptide = psmTable.getString(i, PSMConfig.stripped_peptide_sequence_column_name);
+            //charge = psmTable.getString(i, "Precursor.Charge");
+            charge = psmTable.getString(i, PSMConfig.precursor_charge_column_name);
+            //mod_seq = psmTable.getString(i, "Modified.Sequence");
+            mod_seq = psmTable.getString(i, PSMConfig.peptide_modification_column_name);
             modification = this.get_modification_diann(mod_seq, peptide);
             this.add_peptide(peptide, modification);
             mz_column.set(i, get_mz(this.get_peptide(peptide, modification).getMass(), Integer.parseInt(charge)));
         }
         psmTable.addColumns(mz_column);
         HashMap<String,ArrayList<JPeakGroup>> peptide_form2peptides = new HashMap<>();
-        psmTable = psmTable.sortOn("File.Name","Stripped.Sequence","Precursor.Charge","mz","Q.Value","PEP");
+        //psmTable = psmTable.sortOn("File.Name","Stripped.Sequence","Precursor.Charge","mz","Q.Value","PEP");
+        psmTable = psmTable.sortOn(PSMConfig.ms_file_column_name,PSMConfig.stripped_peptide_sequence_column_name,PSMConfig.precursor_charge_column_name,"mz",PSMConfig.qvalue_column_name,PSMConfig.PEP_column_name);
         String peptide_form;
         // if a peptide form is overlapped with a peptide form with higher score
         IntColumn valid_column = IntColumn.create("peak_share",psmTable.rowCount());
         // HashMap<String,Integer> peptide_mz2count = new HashMap<>();
         HashMap<Integer,JPeakGroup> id2peak = new HashMap<>();
         for(int i=0;i<psmTable.rowCount();i++){
-            peptide = psmTable.getString(i, "Stripped.Sequence");
-            charge = psmTable.getString(i, "Precursor.Charge");
+            //peptide = psmTable.getString(i, "Stripped.Sequence");
+            peptide = psmTable.getString(i, PSMConfig.stripped_peptide_sequence_column_name);
+            //charge = psmTable.getString(i, "Precursor.Charge");
+            charge = psmTable.getString(i, PSMConfig.precursor_charge_column_name);
             mz = mz_column.get(i);
-            rt_start = psmTable.row(i).getDouble("RT.Start");
-            apex_rt = psmTable.row(i).getDouble("RT");
-            rt_end = psmTable.row(i).getDouble("RT.Stop");
+            // rt_start = psmTable.row(i).getDouble("RT.Start");
+            rt_start = psmTable.row(i).getDouble(PSMConfig.rt_start_column_name);
+            // apex_rt = psmTable.row(i).getDouble("RT");
+            apex_rt = psmTable.row(i).getDouble(PSMConfig.rt_column_name);
+            // rt_end = psmTable.row(i).getDouble("RT.Stop");
+            rt_end = psmTable.row(i).getDouble(PSMConfig.rt_end_column_name);
             peptide_form = peptide + "|" + charge + "|" + mz;
             if(!peptide_form2peptides.containsKey(peptide_form)){
                 peptide_form2peptides.put(peptide_form,new ArrayList<>());

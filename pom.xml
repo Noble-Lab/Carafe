@@ -186,6 +186,13 @@
         <version>0.43.1</version>
     </dependency>
 
+    <!-- https://mvnrepository.com/artifact/net.tlabs-data/tablesaw_0.43.1-parquet -->
+    <dependency>
+        <groupId>net.tlabs-data</groupId>
+        <artifactId>tablesaw_0.43.1-parquet</artifactId>
+        <version>0.11.0</version>
+    </dependency>
+
     <!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
     <dependency>
         <groupId>ch.qos.logback</groupId>
