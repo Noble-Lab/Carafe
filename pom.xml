@@ -311,6 +311,10 @@
                 </archive>
                 <outputDirectory>${project.build.directory}/${project.artifactId}-${project.version}
                 </outputDirectory>
+                <excludes>
+                    <exclude>**/test/**</exclude>
+                    <exclude>**/test/**/*.class</exclude>
+                </excludes>
             </configuration>
         </plugin>
 

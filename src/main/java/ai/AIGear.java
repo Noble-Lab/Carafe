@@ -7199,9 +7199,15 @@ public class AIGear {
                     PSMConfig.ms2_index_column_name = "Ms2.Scan";
                 }
             }
-            for (String columnName : psmTable.columnNames()) {
-                System.out.println(columnName);
+            // for PTM data
+            if(!psmTable.columnNames().contains(PSMConfig.ptm_site_qvalue_column_name)){
+                if(psmTable.columnNames().contains("Global.Peptidoform.Q.Value")){
+                    PSMConfig.ptm_site_qvalue_column_name = "Global.Peptidoform.Q.Value";
+                }
             }
+            //for (String columnName : psmTable.columnNames()) {
+            //    System.out.println(columnName);
+            //}
         }else{
             CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
                     .maxCharsPerColumn(10000000)
