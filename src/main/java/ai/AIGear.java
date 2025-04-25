@@ -1129,12 +1129,14 @@ public class AIGear {
         Map<String,HashMap<String,String>> res_files = new LinkedHashMap<>();
 
         if(this.device.toLowerCase().contains("gpu")){
-            try {
+            if(CudaUtils.hasCuda()){
                 MemoryUsage mem = CudaUtils.getGpuMemory(Device.gpu());
                 long gpu_mem = mem.getMax(); // it should return 11GB
                 Cloger.getInstance().logger.info("GPU memory " + gpu_mem);
+                System.out.println(CudaUtils.getCudaVersionString());
+                System.out.println(CudaUtils.getGpuCount());
                 System.out.println(mem.toString());
-            } catch (IllegalStateException e) {
+            } {
                 System.err.println("GPU not available; falling back to CPU.");
                 this.device = "cpu";
             }
