@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 from math import log, log10
 from re import T
@@ -12,6 +14,7 @@ from peptdeep.settings import global_settings,add_user_defined_modifications
 import importlib.util
 import sys
 import re
+
 
 def predict_ms2(model_dir:str,
                 pred_file:str,

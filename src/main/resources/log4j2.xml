@@ -9,6 +9,10 @@
         <Root level="INFO">
             <AppenderRef ref="ConsoleAppender" />
         </Root>
+        <!-- silence the winutils warning -->
+        <Logger name="org.apache.hadoop.util.Shell" level="error" additivity="false">
+        <AppenderRef ref="Console"/>
+        </Logger>
         <Logger name="software.amazon.awssdk" level="INFO" />
         <Logger name="software.amazon.awssdk.request" level="INFO" />
         <Logger name="org.apache.http.wire" level="INFO" />
