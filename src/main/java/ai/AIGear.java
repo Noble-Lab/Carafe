@@ -591,6 +591,15 @@ public class AIGear {
             aiGear.device = cmd.getOptionValue("device");
         }
 
+        if(aiGear.device.toLowerCase().contains("gpu")){
+            if(!CudaUtils.hasCuda()) {
+                System.out.println("GPU is not available! Use CPU instead.");
+                aiGear.device = "cpu";
+            }else{
+                System.out.println("GPU is enabled!");
+            }
+        }
+
         if(cmd.hasOption("lf_frag_mz_min")){
             aiGear.lf_frag_mz_min = Double.parseDouble(cmd.getOptionValue("lf_frag_mz_min"));
         }
@@ -1132,12 +1141,12 @@ public class AIGear {
             if(CudaUtils.hasCuda()){
                 MemoryUsage mem = CudaUtils.getGpuMemory(Device.gpu());
                 long gpu_mem = mem.getMax(); // it should return 11GB
-                Cloger.getInstance().logger.info("GPU memory " + gpu_mem);
-                System.out.println(CudaUtils.getCudaVersionString());
-                System.out.println(CudaUtils.getGpuCount());
-                System.out.println(mem.toString());
-            } {
-                System.err.println("GPU not available; falling back to CPU.");
+                Cloger.getInstance().logger.info("GPU memory: " + gpu_mem);
+                Cloger.getInstance().logger.info("CUDA version: " + CudaUtils.getCudaVersionString());
+                Cloger.getInstance().logger.info("GPU number: " + CudaUtils.getGpuCount());
+                Cloger.getInstance().logger.info(mem.toString());
+            }else{
+                Cloger.getInstance().logger.warn("GPU not available; falling back to CPU.");
                 this.device = "cpu";
             }
         }
