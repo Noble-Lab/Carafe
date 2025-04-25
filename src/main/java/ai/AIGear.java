@@ -1674,8 +1674,8 @@ public class AIGear {
         return (mass + charge * ElementaryIon.proton.getTheoreticMass()) / charge;
     }
 
-    private boolean run_cmd(String cmd){
-        System.out.println(cmd);
+    private boolean run_cmd(String[] cmd){
+        System.out.println(String.join(" ", cmd));
         boolean pass = true;
         Runtime rt = Runtime.getRuntime();
         Process p;
@@ -1738,22 +1738,44 @@ public class AIGear {
         if(!F.exists()){
             ai_py = get_py_path("/main/java/ai/ai.py","carafe_ai");
         }
-        String cmd = this.python_bin + " " + ai_py +
-                " --in_dir " + in_dir +
-                " --out_dir " + out_dir +
-                " --out_prefix "+out_prefix +
-                " --device " + this.device +
-                " --instrument " + ms_instrument_for_training +
-                " --tf_type " + CParameter.tf_type +
-                " --nce " + this.nce+
-                " --seed " + this.global_random_seed +
-                " --mode " + mode;
+        //String cmd = this.python_bin + " " + ai_py +
+        //        " --in_dir " + in_dir +
+        //        " --out_dir " + out_dir +
+        //        " --out_prefix "+out_prefix +
+        //       " --device " + this.device +
+        //        " --instrument " + ms_instrument_for_training +
+        //        " --tf_type " + CParameter.tf_type +
+        //        " --nce " + this.nce+
+        //        " --seed " + this.global_random_seed +
+        //        " --mode " + mode;
+
+        String[] cmd_list_short = new String[] {
+                this.python_bin,
+                ai_py,
+                "--in_dir", in_dir,
+                "--out_dir", out_dir,
+                "--out_prefix", out_prefix,
+                "--device", this.device,
+                "--instrument", ms_instrument_for_training,
+                "--tf_type", CParameter.tf_type,
+                "--nce", String.valueOf(this.nce),
+                "--seed", String.valueOf(this.global_random_seed),
+                "--mode", mode
+        };
+        ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
+
         if(this.no_masking){
-            cmd = cmd + " --no_masking";
+            // cmd = cmd + " --no_masking";
+            cmd_list.add("--no_masking");
         }
         if(!CParameter.user_var_mods.isEmpty() && !CParameter.user_var_mods.equalsIgnoreCase("-")){
-            cmd = cmd + " --user_mod \""+CParameter.user_var_mods + "\"";
+            cmd_list.add("--user_mod");
+            cmd_list.add("\""+CParameter.user_var_mods + "\"");
+            // cmd = cmd + " --user_mod \""+CParameter.user_var_mods + "\"";
         }
+        // convert cmd_list to String []
+        String[] cmd = new String[cmd_list.size()];
+        cmd = cmd_list.toArray(cmd);
         run_cmd(cmd);
     }
 

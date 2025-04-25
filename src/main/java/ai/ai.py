@@ -31,7 +31,7 @@ def train_ms2(in_dir:str,
     import pandas as pd
     import math
     pd.options.mode.chained_assignment = None  # default=‘warn’
-    a = pd.read_csv(in_dir+"/psm_pdv.txt",sep="\t",dtype={'mod_sites': str})
+    a = pd.read_csv(in_dir+"/psm_pdv.txt",sep="\t",dtype={'mod_sites': str, 'mods': str})
 
     if mode_type == 'general':
         model_mgr = ModelManager(mask_modloss=True, device=device)
@@ -88,7 +88,7 @@ def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
     import math
     from peptdeep.pretrained_models import ModelManager
     pd.options.mode.chained_assignment = None  # default=‘warn’
-    a = pd.read_csv(in_dir+"/rt_train_data.tsv",sep="\t")
+    a = pd.read_csv(in_dir+"/rt_train_data.tsv",sep="\t",dtype={'mod_sites': str, 'mods': str})
     if mode_type == 'general':
         model_mgr = ModelManager(mask_modloss=True, device=device)
         model_mgr.load_installed_models('generic')
@@ -131,7 +131,7 @@ def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
     import math
     from peptdeep.pretrained_models import ModelManager
     pd.options.mode.chained_assignment = None  # default=‘warn’
-    a = pd.read_csv(in_dir+"/ccs_train_data.tsv",sep="\t")
+    a = pd.read_csv(in_dir+"/ccs_train_data.tsv",sep="\t",dtype={'mod_sites': str, 'mods': str})
     if mode_type == 'general':
         model_mgr = ModelManager(mask_modloss=True, device=device)
         model_mgr.load_installed_models('generic')

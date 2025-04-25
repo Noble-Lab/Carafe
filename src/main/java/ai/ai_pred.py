@@ -52,7 +52,7 @@ def predict_ms2(model_dir:str,
     if fast_mode:
         a = pd.read_parquet(pred_file)
     else:
-        a = pd.read_csv(pred_file,sep="\t",low_memory=False)
+        a = pd.read_csv(pred_file,sep="\t",low_memory=False,dtype={'mod_sites': str, 'mods': str})
     a['mod_sites'] = a['mod_sites'].fillna("")
     a['mods'] = a['mods'].fillna("")
     if device == 'cpu':
@@ -153,7 +153,7 @@ def predict_rt(model_dir:str,
     if fast_mode:
         a = pd.read_parquet(pred_file)
     else:
-        a = pd.read_csv(pred_file,sep="\t",low_memory=False)
+        a = pd.read_csv(pred_file,sep="\t",low_memory=False,dtype={'mod_sites': str, 'mods': str})
     a.drop('charge', axis=1, inplace=True)
     a.drop_duplicates(inplace=True)
     a['mod_sites'] = a['mod_sites'].fillna("")
@@ -208,7 +208,7 @@ def predict_ccs(model_dir:str,
     if fast_mode:
         a = pd.read_parquet(pred_file)
     else:
-        a = pd.read_csv(pred_file,sep="\t",low_memory=False)
+        a = pd.read_csv(pred_file,sep="\t",low_memory=False,dtype={'mod_sites': str, 'mods': str})
     #a.drop('charge', axis=1, inplace=True)
     #a.drop_duplicates(inplace=True)
     a['mod_sites'] = a['mod_sites'].fillna("")

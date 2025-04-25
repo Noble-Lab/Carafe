@@ -3,8 +3,13 @@ package main.java.ai;
 import main.java.input.CParameter;
 import main.java.util.StreamLog;
 import main.java.util.Cloger;
+import org.apache.commons.lang3.StringUtils;
+
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+
 import static main.java.ai.AIGear.get_jar_path;
 import static main.java.ai.AIGear.get_py_path;
 
@@ -45,33 +50,59 @@ public final  class AIWorker implements Runnable{
         if(!F.exists()){
             ai_pred = get_py_path("/main/java/ai/ai_pred.py","carafe_ai_pred");
         }
-        String cmd = python_bin +" " + ai_pred +
-                " --model_dir "+ model_dir +
-                " --in_file "+ this.input_file +
-                " --out_dir " + this.out_dir +
-                " --out_prefix "+ this.out_prefix +
-                " --device " + this.device +
-                " --instrument " + this.ms_instrument +
-                " --tf_type " + CParameter.tf_type +
-                " --nce " + this.nce+
-                " --mode " + mode;
+        //String cmd = python_bin +" " + ai_pred +
+        //        " --model_dir "+ model_dir +
+        //        " --in_file "+ this.input_file +
+        //        " --out_dir " + this.out_dir +
+        //        " --out_prefix "+ this.out_prefix +
+        //        " --device " + this.device +
+        //        " --instrument " + this.ms_instrument +
+        //        " --tf_type " + CParameter.tf_type +
+        //        " --nce " + this.nce+
+        //        " --mode " + mode;
+
+
+        String[] cmd_list_short = new String[] {
+                python_bin,
+                ai_pred,
+                "--model_dir", model_dir,
+                "--in_file", this.input_file,
+                "--out_dir", this.out_dir,
+                "--out_prefix", this.out_prefix,
+                "--device", this.device,
+                "--instrument", this.ms_instrument,
+                "--tf_type", CParameter.tf_type,
+                "--nce", String.valueOf(this.nce),
+                "--mode", mode
+        };
+        ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
+
         if(fast_mode){
-            cmd += " --fast";
+            // cmd += " --fast";
+            cmd_list.add("--fast");
         }
         if(ccs_enabled){
-            cmd += " --ccs";
+            // cmd += " --ccs";
+            cmd_list.add("--ccs");
         }
         if(!mod2mass.equals("-")){
-            cmd += " --mod2mass \"" + mod2mass + "\"";
+            // cmd += " --mod2mass \"" + mod2mass + "\"";
+            cmd_list.add("--mod2mass");
+            cmd_list.add("\"" + mod2mass + "\"");
         }
         if(!user_mod.isEmpty()){
-            cmd += " --user_mod \"" + user_mod + "\"";
+            // cmd += " --user_mod \"" + user_mod + "\"";
+            cmd_list.add("--user_mod");
+            cmd_list.add("\"" + user_mod + "\"");
         }
-        System.out.println("cmd: "+cmd);
+        System.out.println("cmd: "+ StringUtils.join(" ", cmd_list));
+        // convert cmd_list to String []
+        String[] cmd = new String[cmd_list.size()];
+        cmd = cmd_list.toArray(cmd);
         run_cmd(cmd);
     }
 
-    private boolean run_cmd(String cmd){
+    private boolean run_cmd(String[] cmd){
         boolean pass = true;
         Runtime rt = Runtime.getRuntime();
         Process p;
