@@ -48,6 +48,9 @@ public final class CModification {
      */
     public HashMap<String,Integer> ptm_name2id = new HashMap<>();
 
+    private boolean one_time_message = true;
+
+
     private CModification(){
         // the alphabetically ordered names of the user defined modifications
         ModificationUtils.getInstance();
@@ -133,8 +136,10 @@ public final class CModification {
         for(String mod_name: ModificationUtils.getInstance().mod_name2JMod.keySet()) {
             JMod jMod = ModificationUtils.getInstance().mod_name2JMod.get(mod_name);
             // TODO: need to handle terminal modifications
-            if (jMod.position.toLowerCase().contains("term")) {
+            // mods: Acetyl@Protein_N-term mod_sites: 0
+            if (jMod.position.toLowerCase().contains("term") && one_time_message) {
                 System.err.println("Terminal modification is not supported:" + mod_name);
+                one_time_message = false;
             }
             String site_unimod_acc = jMod.site + "(" + jMod.unimod_accession + ")";
             // take this as modification code (int)
