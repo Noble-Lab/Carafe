@@ -6,7 +6,7 @@
 
     <groupId>Proteomics</groupId>
     <artifactId>carafe</artifactId>
-    <version>0.0.1</version>
+    <version>1.0.0</version>
 
     <dependencyManagement>
         <dependencies>

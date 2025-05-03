@@ -7568,11 +7568,26 @@ public class AIGear {
 
     public void generate_spectral_library(Map<String,HashMap<String,String>> res_files) throws IOException {
         if(this.use_parquet) {
-            if(this.export_spectral_library_format.equalsIgnoreCase("Skyline")){
+            // need to check if the format is a skyline format first
+            // if(this.export_spectral_library_format.equalsIgnoreCase("Skyline")){
+            if(this.export_spectral_library_format.toLowerCase().contains("skyline")){
                 try {
                     generate_spectral_library_parquet_skyline(res_files, this.out_dir, "SkylineAI_spectral_library.tsv");
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
+                }
+                // check if need to generate a library with a different format
+                if(this.export_spectral_library_format.contains(",")){
+                    String [] lf_formats = this.export_spectral_library_format.split(",");
+                    for(String f: lf_formats){
+                        if(!f.equalsIgnoreCase("Skyline")){
+                            Cloger.getInstance().logger.info("Generate a spectral library with format: "+f);
+                            this.export_spectral_library_format = f;
+                            this.export_spectral_library_file_format = "tsv";
+                            // only generate tsv format in this case
+                            generate_spectral_library_parquet(res_files, this.out_dir, "SkylineAI_spectral_library.tsv");
+                        }
+                    }
                 }
             }else if(this.export_spectral_library_format.equalsIgnoreCase("mzSpecLib")) {
                 try {
@@ -8027,6 +8042,7 @@ public class AIGear {
         } else if (out_library_file.endsWith("parquet")){
             out_library_file = out_library_file.replaceAll("parquet$", "blib");
         }
+        Cloger.getInstance().logger.info("The spectral library file is saved to "+out_library_file);
         SkylineIO skylineIO = new SkylineIO(out_library_file);
         skylineIO.add_SpectrumSourceFiles();
         skylineIO.add_ScoreTypes();
