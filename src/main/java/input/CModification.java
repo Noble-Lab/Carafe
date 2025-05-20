@@ -2,7 +2,11 @@ package main.java.input;
 
 import com.compomics.util.experiment.biology.modifications.Modification;
 import com.compomics.util.experiment.biology.modifications.ModificationFactory;
+import com.compomics.util.experiment.identification.matches.ModificationMatch;
+
 import main.java.ai.AIGear;
+import main.java.util.Cloger;
+
 import org.apache.commons.io.IOUtils;
 import java.io.IOException;
 import java.io.InputStream;
@@ -61,21 +65,65 @@ public final class CModification {
         top_mods.addAll(ptmNames);
         int i=0;
         HashSet<String> ptm_name_list = new HashSet<>();
+        // This is used to remove duplicated PTMs
+        // Key: Unimod accession, amino acid site, position, value: modification delta mass
+        HashMap<String, Double> ptm_string2mass = new HashMap<>();
         for(String name : top_mods){
             Modification ptm = ptmFactory.getModification(name);
             if(!ptm.getCategory().name().contains("Nucleotide_Substitution")) {
-                i++;
-                id2ptmname.put(i, name);
-                ptm_name_list.add(name);
-                // for the common PTMs, use the mod mass values from ptmFactory
-                if(name.equalsIgnoreCase("Carbamidomethyl of C")){
-                    this.change_mod_mass(i,ptmFactory.getModification("Carbamidomethylation of C").getMass());
-                } else if (name.equalsIgnoreCase("Phospho of S")) {
-                    this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of S").getMass());
-                } else if (name.equalsIgnoreCase("Phospho of T")) {
-                    this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of T").getMass());
-                } else if (name.equalsIgnoreCase("Phospho of Y")) {
-                    this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of Y").getMass());
+                String unimod_acc = ptm.getUnimodCvTerm()!=null?ptm.getUnimodCvTerm().getAccession():"-";
+                String site;
+                if(name.contains(" of ")){
+                    String []d=  name.split(" of ",2);
+                    site = d[1];
+                }else if(name.contains(" on ")){
+                    String []d=  name.split(" on ",2);
+                    site = d[1];
+                }else if(name.contains(" to ")){
+                    String []d=  name.split(" to ",2);
+                    site = d[1];
+                }else if(name.contains(" from ")){
+                    String []d=  name.split(" from ",2);
+                    site = d[1];
+                }else{
+                    Cloger.getInstance().logger.info("Unknown modification name: " + name);
+                    continue;
+                }
+                String ptm_string = unimod_acc + "_" + site;
+                if(ptm_string2mass.containsKey(ptm_string) && Math.abs(ptm.getMass()-ptm_string2mass.get(ptm_string))<=0.001){
+                    if(!name.startsWith("TMT ")){
+                        Cloger.getInstance().logger.info("Duplicate PTM: " + name + " -> " + ptm_string + " with mass: " + ptm.getMass());
+                        continue;
+                    }
+                }else{
+                    ptm_string2mass.put(ptm_string,ptm.getMass());
+                }
+                if(name.equalsIgnoreCase("Carbamidomethylation of C")){
+                    // skip the this one
+                    continue;
+                }else if(name.equalsIgnoreCase("Phosphorylation of S")){
+                    // skip the this one
+                    continue;
+                }else if(name.equalsIgnoreCase("Phosphorylation of T")){
+                    // skip the this one
+                    continue;
+                }else if(name.equalsIgnoreCase("Phosphorylation of Y")){
+                    // skip the this one
+                    continue;
+                }else{
+                    i++;
+                    id2ptmname.put(i, name);
+                    ptm_name_list.add(name);
+                    // for the common PTMs, use the mod mass values from ptmFactory
+                    if(name.equalsIgnoreCase("Carbamidomethyl of C")){
+                        this.change_mod_mass(i,ptmFactory.getModification("Carbamidomethylation of C").getMass());
+                    } else if (name.equalsIgnoreCase("Phospho of S")) {
+                        this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of S").getMass());
+                    } else if (name.equalsIgnoreCase("Phospho of T")) {
+                        this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of T").getMass());
+                    } else if (name.equalsIgnoreCase("Phospho of Y")) {
+                        this.change_mod_mass(i,ptmFactory.getModification("Phosphorylation of Y").getMass());
+                    }
                 }
             }
         }
@@ -86,6 +134,33 @@ public final class CModification {
             }
             Modification ptm = ptmFactory.getModification(name);
             if(!ptm.getCategory().name().contains("Nucleotide_Substitution")) {
+                String unimod_acc = ptm.getUnimodCvTerm()!=null?ptm.getUnimodCvTerm().getAccession():"-";
+                String site;
+                if(name.contains(" of ")){
+                    String []d=  name.split(" of ",2);
+                    site = d[1];
+                }else if(name.contains(" on ")){
+                    String []d=  name.split(" on ",2);
+                    site = d[1];
+                }else if(name.contains(" to ")){
+                    String []d=  name.split(" to ",2);
+                    site = d[1];
+                }else if(name.contains(" from ")){
+                    String []d=  name.split(" from ",2);
+                    site = d[1];
+                }else{
+                    Cloger.getInstance().logger.info("Unknown modification name: " + name);
+                    continue;
+                }
+                String ptm_string = unimod_acc + "_" + site;
+                if(ptm_string2mass.containsKey(ptm_string) && Math.abs(ptm.getMass()-ptm_string2mass.get(ptm_string))<=0.001){
+                    if(!name.startsWith("TMT ")){
+                        Cloger.getInstance().logger.info("Duplicate PTM: " + name + " -> " + ptm_string + " with mass: " + ptm.getMass());
+                        continue;
+                    }
+                }else{
+                    ptm_string2mass.put(ptm_string,ptm.getMass());
+                }
                 i++;
                 id2ptmname.put(i, name);
             }
@@ -134,6 +209,9 @@ public final class CModification {
             ptm_name2id.put(id2ptmname.get(mod_id),mod_id);
         }
         for(String mod_name: ModificationUtils.getInstance().mod_name2JMod.keySet()) {
+            if(!ptm_name2id.containsKey(mod_name)){
+                continue;
+            }
             JMod jMod = ModificationUtils.getInstance().mod_name2JMod.get(mod_name);
             // TODO: need to handle terminal modifications
             // mods: Acetyl@Protein_N-term mod_sites: 0
