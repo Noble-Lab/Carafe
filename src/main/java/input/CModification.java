@@ -305,7 +305,7 @@ public final class CModification {
 
     }
 
-    public void printPTM(int n_mass_digits){
+    public void printPTM(){
         ModificationFactory ptmFactory = ModificationFactory.getInstance();
         System.out.println("mod_id\tmod_name\tmod_mass\tmod_type\tmod_category\tunimod_accession");
         for(int ptm_id : id2ptmname.keySet()){
@@ -314,11 +314,7 @@ public final class CModification {
             if(ptm.getUnimodCvTerm()!=null){
                 unimod_acc = ptm.getUnimodCvTerm().getAccession();
             }
-            if(n_mass_digits==2){
-                System.out.println(ptm_id + "\t" + ptm.getName() + "\t" + String.format("%.2f",ptm.getMass()) + "\t" + ptm.getModificationType()+"\t"+ptm.getCategory().name()+"\t"+unimod_acc);
-            }else{
-                System.out.println(ptm_id + "\t" + ptm.getName() + "\t" + ptm.getMass() + "\t" + ptm.getModificationType()+"\t"+ptm.getCategory().name()+"\t"+unimod_acc);
-            }
+            System.out.println(ptm_id + "\t" + ptm.getName() + "\t" + ptm.getMass() + "\t" + ptm.getModificationType()+"\t"+ptm.getCategory().name()+"\t"+unimod_acc);
         }
     }
 

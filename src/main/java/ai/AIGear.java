@@ -395,7 +395,7 @@ public class AIGear {
         // Print modification list
         if (cmd.hasOption("printPTM")) {
             ModificationUtils.save_mod2file = false;
-            CModification.getInstance().printPTM(2);
+            CModification.getInstance().printPTM();
             return;
         }
 
