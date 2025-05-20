@@ -86,13 +86,13 @@ public final class CModification {
                     String []d=  name.split(" from ",2);
                     site = d[1];
                 }else{
-                    Cloger.getInstance().logger.info("Unknown modification name: " + name);
+                    Cloger.getInstance().logger.debug("Unknown modification name: " + name);
                     continue;
                 }
                 String ptm_string = unimod_acc + "_" + site;
                 if(ptm_string2mass.containsKey(ptm_string) && Math.abs(ptm.getMass()-ptm_string2mass.get(ptm_string))<=0.001){
                     if(!name.startsWith("TMT ")){
-                        Cloger.getInstance().logger.info("Duplicate PTM: " + name + " -> " + ptm_string + " with mass: " + ptm.getMass());
+                        Cloger.getInstance().logger.debug("Duplicate PTM: " + name + " -> " + ptm_string + " with mass: " + ptm.getMass());
                         continue;
                     }
                 }else{
@@ -149,13 +149,13 @@ public final class CModification {
                     String []d=  name.split(" from ",2);
                     site = d[1];
                 }else{
-                    Cloger.getInstance().logger.info("Unknown modification name: " + name);
+                    Cloger.getInstance().logger.debug("Unknown modification name: " + name);
                     continue;
                 }
                 String ptm_string = unimod_acc + "_" + site;
                 if(ptm_string2mass.containsKey(ptm_string) && Math.abs(ptm.getMass()-ptm_string2mass.get(ptm_string))<=0.001){
                     if(!name.startsWith("TMT ")){
-                        Cloger.getInstance().logger.info("Duplicate PTM: " + name + " -> " + ptm_string + " with mass: " + ptm.getMass());
+                        Cloger.getInstance().logger.debug("Duplicate PTM: " + name + " -> " + ptm_string + " with mass: " + ptm.getMass());
                         continue;
                     }
                 }else{
