@@ -8,6 +8,12 @@ Wen, Bo, Chris Hsu, Wen-Feng Zeng, Michael Riffle, Alexis Chang, Miranda Mudge, 
 
 ## Installation
 
+### Using Carafe in Skyline with an intuitive graphical user interface
+
+A tutorial is available at the Skyline website: [Build a Carafe Library in Skyline](https://skyline.ms/wiki/home/software/Skyline/page.view?name=Build%20Carafe%20Library).
+
+### Using the standalone version of Carafe 
+
 Carafe is written using Java and can be run on Windows, Mac OS and Linux. Both Java and python are required to be installed to run Carafe. If java is not installed, please install Java by following the instruction at https://openjdk.org/install/ or https://www.oracle.com/java/technologies/downloads/. After java is installed, Carafe can be downloaded at https://github.com/Noble-Lab/Carafe/releases.
 
 ### Install AlphaPeptDeep-DIA
