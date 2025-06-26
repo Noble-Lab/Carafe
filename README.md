@@ -16,7 +16,7 @@ A tutorial is available at the Skyline website: [Build a Carafe Library in Skyli
 
 Carafe is written using Java and can be run on Windows, Mac OS and Linux. Both Java and python are required to be installed to run Carafe. If java is not installed, please install Java by following the instruction at https://openjdk.org/install/ or https://www.oracle.com/java/technologies/downloads/. After java is installed, Carafe can be downloaded at https://github.com/Noble-Lab/Carafe/releases.
 
-### Install AlphaPeptDeep-DIA
+#### Install AlphaPeptDeep-DIA
 
 Carafe uses a customized version of AlphaPeptDeep (AlphaPeptDeep-DIA) for model training using DIA data. Please follow the instruction at https://github.com/wenbostar/alphapeptdeep_dia to install AlphaPeptDeep-DIA. In default, the python package will be installed into a conda environment named "carafe". To run the Carafe java program, the conda environment "carafe" should be activated by using the following command:
 
