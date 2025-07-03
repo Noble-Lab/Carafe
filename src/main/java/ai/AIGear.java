@@ -6209,6 +6209,8 @@ public class AIGear {
                 double rt;
                 double max_rt = 0;
                 boolean apex_found = false;
+                boolean boundary_left_found = false;
+                boolean boundary_right_found = false;
                 for (int i = 0; i < scan_num; i++) {
                     int cur_index = index_min + i;
                     int cur_scan = ms2index.get_scan_by_index(isoWinID,cur_index);
@@ -6224,9 +6226,11 @@ public class AIGear {
                     }
                     if(Math.abs(rt-peptideMatch.rt_start)<=0.01){
                         peak.boundary_left_index = i;
+                        boundary_left_found = true;
                     }
                     if(Math.abs(rt-peptideMatch.rt_end)<=0.01){
                         peak.boundary_right_index = i;
+                        boundary_right_found = true;
                     }
                     if(max_rt < rt){
                         max_rt = rt;
@@ -6236,6 +6240,43 @@ public class AIGear {
                 if(!apex_found){
                     System.out.println("Apex not found:"+peptideMatch.rt_apex+","+peptideMatch.rt_start+","+peptideMatch.rt_end);
                     System.exit(1);
+                }
+                if(!boundary_left_found || !boundary_right_found || !apex_found){
+                    // redo the peak index detection
+                    rt=0;
+                    max_rt = 0;
+                    apex_found = false;
+                    boundary_left_found = false;
+                    boundary_right_found = false;
+                    double delta_rt_apex = Double.POSITIVE_INFINITY;
+                    double delta_rt_start = Double.POSITIVE_INFINITY;
+                    double delta_rt_end = Double.POSITIVE_INFINITY;
+                    for (int i = 0; i < scan_num; i++) {
+                        int cur_index = index_min + i;
+                        int cur_scan = ms2index.get_scan_by_index(isoWinID,cur_index);
+                        scan2index.put(cur_scan, i);
+                        index2scan.put(i, cur_scan);
+
+                        rt = ms2index.get_rt_by_scan(isoWinID,cur_scan);
+                        index2rt[i] = rt;
+
+                        if(Math.abs(rt-peptideMatch.rt_apex)<=delta_rt_apex){
+                            peak.apex_index = i;
+                            delta_rt_apex = Math.abs(rt-peptideMatch.rt_apex);
+                        }
+                        if(Math.abs(rt-peptideMatch.rt_start)<=delta_rt_start){
+                            peak.boundary_left_index = i;
+                            delta_rt_start = Math.abs(rt-peptideMatch.rt_start);
+                        }
+                        if(Math.abs(rt-peptideMatch.rt_end)<=delta_rt_end){
+                            peak.boundary_right_index = i;
+                            delta_rt_end = Math.abs(rt-peptideMatch.rt_end);
+                        }
+                        if(max_rt < rt){
+                            max_rt = rt;
+                        }
+
+                    }
                 }
                 int mz_length = libSpectrum.spectrum.mz.length;
                 HashMap<Double,Double> mz2int = new HashMap<>(mz_length);
