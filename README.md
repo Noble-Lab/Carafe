@@ -158,7 +158,7 @@ An end-to-end workflow is also available to run Carafe for *in silico* spectral 
 ```
 1. A DIA MS/MS file generated using an experiment setting of interest. Both ".raw" and ".mzML" formats are supported.
 2. A protein database in FASTA format used for peptide detection on the DIA file;
-3. A protein database in FASTA format used for *in silico* spectral library generation.
+3. A protein database in FASTA format used for in silico spectral library generation.
 4. A parameter file.
 ```
 
