@@ -202,6 +202,11 @@ public class AIGear {
 
     private String rt_merge_method = "min";
 
+    /**
+     * For the same peptide precursor, keep the best MS2 spectrum match (in default) when there are multiple MS runs.
+     */
+    private String ms2_merge_method = "best";
+
     // spectral library generation
     public String db = "";
 
@@ -298,7 +303,7 @@ public class AIGear {
         long startTime = System.currentTimeMillis();
         Options options = new Options();
         options.addOption("i", true, "PSM file");
-        options.addOption("ms", true, "MS file in mzML format");
+        options.addOption("ms", true, "MS file in mzML format: a single mzML or a folder containing mzML files.");
         options.addOption("fixMod", true, "Fixed modification, the format is like : 1,2,3. Use '-printPTM' to show all supported modifications. Default is 1 (Carbamidomethylation(C)[57.02]). " +
                 "If there is no fixed modification, set it as '-fixMod no' or '-fixMod 0'.");
         options.addOption("varMod",true,"Variable modification, the format is the same with -fixMod. Default is 2 (Oxidation(M)[15.99]). "+
@@ -1839,7 +1844,8 @@ public class AIGear {
                     // need to get the column index from the new text file
                     hIndex = get_column_name2index(new_psm_file);
                 }
-                ms_file2psm = get_ms_file2psm_diann(new_psm_file, ms_file, fdr_cutoff);
+                // ms_file2psm = get_ms_file2psm_diann(new_psm_file, ms_file, fdr_cutoff);
+                ms_file2psm = get_ms_file2psm_diann_multiple_ms_runs(new_psm_file, ms_file, fdr_cutoff);
             }else if(this.search_engine.equalsIgnoreCase("generic") && this.data_type.equalsIgnoreCase("DDA")){
                 System.out.println("Generic search engine format for DDA data");
                 ms_file2psm = get_ms_file2psm(psm_file, ms_file, fdr_cutoff);
@@ -7483,7 +7489,15 @@ public class AIGear {
         return ms_file2psm;
     }
 
-    public HashMap<String, ArrayList<String>> get_ms_file2psm_diann(String psm_file, String ms_file, double fdr_cutoff) throws IOException {
+    /**
+     * This will be deleted in the future. Use get_ms_file2psm_diann_multiple_ms_runs instead.
+     * @param psm_file
+     * @param ms_file
+     * @param fdr_cutoff
+     * @return
+     * @throws IOException
+     */
+    public HashMap<String, ArrayList<String>> get_ms_file2psm_diann_will_be_deleted(String psm_file, String ms_file, double fdr_cutoff) throws IOException {
         HashMap<String,Integer> hIndex = get_column_name2index(psm_file);
         BufferedReader psmReader = new BufferedReader(new FileReader(psm_file));
         psmReader.readLine();
@@ -7545,6 +7559,117 @@ public class AIGear {
         System.out.println("The number of MS files:"+ms_file2psm.size());
         System.out.println("The number of valid rows:"+n_valid_row);
         System.out.println("The number of total rows:"+n_total_row);
+        return ms_file2psm;
+    }
+
+    public HashMap<String, ArrayList<String>> get_ms_file2psm_diann_multiple_ms_runs(String psm_file, String ms_file, double fdr_cutoff) throws IOException {
+        HashMap<String,Integer> hIndex = get_column_name2index(psm_file);
+        BufferedReader psmReader = new BufferedReader(new FileReader(psm_file));
+        psmReader.readLine();
+        String line;
+        String cur_ms_file = "-";
+
+        HashMap<String, ArrayList<String>> ms_file2psm = new HashMap<>();
+        int n_valid_row = 0;
+        int n_total_row = 0;
+
+        while((line=psmReader.readLine())!=null){
+            line = line.trim();
+            n_total_row = n_total_row + 1;
+            String []d = line.split("\t");
+
+            // if(hIndex.containsKey("Q.Value")){
+            if(hIndex.containsKey(PSMConfig.qvalue_column_name)){
+                // double q_value = Double.parseDouble(d[hIndex.get("Q.Value")]);
+                double q_value = Double.parseDouble(d[hIndex.get(PSMConfig.qvalue_column_name)]);
+                if(q_value>fdr_cutoff){
+                    continue;
+                }
+            }
+
+
+            // if(hIndex.containsKey("File.Name")){
+            if(hIndex.containsKey(PSMConfig.ms_file_column_name)){
+                cur_ms_file = d[hIndex.get(PSMConfig.ms_file_column_name)];
+                File F = new File(cur_ms_file);
+                if(!F.exists()){
+                    // ms_file should be a folder
+                    Path path = Paths.get(cur_ms_file);
+                    File MS = new File(ms_file);
+                    if(MS.isFile()){
+                        cur_ms_file = ms_file;
+                    }else {
+                        // ms_file is a folder
+                        cur_ms_file = ms_file + File.separator + path.getFileName().toString();
+                        // check this file exists or not
+                        F = new File(cur_ms_file);
+                        if (!F.exists()) {
+                            System.out.println("File not found:" + cur_ms_file);
+                            System.exit(1);
+                        }
+                    }
+                }
+            }else{
+                cur_ms_file = ms_file;
+            }
+
+            if(!ms_file2psm.containsKey(cur_ms_file)){
+                ms_file2psm.put(cur_ms_file,new ArrayList<>());
+            }
+            ms_file2psm.get(cur_ms_file).add(line);
+            n_valid_row = n_valid_row + 1;
+        }
+
+        psmReader.close();
+        System.out.println("The number of MS files:"+ms_file2psm.size());
+        System.out.println("The number of valid rows:"+n_valid_row);
+        System.out.println("The number of total rows:"+n_total_row);
+
+        if(ms_file2psm.size()>=2){
+            System.out.println("There are multiple MS files in the PSM file: "+psm_file);
+            if(this.ms2_merge_method.equalsIgnoreCase("best")){
+                // for each precursor, only keep the best detection
+                HashMap<String, Double> precursor2best_score = new HashMap<>();
+                HashMap<String, String> precursor2best_match = new HashMap<>();
+                HashMap<String, String> precursor2best_ms_run = new HashMap<>();
+                for(String ms_run: ms_file2psm.keySet()){
+                    for(String psm_line: ms_file2psm.get(ms_run)){
+                        String []d = psm_line.split("\t");
+                        // precursor id is a combination of peptide sequence, modification and precursor charge state
+                        String precursor_id = d[hIndex.get(PSMConfig.precursor_id_column_name)];
+                        // PEP score, lower is better
+                        double score = Double.parseDouble(d[hIndex.get(PSMConfig.PEP_column_name)]);
+                        if(!precursor2best_score.containsKey(precursor_id)){
+                            precursor2best_score.put(precursor_id,score);
+                            precursor2best_match.put(precursor_id,psm_line);
+                            precursor2best_ms_run.put(precursor_id,ms_run);
+                        }else{
+                            // PEP score: lower is better
+                            if(score < precursor2best_score.get(precursor_id)){
+                                precursor2best_score.put(precursor_id,score);
+                                precursor2best_match.put(precursor_id,psm_line);
+                                precursor2best_ms_run.put(precursor_id,ms_run);
+                            }
+                        }
+                    }
+                }
+                // update ms_file2psm to only keep the best detection for each precursor
+                ms_file2psm.clear();
+                for(String precursor_id: precursor2best_match.keySet()){
+                    String best_match = precursor2best_match.get(precursor_id);
+                    String best_ms_run = precursor2best_ms_run.get(precursor_id);
+                    if(!ms_file2psm.containsKey(best_ms_run)){
+                        ms_file2psm.put(best_ms_run, new ArrayList<>());
+                    }
+                    ms_file2psm.get(best_ms_run).add(best_match);
+                }
+            }else{
+                // not supported
+                System.err.println("The MS2 merge method: "+this.ms2_merge_method+" is not supported for multiple MS runs in the PSM file: "+psm_file);
+                System.exit(1);
+            }
+
+        }
         return ms_file2psm;
     }
 

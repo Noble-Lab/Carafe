@@ -8,6 +8,12 @@ public class PSMConfig {
     public static String search_engine_name = "DIA-NN";
 
     /**
+     * The column name of precursor ID column in the input file.
+     * It is "Precursor.Id" for DIA-NN.
+     */
+    public static String precursor_id_column_name = "Precursor.Id";
+
+    /**
      * The column name of stripped peptide sequence in the input file
      */
     public static String stripped_peptide_sequence_column_name = "Stripped.Sequence";
