@@ -91,6 +91,9 @@ import static java.util.stream.Collectors.toMap;
 
 public class AIGear {
 
+    /**
+     * FDR threshold used to filter peptide detection result for model training. Default is 1%.
+     */
     public double fdr_cutoff = 0.01;
 
     /**
@@ -99,18 +102,47 @@ public class AIGear {
      */
     public int n_flank_scans = 0;
 
+    /**
+     * A HashSet object to store m/z isolation windows data.
+     */
     public HashSet<String> target_isolation_wins = new HashSet<>();
 
+    /**
+     * The NCE setting used for fragment ion intensity model training/prediction.
+     * This value could be automatically extracted from the MS file when it is available in the MS file.
+     */
     public double nce = 27.0;
 
+    /**
+     * This is used to indicate whether the user has provided a specific MS instrument for spectral library generation.
+     * If true, the user_provided_ms_instrument will be used. Otherwise, the instrument information extracted from
+     * the MS file used for model training or the default ms_instrument setting will be used.
+     */
     public boolean use_user_provided_ms_instrument = false;
+
+    /**
+     * User provided MS instrument setting for fragment ion intensity model training/prediction.
+     */
     public String user_provided_ms_instrument = "";
+
+    /**
+     * MS instrument setting for fragment ion intensity model training/prediction.
+     */
     public String ms_instrument = "Eclipse";
 
+    /**
+     * Device setting for model training/prediction. It's on GPU by default. If GPU is not found, cpu will be used.
+     */
     public String device = "gpu";
 
+    /**
+     * The maximum fragment ion charge state to consider. It is 2+ in default.
+     */
     public int max_fragment_ion_charge = 2;
 
+    /**
+     * This is used to indicate whether to convert I to L when generating spectral library. Default is false.
+     */
     public boolean I2L = false;
 
     /**
@@ -134,52 +166,144 @@ public class AIGear {
      */
     private ConcurrentHashMap<Integer, ConcurrentHashMap<Double,Integer>> scan2mz2count = new ConcurrentHashMap<>();
 
+    /**
+     * Output directory. It's the current directory (i.e., "./") by default.
+     */
     public String out_dir = "./";
+
+    /**
+     * Fragment ion intensity threshold. Any fragment ion with intensity below this value will be ignored when indexing MS data.
+     */
     private final double fragment_ion_intensity_threshold = 0.00;
+
+    /**
+     * A HashMap object to store the mapping between ion type and its column index in the fragment ion data file.
+     */
     private HashMap<String, Integer> ion_type2column_index = new HashMap<>();
+
+    /**
+     * This is used to indicate whether neutral loss of water (H2O) and ammonia (NH3) should be considered when annotating fragment ions.
+     * Default is false, meaning that neutral loss of water and ammonia will not be considered.
+     */
     private boolean lossWaterNH3 = false;
+
+    /**
+     * Fragmentation method, it is HCD by default (i.e., b and y ions will be considered).
+     */
     private final String fragmentation_method = "hcd";
 
+    /**
+     * The first row or head line of the PSM file used for model training.
+     */
     private String psm_head_line = "-";
+
+    /**
+     * The first row or head line of the fragment ion intensity file.
+     */
     private String fragment_ion_intensity_head_line = "-";
 
+    /**
+     * The number of data points used for smoothing XIC. Default is 3.
+     */
     public int sg_smoothing_data_points = 3;
 
+    /**
+     * The RT window offset used for XIC extraction. Default is 1 minute.
+     */
     private double rt_win_offset = 1.0;
 
+    /**
+     * This is used to indicate whether fragment ion intensity normalization should be performed.
+     */
     public boolean fragment_ion_intensity_normalization = false;
 
+    /**
+     * The minimum number of fragment ions to consider when generating fragment ion intensity model training data.
+     * It is 4 in default.
+     */
     public int min_n_fragment_ions = 4;
 
+    /**
+     * If it is true, only export valid matches.
+     */
     public boolean export_valid_matches_only = false;
 
+    /**
+     * If it is true, fragment ion charge will be less than precursor charge. It is false by default.
+     */
     public boolean fragment_ion_charge_less_than_precursor_charge = false;
 
+    /**
+     * If it is true, fragment ion m/z will be exported to a file. It is false by default.
+     */
     public boolean export_fragment_ion_mz_to_file = false;
 
+    /**
+     * A HashMap object stores modification mapping information.
+     */
     private HashMap<String, String> mod_map = new HashMap<>();
 
+    /**
+     * If it is true, export skyline transition list file. It is false by default.
+     */
     public boolean export_skyline_transition_list_file = false;
 
     /**
-     * Any fragment ion with mz <= 200 will not be considered as valid.
+     * Any fragment ion with mz <= 200 (in default) will not be considered as valid when generating training data
+     * for fragment ion intensity model fine-tuning. This could be updated by the fragment ion m/z information
+     * extracted from the MS file used for model training.
      */
     public double min_fragment_ion_mz = 200.0;
+
+    /**
+     * The maximum m/z of fragment ions to consider as valid. Default is 2000.0.
+     */
     public double max_fragment_ion_mz = 2000.0;
 
+    /**
+     * The minimum m/z of fragment ions to consider when generating spectral library.
+     */
     public double lf_frag_mz_min = 200.0;
+
+    /**
+     * The maximum m/z of fragment ions to consider when generating spectral library.
+     */
     public double lf_frag_mz_max = 1800.0;
 
+    /**
+     * The minimum precursor charge state to consider when generating spectral library.
+     */
     public int lf_precursor_charge_min = 2;
+
+    /**
+     * The maximum precursor charge state to consider when generating spectral library.
+     */
     public int lf_precursor_charge_max = 4;
 
+    /**
+     * The maximum number of fragment ions to consider when generating spectral library.
+     */
     public int lf_top_n_fragment_ions = 20;
+
+    /**
+     * The minimum number of fragment ions to consider when generating spectral library.
+     */
     public int lf_min_n_fragment_ions = 2;
 
+    /**
+     * The minimum fragment ion number (b2,b3,b4, ...) to consider when generating spectral library.
+     * This is different from "lf_min_n_fragment_ions".
+     */
     public int lf_frag_n_min = 2;
 
+    /**
+     * If it is true, refine peak boundary when generating training data for fragment ion intensity model training.
+     */
     public boolean refine_peak_boundary = false;
 
+    /**
+     * If it is true, y1 ion will not be considered as valid in fragment ion intensity model training.
+     */
     public boolean remove_y1 = false;
 
     /**
@@ -197,9 +321,19 @@ public class AIGear {
      */
     public double cor_cutoff = 0.75;
 
+    /**
+     * The minimum RT.
+     */
     private double rt_min = 0.0;
+
+    /**
+     * The maximum RT.
+     */
     double rt_max = 0.0;
 
+    /**
+     * The RT aggregation method there are multiple RT values for the same peptide precursor.
+     */
     private String rt_merge_method = "min";
 
     /**
@@ -207,9 +341,14 @@ public class AIGear {
      */
     private String ms2_merge_method = "best";
 
-    // spectral library generation
+    /**
+     * The protein database used for spectral library generation.
+     */
     public String db = "";
 
+    /**
+     * The path of python executable to use for model training and prediction.
+     */
     private String python_bin = "python";
 
     /**
@@ -268,18 +407,45 @@ public class AIGear {
      * The maximum m/z of isolation window. Any MS2 scans with precursor m/z win larger than this value will be ignored.
      */
     public double isolation_win_mz_max = -1;
+
+    /**
+     * If it is true, export XIC data to a file.
+     */
     private boolean export_xic = false;
+
+    /**
+     * PTM site probability cutoff. Default is 0.75. This is only used during PTM model training data generation
+     */
     private double ptm_site_prob_cutoff = 0.75;
+
+    /**
+     * PTM q-value cutoff. This is only used during PTM model training data generation.
+     */
     private double ptm_site_qvalue_cutoff = 1.0;
+
+    /**
+     * For n-terminal fragment ions (such as b-ion) with number <= n_ion_min, they will be considered as invalid.
+     */
     private int n_ion_min = 0;
+
+    /**
+     * For c-terminal fragment ions (such as y-ion) with number <= n_ion_min, they will be considered as invalid.
+     */
     private int c_ion_min = 0;
+
+    /**
+     * A global random seed used for reproducibility.
+     */
     private int global_random_seed = 2024;
 
     /**
-     * Testing mode
+     * Testing mode or not. If it is true, extra information will be exported to files for evaluation.
      */
     private static boolean test_mode = false;
 
+    /**
+     * Use parquet format for saving data or not.
+     */
     public boolean use_parquet = false;
 
     /**
@@ -291,14 +457,39 @@ public class AIGear {
      * The exported file format of spectral library: tsv or parquet
      */
     public String export_spectral_library_file_format = "tsv";
+
+    /**
+     * Export spectra to a mgf file or not. If it is true, all MS2 spectra matched to precursors used for model training
+     * data generation will be exported to an MGF file.
+     */
     public boolean export_spectra_to_mgf = false;
 
+    /**
+     * Column separator
+     */
     private final Splitter tab_splitter = Splitter.on('\t');
 
+    /**
+     * An ModificationParameters object used for spectra annotation during model training data generation.
+     */
     private static final ModificationParameters modificationParameters = new ModificationParameters();
+
+    /**
+     * An SequenceMatchingParameters object used for spectra annotation during model training data generation.
+     */
     private static final SequenceMatchingParameters sequenceMatchingParameters = new SequenceMatchingParameters();
+
+    /**
+     * An SequenceProvider object used for spectra annotation during model training data generation.
+     */
     private static final SequenceProvider sequenceProvider = new SingleProteinSequenceProvider();
 
+    /**
+     * The main function of Carafe
+     * @param args Command line arguments
+     * @throws ParseException If a parse exception occurs
+     * @throws IOException If an I/O error occurs
+     */
     public static void main(String[] args) throws ParseException, IOException {
         long startTime = System.currentTimeMillis();
         Options options = new Options();
@@ -851,6 +1042,10 @@ public class AIGear {
         aiGear.print_parameters(StringUtils.join(args," "));
     }
 
+    /**
+     * Generate multiple spectral libraries for different models based on the provided resource files.
+     * @param res_files A HashMap containing data files used for spectral library generation.
+     */
     public void generate_multiple_library(Map<String,HashMap<String,String>> res_files){
         try {
             generate_spectral_library(res_files);
@@ -968,13 +1163,28 @@ public class AIGear {
 
     }
 
+    /**
+     * A file path which is the same as the original_file but in the folder of "new_folder".
+     * @param original_file A file path of the original file
+     * @param new_folder A folder path
+     * @return
+     */
     private String get_file_path(String original_file, String new_folder){
         File F = new File(original_file);
         return new_folder + File.separator + F.getName();
     }
 
+    /**
+     * A comparator for sorting peptides by their mass in ascending order.
+     */
     public final Comparator<Peptide> comparator_peptide_mass_for_peptide_from_min2max = Comparator.comparingDouble(Peptide::getMass);
 
+    /**
+     * Generate a spectral library based on the models stored in the provided model directory.
+     * @param model_dir A folder path containing the trained models for spectral library generation.
+     * @return A map containing the prediction data files for spectral library generation.
+     * @throws IOException
+     */
     public Map<String,HashMap<String,String>> generate_spectral_library(String model_dir) throws IOException {
         // digest proteins and generate peptide forms
         // need to consider for both small and large databases
@@ -1252,11 +1462,21 @@ public class AIGear {
         return res_files;
     }
 
+    /**
+     * Get the GPU memory available for the current device.
+     * @return The total GPU memory in GB.
+     */
     public double get_gpu_mem(){
         MemoryUsage mem = CudaUtils.getGpuMemory(Device.gpu());
         return 1.0*mem.getMax()/1024/1024/1024;
     }
 
+    /**
+     * Generate a spectral library based on the provided prediction data files.
+     * @param res_files A map containing the prediction data files for spectral library generation.
+     * @param out_dir Output directory where the spectral library files will be saved.
+     * @throws IOException
+     */
     public void generate_spectral_library(Map<String,HashMap<String,String>> res_files, String out_dir) throws IOException {
         String pep_index_file = out_dir+File.separator+"pep_index.tsv";
         String frag_ions_file = out_dir+File.separator+"frag_ions.tsv";
@@ -1377,6 +1597,16 @@ public class AIGear {
         pepTable.write().usingOptions(writeOptions);
     }
 
+    /**
+     * Get the fragment ion intensity for a precursor.
+     * @param ms2_mz_lines ArrayList containing the MS2 m/z lines.
+     * @param ms2_intensity_lines ArrayList containing the MS2 intensity lines.
+     * @param column_names Array of column names for the fragment ions.
+     * @param frag_start_idx Starting index for the fragment ions.
+     * @param frag_stop_idx Stopping index for the fragment ions.
+     * @param top_n Number of top fragment ions to consider.
+     * @return An array containing two strings: m/z values and their corresponding intensities.
+     */
     private String[] get_fragment_ion_intensity(ArrayList<String> ms2_mz_lines,
                                             ArrayList<String> ms2_intensity_lines,
                                             String []column_names,
@@ -1404,6 +1634,20 @@ public class AIGear {
         return res;
     }
 
+    /**
+     * Get the fragment ion intensity for a precursor.
+     * @param ms2_mz_lines ArrayList containing the MS2 m/z lines.
+     * @param ms2_intensity_lines ArrayList containing the MS2 intensity lines.
+     * @param column_names Array of column names for the fragment ions.
+     * @param frag_start_idx Starting index for the fragment ions.
+     * @param frag_stop_idx Stopping index for the fragment ions.
+     * @param top_n Number of top fragment ions to consider.
+     * @param ion_types Array of ion types.
+     * @param mod_losses Array of modification losses.
+     * @param ion_charges Array of ion charges.
+     * @param frag_n_min Minimum fragment ion number to consider.
+     * @return An ArrayList of LibFragment objects containing the fragment ion information.
+     */
     ArrayList<LibFragment> get_fragment_ion_intensity4parquet_all(ArrayList<double[]> ms2_mz_lines,
                                                                           ArrayList<double[]> ms2_intensity_lines,
                                                                           String []column_names,
@@ -1507,6 +1751,20 @@ public class AIGear {
         return fragments;
     }
 
+    /**
+     * Get the fragment ion intensity for a precursor.
+     * @param ms2_mz_lines ArrayList containing the MS2 m/z lines.
+     * @param ms2_intensity_lines ArrayList containing the MS2 intensity lines.
+     * @param column_names Array of column names for the fragment ions.
+     * @param frag_start_idx Starting index for the fragment ions.
+     * @param frag_stop_idx Stopping index for the fragment ions.
+     * @param top_n Number of top fragment ions to consider.
+     * @param ion_types Array of ion types.
+     * @param mod_losses Array of modification losses.
+     * @param ion_charges Array of ion charges.
+     * @param frag_n_min Minimum fragment ion number to consider.
+     * @return An ArrayList of strings containing the fragment ion information.
+     */
     private ArrayList<String> get_fragment_ion_intensity(ArrayList<String> ms2_mz_lines,
                                                          ArrayList<String> ms2_intensity_lines,
                                                          String []column_names,
@@ -1613,6 +1871,12 @@ public class AIGear {
     }
 
 
+    /**
+     * Generate input for a peptide for prediction. Different precursor charges are considered.
+     * @param peptide A Peptide object containing the peptide sequence and modifications when available.
+     * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
+     * @return A string formatted for prediction input.
+     */
     private String get_input_for_prediction(Peptide peptide, int pepID){
         StringBuilder stringBuilder = new StringBuilder();
         double mz;
@@ -1632,6 +1896,13 @@ public class AIGear {
         return stringBuilder.toString();
     }
 
+    /**
+     * Generate a single line of input for a peptide for prediction with a specific precursor charge.
+     * @param peptide A Peptide object containing the peptide sequence and modifications when available.
+     * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
+     * @param precursor_charge The precursor charge of the peptide.
+     * @return A single line string formatted for prediction input.
+     */
     private String get_input_for_prediction(Peptide peptide, int pepID, int precursor_charge){
         StringBuilder stringBuilder = new StringBuilder();
         double mz;
@@ -1649,7 +1920,13 @@ public class AIGear {
         return stringBuilder.toString();
     }
 
-
+    /**
+     * Generate input records for a peptide for prediction. Different precursor charges are considered.
+     * @param peptide A Peptide object containing the peptide sequence and modifications when available.
+     * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
+     * @param schema The Avro schema for the input records.
+     * @return An ArrayList of GenericRecord objects formatted for prediction input.
+     */
     private ArrayList<GenericRecord> get_InputRecord_for_prediction(Peptide peptide, int pepID, Schema schema){
         // StringBuilder stringBuilder = new StringBuilder();
         double mz;
@@ -1672,6 +1949,14 @@ public class AIGear {
         return records;
     }
 
+    /**
+     * Generate an input record for a peptide for prediction with a specific precursor charge.
+     * @param peptide A Peptide object containing the peptide sequence and modifications when available.
+     * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
+     * @param schema The Avro schema for the input records.
+     * @param precursor_charge The precursor charge of the peptide.
+     * @return An ArrayList of GenericRecord objects formatted for prediction input.
+     */
     private ArrayList<GenericRecord> get_InputRecord_for_prediction(Peptide peptide, int pepID, Schema schema, int precursor_charge){
         double mz;
         String [] mods = convert_modification(peptide);
@@ -1691,10 +1976,21 @@ public class AIGear {
         return records;
     }
 
+    /**
+     * Calculate the m/z value for a given mass and charge.
+     * @param mass The mass of the ion.
+     * @param charge The charge state of the ion.
+     * @return The m/z value calculated using the formula (mass + charge * proton mass) / charge.
+     */
     public double get_mz(double mass, int charge) {
         return (mass + charge * ElementaryIon.proton.getTheoreticMass()) / charge;
     }
 
+    /**
+     * Run an external command.
+     * @param cmd The command to run as an array of strings.
+     * @return True if the command executed successfully, false otherwise.
+     */
     private boolean run_cmd(String[] cmd){
         System.out.println(String.join(" ", cmd));
         boolean pass = true;
@@ -1738,6 +2034,13 @@ public class AIGear {
         return pass;
     }
 
+    /**
+     * Train MS2 and retention time prediction models.
+     * @param paraMap A map containing parameters for training.
+     * @param in_dir Input directory containing training data files.
+     * @param out_dir Output directory where the trained model will be saved.
+     * @param out_prefix Prefix for the output files.
+     */
     public void train_ms2_and_rt(HashMap<String,String> paraMap, String in_dir, String out_dir, String out_prefix){
         String psm_df = in_dir+"/psm_pdv.txt";
         String intensity_df = in_dir+"/fragment_intensity_df.tsv";
@@ -1800,6 +2103,10 @@ public class AIGear {
         run_cmd(cmd);
     }
 
+    /**
+     * Get the parent directory of the JAR file
+     * @return The parent directory of the JAR file.
+     */
     public static String get_jar_path(){
         try {
             String jar_file = AIGear.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
@@ -1810,6 +2117,12 @@ public class AIGear {
         }
     }
 
+    /**
+     * Extract the Python script from the JAR file to a temporary file and then return its absolute path.
+     * @param py_file_path The path to the Python script within the JAR file, e.g., "/main/java/ai/ai.py".
+     * @param prefix A prefix for the temporary file name.
+     * @return The absolute path of the extracted Python script file.
+     */
     static String get_py_path(String py_file_path,String prefix){
         String py = "";
         // Extract the Python script from the JAR
@@ -1829,6 +2142,12 @@ public class AIGear {
         return py;
     }
 
+    /**
+     * Load peptide detection data.
+     * @param psm_file A file containing peptide detection data.
+     * @param ms_file A file containing MS data a folder containing MS files.
+     * @param fdr_cutoff The FDR cutoff value for filtering peptide detection data.
+     */
     public void load_data(String psm_file, String ms_file, double fdr_cutoff) {
         System.out.println("FDR cutoff:"+fdr_cutoff);
         try {
@@ -1860,6 +2179,11 @@ public class AIGear {
     }
 
 
+    /**
+     * Generate training data for MS2 and retention time prediction.
+     * It writes the results to output files for model training.
+     * @throws IOException If there is an error reading or writing files.
+     */
     public void get_ms2_matches() throws IOException {
         this.ion_type2column_index.clear();
         double original_fragment_ion_intensity_cutoff = CParameter.fragment_ion_intensity_cutoff;
@@ -2305,7 +2629,11 @@ public class AIGear {
 
     }
 
-
+    /**
+     * Generate training data for MS2 and retention time prediction based on DIA-NN search result.
+     * It writes the results to output files for model training.
+     * @throws IOException If there is an error reading or writing files.
+     */
     public void get_ms2_matches_diann() throws IOException {
         CModification.getInstance();
         this.ion_type2column_index.clear();
@@ -3190,8 +3518,10 @@ public class AIGear {
     }
 
     /**
-     * Generate training data without considering ion interference
-     * @throws IOException
+     * Generate training data for MS2 and retention time prediction without interference detection based on DIA-NN search result.
+     * This should be only used for testing purpose.
+     * It writes the results to output files for model training.
+     * @throws IOException If there is an error reading or writing files.
      */
     public void get_ms2_matches_diann_dda() throws IOException {
         this.ion_type2column_index.clear();
@@ -3813,7 +4143,7 @@ public class AIGear {
 
 
     /**
-     * Generate training data using DDA data with a generic format
+     * Generate training data for MS2 and retention time prediction using DDA data with a generic format of peptide detection result.
      * @throws IOException
      */
     public void get_ms2_matches_generic_dda() throws IOException {
@@ -4274,8 +4604,10 @@ public class AIGear {
     }
 
     /**
-     * This is for TIMS-TOF data processing
-     * @throws IOException
+     * Generate training data for MS2 and retention time prediction based on DIA-NN search result for TIMS-TOF data.
+     * This function is still in development and may not work as expected.
+     * It writes the results to output files for model training.
+     * @throws IOException If there is an error reading or writing files.
      */
     public void get_ms2_matches_diann_ccs() throws IOException {
         this.ion_type2column_index.clear();
@@ -5153,9 +5485,19 @@ public class AIGear {
 
     }
 
-
+    /**
+     * Export MS2 spectra in MGF format
+     */
     public boolean export_ccs_mgf = false;
 
+    /**
+     * A record to store MS2 spectrum metadata.
+     * @param index Spectrum index
+     * @param precursor_rt Precursor retention time
+     * @param precursor_im Precursor ion mobility
+     * @param isolation_mz Isolation m/z
+     * @param isolation_width Isolation width
+     */
     public record MS2SpectraMeta(int index,
                              double precursor_rt,
                              double precursor_im,
@@ -5163,6 +5505,16 @@ public class AIGear {
                              double isolation_width) {
     }
 
+    /**
+     * A record to store MS2 spectra data.
+     * @param index Spectrum index
+     * @param mz_values m/z values of the spectrum
+     * @param intensities Intensities of the spectrum
+     * @param precursor_rt Precursor retention time
+     * @param precursor_im Precursor ion mobility
+     * @param isolation_mz Isolation m/z
+     * @param isolation_width Isolation width
+     */
     public record MS2SpectraAll(int index,
                                  ArrayList<Double> mz_values,
                                 ArrayList<Double> intensities,
@@ -5172,7 +5524,13 @@ public class AIGear {
                                  double isolation_width) {
     }
 
-
+    /** Get the apex MS2 scan information for each peptide match.
+     * @param matches List of matches
+     * @param ms_file Path to the MS file
+     * @param dbGear A DBGear instance for database access
+     * @param out_dir Output directory for results
+     * @return A map of matches to their corresponding MS2 spectra metadata
+     */
     public ConcurrentHashMap<String, ApexMatch> get_ms2spectrum_index(ArrayList<String> matches, String ms_file, DBGear dbGear, String out_dir) throws IOException {
         // ConcurrentHashMap<String, Integer> index2index = new ConcurrentHashMap<>();
         ConcurrentHashMap<String, ApexMatch> index2index = new ConcurrentHashMap<>();
@@ -5270,7 +5628,7 @@ public class AIGear {
     }
 
     /**
-     * Add apex MS2 index and scan numbers to the psm file.
+     * Add apex MS2 index and scan numbers to the peptide detection file.
      * @param psm_file A PSM table file from DIA search
      * @param ms_file A MS spectrum file in mzML format
      * @return A map of PSM to ApexMatch
@@ -5407,10 +5765,26 @@ public class AIGear {
         return(out_file);
     }
 
+    /**
+     * Check if the m/z value is within the isolation window.
+     * @param mz m/z value to check
+     * @param iso_mz Isolation m/z value in the center
+     * @param width Isolation width
+     * @return true if within isolation window, false otherwise
+     */
     private boolean is_within_isolation_win(double mz, double iso_mz, double width){
         return mz >= (iso_mz - width / 2.0) && mz <= (iso_mz + width / 2.0);
     }
 
+    /**
+     * Get MS2 spectrum match information for each peptide match and export matched spectra to an MGF file.
+     * @param matches List of matches
+     * @param ms_file Path to the MS file
+     * @param dbGear A DBGear instance for database access
+     * @param out_dir Output directory for results
+     * @return A map of matches to their corresponding MS2 spectra metadata
+     * @throws IOException If an I/O error occurs
+     */
     public ConcurrentHashMap<String, Integer> get_ms2spectrum_index_and_export_mgf(ArrayList<String> matches, String ms_file, DBGear dbGear, String out_dir) throws IOException {
         ConcurrentHashMap<String, Integer> index2index = new ConcurrentHashMap<>();
         HashMap<Integer, HashMap<String, Double>> index = new HashMap<>();
@@ -5537,6 +5911,13 @@ public class AIGear {
         return index2index;
     }
 
+    /**
+     * Get MS2 spectrum match information for each peptide match.
+     * @param psm_file A PSM table file from DIA search
+     * @param ms_file A MS spectrum file in mzML format
+     * @param dbGear A DBGear instance for database access
+     * @param out_dir Output directory for results
+     */
     public void get_ms2spectrum_index(String psm_file, String ms_file, DBGear dbGear, String out_dir){
         ArrayList<String> matches = new ArrayList<>();
         try {
@@ -5561,6 +5942,13 @@ public class AIGear {
         }
     }
 
+    /**
+     * Get MS2 spectrum match information for each peptide match and export matched spectra to an MGF file.
+     * @param psm_file A PSM table file from DIA search
+     * @param ms_file A MS spectrum file in mzML format
+     * @param dbGear A DBGear instance for database access
+     * @param out_dir Output directory for results
+     */
     public void get_ms2spectrum_index_and_export_mgf(String psm_file, String ms_file, DBGear dbGear, String out_dir){
         ArrayList<String> matches = new ArrayList<>();
         try {
@@ -5585,7 +5973,12 @@ public class AIGear {
         }
     }
 
-
+    /**
+     * Save XIC data to a json format string
+     * @param id XIC ID
+     * @param pMatch A PeptideMatch object which stores peptide XIC data
+     * @return A JSON string representation of the XIC data
+     */
     private String get_xic_json(String id, PeptideMatch pMatch){
         JXIC xic = new JXIC();
         if(pMatch.peak.fragment_ions_mz!=null) {
@@ -5619,7 +6012,14 @@ public class AIGear {
         return(JSON.toJSONString(xic));
     }
 
-
+    /**
+     * Get adjacent MS2 matches for a given peptide match.
+     * @param peptideMatch A PeptideMatch object
+     * @param n_flank_scans Number of flank scans to consider
+     * @param diaIndex A DIAIndex object containing indexed DIA data
+     * @param iso_win Isolation window ID
+     * @return A list of adjacent PeptideMatch objects
+     */
     ArrayList<PeptideMatch> get_adjacent_ms2_matches(PeptideMatch peptideMatch, int n_flank_scans, DIAIndex diaIndex, String iso_win){
         int scan_num = peptideMatch.scan;
         int scan_index = diaIndex.get_index_by_scan(iso_win,scan_num);
@@ -5725,12 +6125,12 @@ public class AIGear {
 
 
     /**
-     * This function is the same with get_adjacent_ms2_matches except the class of one of the input parameters diaIndex
-     * @param peptideMatch
-     * @param n_flank_scans
-     * @param diaIndex
-     * @param iso_win
-     * @return
+     * Get adjacent MS2 matches for a given peptide match for TIMS-TOF data
+     * @param peptideMatch A PeptideMatch object
+     * @param n_flank_scans Number of flank scans to consider
+     * @param diaIndex A CCSDIAIndex object containing indexed DIA data
+     * @param iso_win Isolation window ID
+     * @return A list of adjacent PeptideMatch objects
      */
     ArrayList<PeptideMatch> get_adjacent_ms2_matches_ccs(PeptideMatch peptideMatch, int n_flank_scans, CCSDIAIndex diaIndex, String iso_win){
         int scan_num = peptideMatch.scan;
@@ -5834,7 +6234,13 @@ public class AIGear {
         }
         return pMatches;
     }
-    
+
+    /**
+     * Spectra correlation calculation
+     * @param x A PeptideMatch object
+     * @param y A PeptideMatch object
+     * @return The correlation value between the two spectra
+     */
     private double calc_spectrum_correlation(PeptideMatch x, PeptideMatch y){
         int n_valid_peaks = 0;
         int n_total_peaks = 0;
@@ -5874,10 +6280,21 @@ public class AIGear {
         return cor;
     }
 
+    /**
+     * Log10 transformation
+     * @param x The input value to be transformed
+     * @return Log10 transformed value
+     */
     private double log_transform(double x){
         return FastMath.log10(x+1)/3;
     }
 
+    /**
+     * Extraction modification from DIA-NN format inputs
+     * @param mod_seq The modified sequence string from DIA-NN
+     * @param peptide Peptide sequence
+     * @return A string containing the modification information
+     */
     private String get_modification_diann(String mod_seq, String peptide){
         // AAAAC(UniMod:4)LDK2
         // AGEVLNQPM(UniMod:35)MMAAR2
@@ -5912,6 +6329,14 @@ public class AIGear {
 
     }
 
+    /**
+     * Generate RT training data.
+     * @param peptide2rt A HashMap containing peptide retention time information
+     * @param method The method for aggregating retention times (max, min, mean) when there are multiple retention time values
+     *               available for a given peptide precursor.
+     * @param out_file Output file
+     * @throws IOException If an I/O error occurs
+     */
     private void generate_rt_train_data(HashMap<String,PeptideRT> peptide2rt, String method, String out_file) throws IOException {
 
         peptide2rt.values().parallelStream().forEach(peptideRT -> {
@@ -5963,7 +6388,14 @@ public class AIGear {
         System.out.println("RT train data:"+out_file);
     }
 
-
+    /**
+     * Generate CCS training data.
+     * @param peptide2ccs A HashMap containing peptide CCS information
+     * @param method The method for aggregating CCS values (max, min, mean) when there are multiple CCS values
+     *               available for a given peptide precursor.
+     * @param out_file Output file
+     * @throws IOException If an I/O error occurs
+     */
     private void generate_ccs_train_data(HashMap<String,PeptideCCS> peptide2ccs, String method, String out_file) throws IOException {
 
         peptide2ccs.values().parallelStream().forEach(peptideCCS -> {
@@ -6009,7 +6441,12 @@ public class AIGear {
         System.out.println("CCS train data:"+out_file);
     }
 
-
+    /**
+     * Get the number of valid fragment ions in the ion intensity matrix: intensity > 0 and valid
+     * @param ion_intensity_matrix Ion intensity matrix
+     * @param ion_valid_matrix Ion intensity valid matrix. The same shape with ion_intensity_matrix
+     * @return The number of valid fragment ions
+     */
     private int get_n_valid_fragment_ions(double [][] ion_intensity_matrix, int [][] ion_valid_matrix){
         int n = 0;
         for (int i = 0; i < ion_intensity_matrix.length; i++) {
@@ -6022,6 +6459,11 @@ public class AIGear {
         return n;
     }
 
+    /**
+     * Get the number of matched fragment ions: intensity > 0
+     * @param ion_intensity_matrix Ion intensity matrix
+     * @return The number of matched fragment ions
+     */
     private int get_n_matched_fragment_ions(double [][] ion_intensity_matrix){
         int n = 0;
         for (int i = 0; i < ion_intensity_matrix.length; i++) {
@@ -6034,6 +6476,11 @@ public class AIGear {
         return n;
     }
 
+    /**
+     * Extract modification name and position from a modification string.
+     * @param modification A modification string. Multiple modifications are separated by ";".
+     * @return An array of two strings: the first string contains modification names, and the second string contains modification positions.
+     */
     private String[] convert_modification(String modification){
         if(modification.equalsIgnoreCase("-")){
             return new String[]{"",""};
@@ -6060,11 +6507,23 @@ public class AIGear {
         }
     }
 
+    /**
+     * Extract modification name and position from a modification string.
+     * @param peptide A Peptide object.
+     * @return An array of two strings: the first string contains modification names, and the second string contains modification positions.
+     */
     private String[] convert_modification(Peptide peptide){
         String modification = ModificationUtils.getInstance().getModificationString(peptide);
         return convert_modification(modification);
     }
 
+    /**
+     * Convert a peptide sequence with modifications to a string representation: each modified amino acid is represented
+     * using a specific integer number.
+     * @param peptide Peptide sequence
+     * @param modification Peptide modification string, such as Oxidation of M@17[15.9949];Carbamidomethylation of C@6[57.0215].
+     * @return A peptide sequence with modified amino acids converted to integers.
+     */
     private String convert_modification(String peptide, String modification){
         String x = peptide;
         boolean unrecognized_mod_found = false;
@@ -6103,6 +6562,9 @@ public class AIGear {
         return x;
     }
 
+    /**
+     * Load modification map from the ModificationUtils class.
+     */
     public void load_mod_map(){
         this.mod_map.put("Carbamidomethylation of C","Carbamidomethyl@C");
         this.mod_map.put("Oxidation of M","Oxidation@M");
@@ -6120,7 +6582,12 @@ public class AIGear {
         }
     }
 
-
+    /**
+     * Extract the XIC (Extracted Ion Chromatogram) for a given peptide match.
+     * @param ms2index DIA index containing MS2 data
+     * @param peptideMatch A PeptideMatch object containing information about the peptide
+     * @param isoWinID Isolation window ID for the XIC extraction
+     */
     private void xic_query(DIAIndex ms2index, PeptideMatch peptideMatch, String isoWinID) {
         LibSpectrum libSpectrum = peptideMatch.libSpectrum;
         boolean is_ppm = CParameter.itolu.equalsIgnoreCase("ppm");
@@ -6413,6 +6880,12 @@ public class AIGear {
         }
     }
 
+    /**
+     * Extract the XIC (Extracted Ion Chromatogram) for a given peptide match. This is used for TIMS-TOF DIA data.
+     * @param ms2index DIA index containing MS2 data
+     * @param peptideMatch A PeptideMatch object containing information about the peptide
+     * @param isoWinID Isolation window ID for the XIC extraction
+     */
     private void xic_query_ccs(CCSDIAIndex ms2index, PeptideMatch peptideMatch, String isoWinID) {
         LibSpectrum libSpectrum = peptideMatch.libSpectrum;
         boolean is_ppm = CParameter.itolu.equalsIgnoreCase("ppm");
@@ -6693,6 +7166,16 @@ public class AIGear {
         }
     }
 
+    /**
+     * Refine the peak boundary detection for a given peptide peak in DIA data.
+     * @param x A RealMatrix format matrix containing the XIC data
+     * @param peak A PeptidePeak object containing the peak information
+     * @param ms2index DIA index containing MS2 data
+     * @param isoWinID Isolation window ID for the XIC extraction
+     * @param index2scan A map between spectrum index and scan number
+     * @param libSpectrum A LibSpectrum object containing the query m/z information
+     * @return A boolean value indicating whether the peak boundary is refined successfully.
+     */
     public boolean refine_peak_boundary_detection(RealMatrix x, PeptidePeak peak, DIAIndex ms2index, String isoWinID, HashMap<Integer, Integer> index2scan, LibSpectrum libSpectrum){
         boolean is_refined = false;
         // select the top 12 high abundant fragments
@@ -6772,15 +7255,14 @@ public class AIGear {
         return is_refined;
     }
 
-    /**
-     * This function is the same with refine_peak_boundary_detection. The only difference is one of the input parameter class: ms2index
-     * @param x
-     * @param peak
-     * @param ms2index A CCSDIAIndex object
-     * @param isoWinID
-     * @param index2scan
-     * @param libSpectrum
-     * @return
+    /** Refine the peak boundary detection for a given peptide peak in DIA data with CCS information.
+     * @param x A RealMatrix format matrix containing the XIC data
+     * @param peak A PeptidePeak object containing the peak information
+     * @param ms2index DIA index containing MS2 data
+     * @param isoWinID Isolation window ID for the XIC extraction
+     * @param index2scan A map between spectrum index and scan number
+     * @param libSpectrum A LibSpectrum object containing the query m/z information
+     * @return A boolean value indicating whether the peak boundary is refined successfully.
      */
     public boolean refine_peak_boundary_detection_ccs(RealMatrix x, PeptidePeak peak, CCSDIAIndex ms2index, String isoWinID, HashMap<Integer, Integer> index2scan, LibSpectrum libSpectrum){
         boolean is_refined = false;
@@ -6861,6 +7343,16 @@ public class AIGear {
         return is_refined;
     }
 
+    /**
+     * Query a single fragment ion against DIA data.
+     * @param ms2index DIA index containing MS2 data
+     * @param mz The fragment ion m/z to query
+     * @param rt_start The start of the retention time range for query
+     * @param rt_end The end of the retention time range for query
+     * @param is_ppm A boolean value indicating whether the m/z tolerance is in ppm or not
+     * @param isoWinID Isolation window ID for the query
+     * @return An ArrayList of JFragmentIon objects containing extract fragment ion data.
+     */
     private ArrayList<JFragmentIon> single_fragment_ion_query_for_dia(DIAIndex ms2index, double mz, double rt_start, double rt_end, boolean is_ppm, String isoWinID){
         ArrayList<JFragmentIon> scans = new ArrayList<>();
         double[] frag_mz_range = CParameter.getRangeOfMass(mz,CParameter.itol,is_ppm);
@@ -6880,6 +7372,17 @@ public class AIGear {
         return scans;
     }
 
+    /**
+     * Query a single fragment ion against DIA data from TIMS-TOF.
+     * @param ms2index DIA index containing MS2 data
+     * @param mz The fragment ion m/z to query
+     * @param ccs CCS value
+     * @param rt_start The start of the retention time range for query
+     * @param rt_end The end of the retention time range for query
+     * @param is_ppm A boolean value indicating whether the m/z tolerance is in ppm or not
+     * @param isoWinID Isolation window ID for the query
+     * @return An ArrayList of JFragmentIon objects containing extract fragment ion data.
+     */
     private ArrayList<JFragmentIonIM> single_fragment_ion_query_for_dia_ccs(CCSDIAIndex ms2index, double mz, double ccs, double rt_start, double rt_end, boolean is_ppm, String isoWinID){
         ArrayList<JFragmentIonIM> scans = new ArrayList<>();
         double[] frag_mz_range = CParameter.getRangeOfMass(mz,CParameter.itol,is_ppm);
@@ -6899,6 +7402,11 @@ public class AIGear {
         return scans;
     }
 
+    /**
+     * Get the column index of the ion type in the fragment ion intensity matrix.
+     * @param ionMatch A IonMatch object which contains the information for a single fragment ion match
+     * @return The column index of the ion type in the fragment ion intensity matrix.
+     */
     private int get_ion_type_column_index(IonMatch ionMatch){
         String ion_type = "";
         if(ionMatch.ion.getSubType() == PeptideFragmentIon.B_ION){
@@ -6934,6 +7442,12 @@ public class AIGear {
         return(this.ion_type2column_index.get(ion_type));
     }
 
+    /**
+     * Get the column index of the ion type in the fragment ion intensity matrix.
+     * @param ion An Ion object which contains the information for a single fragment ion
+     * @param charge The charge state of the fragment ion
+     * @return The column index of the ion type in the fragment ion intensity matrix.
+     */
     private int get_ion_type_column_index(Ion ion, int charge){
         String ion_type = "";
         if(ion.getSubType() == PeptideFragmentIon.B_ION){
@@ -6969,6 +7483,12 @@ public class AIGear {
         return(this.ion_type2column_index.get(ion_type));
     }
 
+    /**
+     * Set the column index for different types of fragment ions based on the fragmentation type and maximum fragment ion charge.
+     * @param fragmentation_type Fragmentation type: HCD or CID
+     * @param max_fragment_ion_charge The maximum fragment ion charge to consider
+     * @param lossWaterNH3 A boolean value indicating whether to consider neutral losses of water and ammonia
+     */
     private void set_ion_type_column_index(String fragmentation_type, int max_fragment_ion_charge, boolean lossWaterNH3){
         if(fragmentation_type.equalsIgnoreCase("hcd") || fragmentation_type.equalsIgnoreCase("cid")){
             ArrayList<String> col_names = new ArrayList<>();
@@ -7007,6 +7527,11 @@ public class AIGear {
         }
     }
 
+    /**
+     * Get the valid maximum fragment ion charge based on the precursor charge and the maximum fragment ion charge setting.
+     * @param precursor_charge The charge state of precursor ion
+     * @return The valid maximum fragment ion charge.
+     */
     private int get_valid_max_fragment_ions(int precursor_charge){
         if(precursor_charge<=2){
             return precursor_charge;
@@ -7015,6 +7540,15 @@ public class AIGear {
         return Math.min(precursor_charge,this.max_fragment_ion_charge);
     }
 
+    /**
+     * Get the matched fragment ions for a given peptide and spectrum.
+     * @param objPeptide A Peptide object containing peptide sequence and modification information
+     * @param spectrum A Spectrum object containing the MS2 spectrum to annotate
+     * @param precursor_charge Precursor charge state
+     * @param max_fragment_ion_charge Maximum fragment ion charge state to consider
+     * @param lossWaterNH3 A boolean value indicating whether to consider neutral losses of water and ammonia
+     * @return An ArrayList containing the matched fragment ion information.
+     */
     private ArrayList<IonMatch> get_matched_ions(Peptide objPeptide, Spectrum spectrum, int precursor_charge, int max_fragment_ion_charge, boolean lossWaterNH3) {
 
         PeptideSpectrumAnnotator peptideSpectrumAnnotator = new PeptideSpectrumAnnotator();
@@ -7104,6 +7638,11 @@ public class AIGear {
 
     }
 
+    /**
+     * Get the NeutralLossesMap for a given peptide.
+     * @param peptide A Peptide object
+     * @return A NeutralLossesMap object.
+     */
     public static NeutralLossesMap getNeutralLossesMap(Peptide peptide) {
         // ModificationFactory modificationFactory = ModificationFactory.getInstance();
         NeutralLossesMap neutralLossesMap = new NeutralLossesMap();
@@ -7134,12 +7673,23 @@ public class AIGear {
         return neutralLossesMap;
     }
 
-
+    /**
+     * Return a Peptide object based on the peptide sequence and modification from the global peptide_mod2Peptide map.
+     * @param peptide_sequence Peptide sequence
+     * @param modification Peptide modification
+     * @return A Peptide object.
+     */
     private Peptide get_peptide(String peptide_sequence, String modification){
         String peptide_mod = peptide_sequence + modification;
         return peptide_mod2Peptide.get(peptide_mod);
     }
 
+    /**
+     * Generate a Peptide object based on the peptide sequence and modification, then add the object to the global
+     * peptide_mod2Peptide map.
+     * @param peptide_sequence Peptide sequence
+     * @param modification Peptide modification
+     */
     private void add_peptide(String peptide_sequence, String modification){
         String peptide_mod = peptide_sequence + modification;
         if(!this.peptide_mod2Peptide.containsKey(peptide_mod)){
@@ -7148,6 +7698,12 @@ public class AIGear {
         }
     }
 
+    /**
+     * Generate a Peptide object based on the peptide sequence and modification
+     * @param peptideSequence Peptide sequence
+     * @param modifications Peptide modification
+     * @return A Peptide object.
+     */
     public Peptide generatePeptide(String peptideSequence, String modifications){
         Peptide peptide = new Peptide(peptideSequence);
         if(!modifications.equals("-")){
@@ -7163,7 +7719,13 @@ public class AIGear {
         return peptide;
     }
 
-    // only use this for preprocessing DIA-NN result for model training.
+    /**
+     * Remove interference peptides from a PSM file and save the results to a new PSM file. This is only used when the
+     * input psm_file is in a generic format.
+     * @param psm_file A peptide detection result file
+     * @param new_psm_file A new PSM file to save the data after removing interfered peptides
+     * @param fdr_cutoff FDR cutoff used to filter the original peptide detection result.
+     */
     public void remove_interference_peptides(String psm_file, String new_psm_file, double fdr_cutoff){
         CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
                 .separator('\t')
@@ -7190,6 +7752,12 @@ public class AIGear {
 
     }
 
+    /**
+     * Remove interference peptides from a PSM file and save the results to a new PSM file. This is only used when the
+     * input psm_file is in a generic format.
+     * @param psmTable A Table object containing peptide detection result
+     * @return A Table object containing the data after removing interfered peptides
+     */
     public static Table remove_interference_peptides(Table psmTable){
         String peptide;
         String mz;
@@ -7266,6 +7834,12 @@ public class AIGear {
         return psmTable;
     }
 
+    /**
+     * Remove interference peptides from a PSM file and save the results to a new PSM file.
+     * This is used for DIA-NN result.
+     * @param psm_file A peptide detection result file
+     * @param new_psm_file A new PSM file to save the data after removing interfered peptides
+     */
     public void remove_interference_peptides_diann(String psm_file, String new_psm_file){
 
         Table psmTable;
@@ -7427,6 +8001,14 @@ public class AIGear {
         psmTable.write().usingOptions(writeOptions);
     }
 
+    /**
+     * Read the peptide detection result and save the data to a HashMap object.
+     * @param psm_file A peptide detection result file
+     * @param ms_file An MS file
+     * @param fdr_cutoff FDR cutoff used to filter peptide detection result
+     * @return A HashMap<String, ArrayList<String>> which stores the peptide detection result.
+     * @throws IOException If an I/O error occurs
+     */
     public HashMap<String, ArrayList<String>> get_ms_file2psm(String psm_file, String ms_file, double fdr_cutoff) throws IOException {
         HashMap<String,Integer> hIndex = get_column_name2index(psm_file);
         BufferedReader psmReader = new BufferedReader(new FileReader(psm_file));
@@ -7490,12 +8072,13 @@ public class AIGear {
     }
 
     /**
+     * Read the peptide detection result and save the data to a HashMap object.
      * This will be deleted in the future. Use get_ms_file2psm_diann_multiple_ms_runs instead.
-     * @param psm_file
-     * @param ms_file
-     * @param fdr_cutoff
-     * @return
-     * @throws IOException
+     * @param psm_file A peptide detection result file
+     * @param ms_file An MS file
+     * @param fdr_cutoff FDR cutoff used to filter peptide detection result
+     * @return A HashMap<String, ArrayList<String>> which stores the peptide detection result.
+     * @throws IOException If an I/O error occurs
      */
     public HashMap<String, ArrayList<String>> get_ms_file2psm_diann_will_be_deleted(String psm_file, String ms_file, double fdr_cutoff) throws IOException {
         HashMap<String,Integer> hIndex = get_column_name2index(psm_file);
@@ -7562,6 +8145,14 @@ public class AIGear {
         return ms_file2psm;
     }
 
+    /**
+     * Read the peptide detection result and save the data to a HashMap object.
+     * @param psm_file A peptide detection result file
+     * @param ms_file An MS file or a folder containing the MS files.
+     * @param fdr_cutoff FDR cutoff used to filter peptide detection result
+     * @return A HashMap<String, ArrayList<String>> which stores the peptide detection result.
+     * @throws IOException If an I/O error occurs
+     */
     public HashMap<String, ArrayList<String>> get_ms_file2psm_diann_multiple_ms_runs(String psm_file, String ms_file, double fdr_cutoff) throws IOException {
         HashMap<String,Integer> hIndex = get_column_name2index(psm_file);
         BufferedReader psmReader = new BufferedReader(new FileReader(psm_file));
@@ -7673,6 +8264,12 @@ public class AIGear {
         return ms_file2psm;
     }
 
+    /**
+     * Get the column name to index mapping from a file.
+     * @param file A file in which the first line is the header line containing column names.
+     * @return A HashMap<String,Integer>: key -> column name, value -> column index (0-based).
+     * @throws IOException If an I/O error occurs
+     */
     public HashMap<String,Integer> get_column_name2index(String file) throws IOException {
         BufferedReader reader = new BufferedReader(new FileReader(file));
         String head_line= reader.readLine().trim();
@@ -7682,6 +8279,11 @@ public class AIGear {
         return hIndex;
     }
 
+    /**
+     * Get the column name to index mapping from a header line.
+     * @param head_line The first line of a file
+     * @return A HashMap<String,Integer>: key -> column name, value -> column index (0-based).
+     */
     public HashMap<String,Integer> get_column_name2index_from_head_line(String head_line){
         this.psm_head_line = head_line;
         String []h = head_line.split("\t");
@@ -7692,6 +8294,13 @@ public class AIGear {
         return hIndex;
     }
 
+    /**
+     * Get the number of rows for a file
+     * @param file The file to count the number of rows in it.
+     * @param header If the file has a header line, set it to true, otherwise set it to false.
+     * @return The number of rows in the file
+     * @throws IOException If an I/O error occurs
+     */
     public int get_n_rows(String file, boolean header) throws IOException {
         BufferedReader pReader = new BufferedReader(new FileReader(file));
         String line;
@@ -7706,6 +8315,12 @@ public class AIGear {
         return n;
     }
 
+    /**
+     * Generate theoretical fragment ions for a peptide
+     * @param peptide A Peptide object
+     * @param precursor_charge Precursor charge state
+     * @return A HashMap<Integer, ArrayList<Ion>> containing the theoretical fragment ions.
+     */
     private HashMap<Integer, ArrayList<Ion>> generate_theoretical_fragment_ions(Peptide peptide, int precursor_charge){
         // generate theoretical fragment ions.
         PeptideFrag peptideFrag = new PeptideFrag();
@@ -7714,6 +8329,11 @@ public class AIGear {
 
     }
 
+    /**
+     * Get possible fragment ion charges based on the precursor charge.
+     * @param precursorCharge Precursor charge state
+     * @return A HashSet<Integer> containing possible fragment ion charges.
+     */
     private HashSet<Integer> getPossibleFragmentIonCharges(int precursorCharge) {
         HashSet<Integer> charges = new HashSet<>(4);
         if (precursorCharge <= 1) {
@@ -7732,6 +8352,11 @@ public class AIGear {
         return charges;
     }
 
+    /**
+     * Generate a spectral library.
+     * @param res_files A Map<String,HashMap<String,String>> containing prediction data used for spectral library generation
+     * @throws IOException If an I/O error occurs
+     */
     public void generate_spectral_library(Map<String,HashMap<String,String>> res_files) throws IOException {
         if(this.use_parquet) {
             // need to check if the format is a skyline format first
@@ -7769,6 +8394,13 @@ public class AIGear {
         }
     }
 
+    /**
+     * Generate a spectral library.
+     * @param res_files A Map<String,HashMap<String,String>> containing prediction data used for spectral library generation
+     * @param out_folder Output folder
+     * @param file_name Output file name
+     * @throws IOException If an I/O error occurs
+     */
     public void generate_spectral_library(Map<String,HashMap<String,String>> res_files, String out_folder, String file_name) throws IOException {
         //String out_library_file = this.out_dir + File.separator + "SkylineAI_spectral_library.tsv";
         String out_library_file = out_folder + File.separator + file_name;
@@ -7962,6 +8594,13 @@ public class AIGear {
         libWriter.close();
     }
 
+    /**
+     * Generate a spectral library in Parquet format.
+     * @param res_files A Map<String,HashMap<String,String>> containing prediction data used for spectral library generation
+     * @param out_folder Output folder
+     * @param file_name Output file name
+     * @throws IOException If an I/O error occurs
+     */
     public void generate_spectral_library_parquet(Map<String,HashMap<String,String>> res_files, String out_folder, String file_name) throws IOException {
         //String out_library_file = this.out_dir + File.separator + "SkylineAI_spectral_library.tsv";
         String out_library_file = out_folder + File.separator + file_name;
@@ -8196,6 +8835,14 @@ public class AIGear {
         }
     }
 
+    /**
+     * Generate a spectral library in Skyline format.
+     * @param res_files A Map<String,HashMap<String,String>> containing prediction data used for spectral library generation
+     * @param out_folder Output folder
+     * @param file_name Output file name
+     * @throws IOException If an I/O error occurs
+     * @throws SQLException If an SQL error occurs
+     */
     public void generate_spectral_library_parquet_skyline(Map<String,HashMap<String,String>> res_files, String out_folder, String file_name) throws IOException, SQLException {
         //String out_library_file = this.out_dir + File.separator + "SkylineAI_spectral_library.tsv";
         String out_library_file = out_folder + File.separator + file_name;
@@ -8437,6 +9084,14 @@ public class AIGear {
         skylineIO.close();
     }
 
+    /**
+     * Generate a spectral library in mzSpecLib format.
+     * @param res_files A Map<String,HashMap<String,String>> containing prediction data used for spectral library generation
+     * @param out_folder Output folder
+     * @param file_name Output file name
+     * @throws IOException If an I/O error occurs
+     * @throws SQLException If an SQL error occurs
+     */
     public void generate_spectral_library_parquet_mzSpecLib(Map<String,HashMap<String,String>> res_files, String out_folder, String file_name) throws IOException, SQLException {
         //String out_library_file = this.out_dir + File.separator + "SkylineAI_spectral_library.tsv";
         String out_library_file = out_folder + File.separator + file_name;
@@ -8627,6 +9282,13 @@ public class AIGear {
         mzLibWriter.close();
     }
 
+    /**
+     * Peptide string format conversion.
+     * @param peptide A Peptide object
+     * @param mods A string containing modifications in the format "mod1;mod2;..." (e.g., Oxidation@M:Oxidation@M).
+     * @param mod_sites A string containing modification sites in the format "site1;site2;..." (e.g., 1;2).
+     * @return A formatted peptide string.
+     */
     String get_modified_peptide(String peptide, String mods, String mod_sites){
         if(mods.isEmpty()){
             return "_"+peptide+"_";
@@ -8674,7 +9336,13 @@ public class AIGear {
 
     }
 
-
+    /**
+     * Peptide string format conversion for DIA-NN library generation.
+     * @param peptide A Peptide object
+     * @param mods A string containing modifications in the format "mod1;mod2;..." (e.g., Oxidation@M:Oxidation@M).
+     * @param mod_sites A string containing modification sites in the format "site1;site2;..." (e.g., 1;2).
+     * @return A formatted peptide string.
+     */
     String get_modified_peptide_diann(String peptide, String mods, String mod_sites){
         if(mods.isEmpty()){
             return "_"+peptide+"_";
@@ -8722,7 +9390,13 @@ public class AIGear {
 
     }
 
-
+    /**
+     * Peptide string format conversion for EncyclopeDIA library generation.
+     * @param peptide A Peptide object
+     * @param mods A string containing modifications in the format "mod1;mod2;..." (e.g., Oxidation@M:Oxidation@M).
+     * @param mod_sites A string containing modification sites in the format "site1;site2;..." (e.g., 1;2).
+     * @return A formatted peptide string.
+     */
     String get_modified_peptide_encyclopedia(String peptide, String mods, String mod_sites){
         if(mods.isEmpty()){
             return "_"+peptide+"_";
@@ -8770,6 +9444,13 @@ public class AIGear {
 
     }
 
+    /**
+     * Peptide string format conversion for Skyline (.blib) library generation.
+     * @param peptide A Peptide object
+     * @param mods A string containing modifications in the format "mod1;mod2;..." (e.g., Oxidation@M:Oxidation@M).
+     * @param mod_sites A string containing modification sites in the format "site1;site2;..." (e.g., 1;2).
+     * @return A formatted peptide string.
+     */
     String get_modified_peptide_skyline(String peptide, String mods, String mod_sites){
         if(mods.isEmpty()){
             return peptide;
@@ -8817,6 +9498,11 @@ public class AIGear {
 
     }
 
+    /**
+     * Print the parameter information to console.
+     * @param cmd The java command line
+     * @throws IOException If an I/O error occurs.
+     */
     private void print_parameters(String cmd) throws IOException {
         String itol_unit;
         if(CParameter.itolu.equalsIgnoreCase("ppm")){
@@ -8918,6 +9604,14 @@ public class AIGear {
         bWriter.close();
     }
 
+    /**
+     * Select the best NCE based on the correlation of predicted MS2 spectra and observed MS2 spectra.
+     * @param in_dir The folder containing all the data required for the analysis
+     * @param min_nce The minimum NCE to consider
+     * @param max_nce The maximum NCE to consider
+     * @return The best NCE.
+     * @throws IOException If an I/O error occurs.
+     */
     public int select_best_nce(String in_dir, int min_nce, int max_nce) throws IOException {
         int best_nce = 0;
         double best_cor = Double.NEGATIVE_INFINITY;
@@ -9175,6 +9869,11 @@ public class AIGear {
         return best_nce;
     }
 
+    /**
+     * Load the data from a file and save the data as a Table object.
+     * @param file A file containing the data to load
+     * @return A Table object.
+     */
     private Table read_table(String file){
         CsvReadOptions.Builder builder = CsvReadOptions.builder(file)
                 .maxCharsPerColumn(10000000)
@@ -9184,6 +9883,12 @@ public class AIGear {
         return(Table.read().usingOptions(options));
     }
 
+    /**
+     * Calculate spectral angle between two spectra.
+     * @param a The first spectrum (array of intensities)
+     * @param b The second spectrum (array of intensities)
+     * @return Spectral angle
+     */
     public static double calc_spectral_angle(double[] a, double[] b) {
         if (a.length != b.length) {
             throw new IllegalArgumentException("Vectors must have the same length");
@@ -9219,10 +9924,9 @@ public class AIGear {
 
     /**
      * Calculate the unweighted spectral entropy similarity between two spectra.
-     *
-     * @param a the first spectrum (array of intensities)
-     * @param b the second spectrum (array of intensities)
-     * @return the unweighted spectral entropy similarity
+     * @param a The first spectrum (array of intensities)
+     * @param b The second spectrum (array of intensities)
+     * @return The unweighted spectral entropy similarity
      * @throws IllegalArgumentException if the input arrays have different lengths or are empty
      */
     public static double calc_unweighted_spectral_entropy(double[] a, double[] b) {
