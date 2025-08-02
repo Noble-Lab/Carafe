@@ -2737,6 +2737,10 @@ public class AIGear {
         HashMap<String, JMeta> ms_file2meta = new HashMap<>();
         boolean first_meta = true;
 
+        // useful when there are multiple MS files and they may have different precursor m/z ranges.
+        double global_minPeptideMz = Double.POSITIVE_INFINITY;
+        double global_maxPeptideMz = 0.0;
+
         for(String ms_file: this.ms_file2psm.keySet()){
             System.out.println("Process MS file:"+ms_file);
             ms_file2meta.put(ms_file, new JMeta());
@@ -2755,6 +2759,15 @@ public class AIGear {
             }
             CParameter.minPeptideMz = meta.precursor_ion_mz_min - 0.5;
             CParameter.maxPeptideMz = meta.precursor_ion_mz_max + 0.5;
+
+            if(global_minPeptideMz >= CParameter.minPeptideMz){
+                global_minPeptideMz = CParameter.minPeptideMz;
+            }
+
+            if(global_maxPeptideMz <= CParameter.maxPeptideMz){
+                global_maxPeptideMz = CParameter.maxPeptideMz;
+            }
+
             CParameter.min_fragment_ion_mz = meta.fragment_ion_mz_min - 0.5;
             if(CParameter.max_fragment_ion_mz > meta.fragment_ion_mz_max){
                 CParameter.max_fragment_ion_mz = meta.fragment_ion_mz_max + 0.5;
@@ -3501,6 +3514,11 @@ public class AIGear {
 
         metaWriter.write("\n}");
         metaWriter.close();
+
+        if(this.ms_file2psm.size()>=2){
+            CParameter.minPeptideMz = global_minPeptideMz;
+            CParameter.maxPeptideMz = global_maxPeptideMz;
+        }
 
         System.out.println("Total matches:"+n_total_matches);
         System.out.println("Total valid matches:"+n_total_matches_valid);
