@@ -493,7 +493,7 @@ public class AIGear {
     public static void main(String[] args) throws ParseException, IOException {
         long startTime = System.currentTimeMillis();
         Options options = new Options();
-        options.addOption("i", true, "PSM file");
+        options.addOption("i", true, "Peptide detection file from DIA-NN (e.g., report.tsv or report.parquet) or Skyline");
         options.addOption("ms", true, "MS file in mzML format: a single mzML or a folder containing mzML files.");
         options.addOption("fixMod", true, "Fixed modification, the format is like : 1,2,3. Use '-printPTM' to show all supported modifications. Default is 1 (Carbamidomethylation(C)[57.02]). " +
                 "If there is no fixed modification, set it as '-fixMod no' or '-fixMod 0'.");

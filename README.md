@@ -29,8 +29,8 @@ conda activate carafe
 ```
 $ java -jar carafe.jar
 usage: Options
- -i <arg>                PSM file
- -ms <arg>               MS file in mzML format
+ -i <arg>                Peptide detection file from DIA-NN (e.g., report.tsv or report.parquet) or Skyline
+ -ms <arg>               MS file in mzML format: a single mzML or a folder containing mzML files.
  -fixMod <arg>           Fixed modification, the format is like : 1,2,3. Default is 1 (Carbamidomethylation(C)[57.02]). 
                          If there is no fixed modification, set it as '-fixMod no' or '-fixMod 0'.
  -varMod <arg>           Variable modification, the format is the same with -fixMod. Default is 2
