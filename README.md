@@ -4,7 +4,7 @@
 
 **Carafe** is a tool for experimental specific *in silico* spectral library generation using deep learning for DIA data analysis. Carafe generates an experimental specific *in silico* spectral library by directly training both RT and fragment ion intensity prediction models on DIA data generated from a specific DIA experiment setting of interest. More details about how Carafe works can be found in the following manuscript:
 
-Wen, Bo, Chris Hsu, Wen-Feng Zeng, Michael Riffle, Alexis Chang, Miranda Mudge, Brook L. Nunn, et al. “[Carafe Enables High Quality in Silico Spectral Library Generation for Data-Independent Acquisition Proteomics](https://doi.org/10.1101/2024.10.15.618504).” **bioRxiv**, 2024.10.15.618504.
+Bo Wen, Chris Hsu, David Shteynberg, Wen-Feng Zeng, Michael Riffle, Alexis Chang, Miranda Mudge, Brook L. Nunn, Brendan X. MacLean, et al. “[Carafe Enables High Quality in Silico Spectral Library Generation for Data-Independent Acquisition Proteomics](https://doi.org/10.1101/2024.10.15.618504).” **bioRxiv**, 2024.10.15.618504.
 
 ## Installation
 
@@ -168,5 +168,5 @@ Details are available at https://nf-carafe-ai-ms.readthedocs.io.
 
 ## How to cite:
 
-Wen, Bo, Chris Hsu, Wen-Feng Zeng, Michael Riffle, Alexis Chang, Miranda Mudge, Brook L. Nunn, et al. “[Carafe Enables High Quality in Silico Spectral Library Generation for Data-Independent Acquisition Proteomics](https://doi.org/10.1101/2024.10.15.618504).” **bioRxiv**, 2024.10.15.618504.
+Bo Wen, Chris Hsu, David Shteynberg, Wen-Feng Zeng, Michael Riffle, Alexis Chang, Miranda Mudge, Brook L. Nunn, Brendan X. MacLean, et al. “[Carafe Enables High Quality in Silico Spectral Library Generation for Data-Independent Acquisition Proteomics](https://doi.org/10.1101/2024.10.15.618504).” **bioRxiv**, 2024.10.15.618504.
 
