@@ -64,6 +64,7 @@ public final  class AIWorker implements Runnable{
 
         String[] cmd_list_short = new String[] {
                 python_bin,
+                "-u",  // Forces immediate flushing to pipes
                 ai_pred,
                 "--model_dir", model_dir,
                 "--in_file", this.input_file,
