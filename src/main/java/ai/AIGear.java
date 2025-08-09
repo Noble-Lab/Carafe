@@ -1414,6 +1414,11 @@ public class AIGear {
             double gpu_mem = get_gpu_mem();
             int n_gpu_jobs = (int)Math.floor(gpu_mem/2);
             n_gpu_jobs = Math.min(n_gpu_jobs,input_files.size());
+            // check if this is on a windows system
+            if(System.getProperty("os.name").toLowerCase().contains("win")){
+                Cloger.getInstance().logger.info("Running on Windows");
+                n_gpu_jobs = 1;
+            }
             ExecutorService fixedThreadPool = Executors.newFixedThreadPool(n_gpu_jobs);
             Cloger.getInstance().logger.info("Number of GPU jobs "+n_gpu_jobs);
             AIWorker.python_bin = this.python_bin;

@@ -64,6 +64,7 @@ public final  class AIWorker implements Runnable{
 
         String[] cmd_list_short = new String[] {
                 python_bin,
+                "-u",  // Forces immediate flushing to pipes
                 ai_pred,
                 "--model_dir", model_dir,
                 "--in_file", this.input_file,
@@ -95,7 +96,7 @@ public final  class AIWorker implements Runnable{
             cmd_list.add("--user_mod");
             cmd_list.add("\"" + user_mod + "\"");
         }
-        System.out.println("cmd: "+ StringUtils.join(" ", cmd_list));
+        System.out.println("cmd: "+ StringUtils.join(cmd_list));
         // convert cmd_list to String []
         String[] cmd = new String[cmd_list.size()];
         cmd = cmd_list.toArray(cmd);
