@@ -2167,6 +2167,11 @@ public class AIGear {
                 if(psm_file.endsWith(".parquet")) {
                     // need to get the column index from the new text file
                     hIndex = get_column_name2index(new_psm_file);
+                    // check if ms2 scan is present in the file
+                    if(!hIndex.containsKey(PSMConfig.ms2_index_column_name)){
+                        Cloger.getInstance().logger.error("MS2 scan column ("+PSMConfig.ms2_index_column_name+") is missing in the input file: "+psm_file+". If the DIA-NN search is done using DIA-NN v2.2.0, please add --export-quant to the command line!");
+                        System.exit(1);
+                    }
                 }
                 // ms_file2psm = get_ms_file2psm_diann(new_psm_file, ms_file, fdr_cutoff);
                 ms_file2psm = get_ms_file2psm_diann_multiple_ms_runs(new_psm_file, ms_file, fdr_cutoff);
