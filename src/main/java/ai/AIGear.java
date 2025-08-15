@@ -8223,8 +8223,13 @@ public class AIGear {
                         // check this file exists or not
                         F = new File(cur_ms_file);
                         if (!F.exists()) {
-                            System.out.println("File not found:" + cur_ms_file);
-                            System.exit(1);
+                            // try to check if the file with .mzML extension exists
+                            cur_ms_file = ms_file + File.separator + path.getFileName().toString() + ".mzML";
+                            F = new File(cur_ms_file);
+                            if (!F.exists()) {
+                                System.out.println("File not found:" + cur_ms_file);
+                                System.exit(1);
+                            }
                         }
                     }
                 }
