@@ -10,7 +10,7 @@ Bo Wen, Chris Hsu, David Shteynberg, Wen-Feng Zeng, Michael Riffle, Alexis Chang
 
 ### Using Carafe in Skyline with an intuitive graphical user interface
 
-A tutorial is available at the Skyline website: [Build a Carafe Library in Skyline](https://skyline.ms/wiki/home/software/Skyline/page.view?name=Build%20Carafe%20Library).
+A tutorial is available at the Skyline website: [Build a Carafe Library in Skyline](https://skyline.ms/carafe.url).
 
 ### Using the standalone version of Carafe 
 
