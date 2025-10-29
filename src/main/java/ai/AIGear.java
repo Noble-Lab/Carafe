@@ -148,12 +148,12 @@ public class AIGear {
     /**
      * This is used to store all peptide matches data. Keys are ms file names, values are peptide matches.
      */
-    private HashMap<String, ArrayList<String>> ms_file2psm = new HashMap<>();
+    HashMap<String, ArrayList<String>> ms_file2psm = new HashMap<>();
 
     /**
      * Column name to index for PSM file.
      */
-    private HashMap<String,Integer> hIndex = new HashMap<>();
+    HashMap<String,Integer> hIndex = new HashMap<>();
 
     /**
      * Peptide sequence + modification -> Peptide object
@@ -241,7 +241,7 @@ public class AIGear {
     /**
      * A HashMap object stores modification mapping information.
      */
-    private HashMap<String, String> mod_map = new HashMap<>();
+    HashMap<String, String> mod_map = new HashMap<>();
 
     /**
      * If it is true, export skyline transition list file. It is false by default.
@@ -334,7 +334,7 @@ public class AIGear {
     /**
      * The RT aggregation method there are multiple RT values for the same peptide precursor.
      */
-    private String rt_merge_method = "min";
+    String rt_merge_method = "min";
 
     /**
      * For the same peptide precursor, keep the best MS2 spectrum match (in default) when there are multiple MS runs.
@@ -416,12 +416,12 @@ public class AIGear {
     /**
      * PTM site probability cutoff. Default is 0.75. This is only used during PTM model training data generation
      */
-    private double ptm_site_prob_cutoff = 0.75;
+    double ptm_site_prob_cutoff = 0.75;
 
     /**
      * PTM q-value cutoff. This is only used during PTM model training data generation.
      */
-    private double ptm_site_qvalue_cutoff = 1.0;
+    double ptm_site_qvalue_cutoff = 1.0;
 
     /**
      * For n-terminal fragment ions (such as b-ion) with number <= n_ion_min, they will be considered as invalid.
@@ -2182,6 +2182,44 @@ public class AIGear {
                 String new_psm_file = this.out_dir + File.separator + "psm_rank_" + fdr_cutoff + ".tsv";
                 remove_interference_peptides(psm_file,new_psm_file,fdr_cutoff);
                 ms_file2psm = get_ms_file2psm(new_psm_file, ms_file, fdr_cutoff);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
+    /**
+     * Load peptide detection data.
+     * @param psm_file A file containing peptide detection data.
+     * @param fdr_cutoff The FDR cutoff value for filtering peptide detection data.
+     */
+    public void load_data(String psm_file, double fdr_cutoff) {
+        System.out.println("FDR cutoff:"+fdr_cutoff);
+        try {
+            if(!psm_file.endsWith(".parquet")) {
+                // If the psm_file is not in parquet format, it is a text file
+                hIndex = get_column_name2index(psm_file);
+            }
+            if(this.search_engine.equalsIgnoreCase("DIANN") || this.search_engine.equalsIgnoreCase("DIA-NN")) {
+                System.out.println("DIANN search engine");
+                String new_psm_file = this.out_dir + File.separator + "psm_rank_" + fdr_cutoff + ".tsv";
+                remove_interference_peptides_diann(psm_file, new_psm_file);
+                if(psm_file.endsWith(".parquet")) {
+                    // need to get the column index from the new text file
+                    hIndex = get_column_name2index(new_psm_file);
+                    // check if ms2 scan is present in the file
+                    if(!hIndex.containsKey(PSMConfig.ms2_index_column_name)){
+                        Cloger.getInstance().logger.error("MS2 scan column ("+PSMConfig.ms2_index_column_name+") is missing in the input file: "+psm_file+". If the DIA-NN search is done using DIA-NN v2.2.0, please add --export-quant to the command line!");
+                        // System.exit(1);
+                    }
+                }
+                // ms_file2psm = get_ms_file2psm_diann(new_psm_file, ms_file, fdr_cutoff);
+                ms_file2psm = get_ms_file2psm_diann_multiple_ms_runs(new_psm_file, fdr_cutoff);
+            }else if(this.search_engine.equalsIgnoreCase("generic") && this.data_type.equalsIgnoreCase("DDA")){
+                // TODO: to be implemented
+            }else {
+                // TODO: to be implemented
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -6323,7 +6361,7 @@ public class AIGear {
      * @param peptide Peptide sequence
      * @return A string containing the modification information
      */
-    private String get_modification_diann(String mod_seq, String peptide){
+    String get_modification_diann(String mod_seq, String peptide){
         // AAAAC(UniMod:4)LDK2
         // AGEVLNQPM(UniMod:35)MMAAR2
         // AAAAAAAATMALAAPS(UniMod:21)SPTPESPTMLTK
@@ -6365,7 +6403,7 @@ public class AIGear {
      * @param out_file Output file
      * @throws IOException If an I/O error occurs
      */
-    private void generate_rt_train_data(HashMap<String,PeptideRT> peptide2rt, String method, String out_file) throws IOException {
+    void generate_rt_train_data(HashMap<String,PeptideRT> peptide2rt, String method, String out_file) throws IOException {
 
         peptide2rt.values().parallelStream().forEach(peptideRT -> {
             if(peptideRT.rts.size()==1){
@@ -6563,13 +6601,13 @@ public class AIGear {
                 String pos = ptm.split("@")[1].split("\\[")[0];
                 if(mod_name.equalsIgnoreCase("Oxidation of M")) {
                     aa[Integer.parseInt(pos) - 1] = String.valueOf(1);
-                }else if(mod_name.equalsIgnoreCase("Phosphorylation of S")){
+                }else if(mod_name.equalsIgnoreCase("Phosphorylation of S") || mod_name.equalsIgnoreCase("Phospho of S")){
                     aa[Integer.parseInt(pos)-1] = String.valueOf(2);
-                }else if(mod_name.equalsIgnoreCase("Phosphorylation of T")){
+                }else if(mod_name.equalsIgnoreCase("Phosphorylation of T") || mod_name.equalsIgnoreCase("Phospho of T")){
                     aa[Integer.parseInt(pos)-1] = String.valueOf(3);
-                }else if(mod_name.equalsIgnoreCase("Phosphorylation of Y")){
+                }else if(mod_name.equalsIgnoreCase("Phosphorylation of Y") || mod_name.equalsIgnoreCase("Phospho of Y")){
                     aa[Integer.parseInt(pos)-1] = String.valueOf(4);
-                }else if(mod_name.equalsIgnoreCase("Carbamidomethylation of C")){
+                }else if(mod_name.equalsIgnoreCase("Carbamidomethylation of C") || mod_name.equalsIgnoreCase("Carbamidomethyl of C")){
                     // no need to change
                     // fixed modification.
                 }else{
@@ -7707,7 +7745,7 @@ public class AIGear {
      * @param modification Peptide modification
      * @return A Peptide object.
      */
-    private Peptide get_peptide(String peptide_sequence, String modification){
+    Peptide get_peptide(String peptide_sequence, String modification){
         String peptide_mod = peptide_sequence + modification;
         return peptide_mod2Peptide.get(peptide_mod);
     }
@@ -7718,7 +7756,7 @@ public class AIGear {
      * @param peptide_sequence Peptide sequence
      * @param modification Peptide modification
      */
-    private void add_peptide(String peptide_sequence, String modification){
+    void add_peptide(String peptide_sequence, String modification){
         String peptide_mod = peptide_sequence + modification;
         if(!this.peptide_mod2Peptide.containsKey(peptide_mod)){
             Peptide peptide = generatePeptide(peptide_sequence,modification);
@@ -8235,6 +8273,104 @@ public class AIGear {
                 }
             }else{
                 cur_ms_file = ms_file;
+            }
+
+            if(!ms_file2psm.containsKey(cur_ms_file)){
+                ms_file2psm.put(cur_ms_file,new ArrayList<>());
+            }
+            ms_file2psm.get(cur_ms_file).add(line);
+            n_valid_row = n_valid_row + 1;
+        }
+
+        psmReader.close();
+        System.out.println("The number of MS files:"+ms_file2psm.size());
+        System.out.println("The number of valid rows:"+n_valid_row);
+        System.out.println("The number of total rows:"+n_total_row);
+
+        if(ms_file2psm.size()>=2){
+            System.out.println("There are multiple MS files in the PSM file: "+psm_file);
+            if(this.ms2_merge_method.equalsIgnoreCase("best")){
+                // for each precursor, only keep the best detection
+                HashMap<String, Double> precursor2best_score = new HashMap<>();
+                HashMap<String, String> precursor2best_match = new HashMap<>();
+                HashMap<String, String> precursor2best_ms_run = new HashMap<>();
+                for(String ms_run: ms_file2psm.keySet()){
+                    for(String psm_line: ms_file2psm.get(ms_run)){
+                        String []d = psm_line.split("\t");
+                        // precursor id is a combination of peptide sequence, modification and precursor charge state
+                        String precursor_id = d[hIndex.get(PSMConfig.precursor_id_column_name)];
+                        // PEP score, lower is better
+                        double score = Double.parseDouble(d[hIndex.get(PSMConfig.PEP_column_name)]);
+                        if(!precursor2best_score.containsKey(precursor_id)){
+                            precursor2best_score.put(precursor_id,score);
+                            precursor2best_match.put(precursor_id,psm_line);
+                            precursor2best_ms_run.put(precursor_id,ms_run);
+                        }else{
+                            // PEP score: lower is better
+                            if(score < precursor2best_score.get(precursor_id)){
+                                precursor2best_score.put(precursor_id,score);
+                                precursor2best_match.put(precursor_id,psm_line);
+                                precursor2best_ms_run.put(precursor_id,ms_run);
+                            }
+                        }
+                    }
+                }
+                // update ms_file2psm to only keep the best detection for each precursor
+                ms_file2psm.clear();
+                for(String precursor_id: precursor2best_match.keySet()){
+                    String best_match = precursor2best_match.get(precursor_id);
+                    String best_ms_run = precursor2best_ms_run.get(precursor_id);
+                    if(!ms_file2psm.containsKey(best_ms_run)){
+                        ms_file2psm.put(best_ms_run, new ArrayList<>());
+                    }
+                    ms_file2psm.get(best_ms_run).add(best_match);
+                }
+            }else{
+                // not supported
+                System.err.println("The MS2 merge method: "+this.ms2_merge_method+" is not supported for multiple MS runs in the PSM file: "+psm_file);
+                System.exit(1);
+            }
+
+        }
+        return ms_file2psm;
+    }
+
+    /**
+     * Read the peptide detection result and save the data to a HashMap object.
+     * @param psm_file A peptide detection result file
+     * @param fdr_cutoff FDR cutoff used to filter peptide detection result
+     * @return A HashMap<String, ArrayList<String>> which stores the peptide detection result.
+     * @throws IOException If an I/O error occurs
+     */
+    public HashMap<String, ArrayList<String>> get_ms_file2psm_diann_multiple_ms_runs(String psm_file, double fdr_cutoff) throws IOException {
+        HashMap<String,Integer> hIndex = get_column_name2index(psm_file);
+        BufferedReader psmReader = new BufferedReader(new FileReader(psm_file));
+        psmReader.readLine();
+        String line;
+        String cur_ms_file = "-";
+
+        HashMap<String, ArrayList<String>> ms_file2psm = new HashMap<>();
+        int n_valid_row = 0;
+        int n_total_row = 0;
+
+        while((line=psmReader.readLine())!=null){
+            line = line.trim();
+            n_total_row = n_total_row + 1;
+            String []d = line.split("\t");
+
+            // if(hIndex.containsKey("Q.Value")){
+            if(hIndex.containsKey(PSMConfig.qvalue_column_name)){
+                // double q_value = Double.parseDouble(d[hIndex.get("Q.Value")]);
+                double q_value = Double.parseDouble(d[hIndex.get(PSMConfig.qvalue_column_name)]);
+                if(q_value>fdr_cutoff){
+                    continue;
+                }
+            }
+
+
+            // if(hIndex.containsKey("File.Name")){
+            if(hIndex.containsKey(PSMConfig.ms_file_column_name)){
+                cur_ms_file = d[hIndex.get(PSMConfig.ms_file_column_name)];
             }
 
             if(!ms_file2psm.containsKey(cur_ms_file)){
