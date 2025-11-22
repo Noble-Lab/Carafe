@@ -2,10 +2,11 @@ package main.java.dia;
 
 import com.jerolba.carpet.CarpetReader;
 import main.java.input.CParameter;
-import org.eclipse.collections.impl.list.mutable.primitive.FloatArrayList;
+import main.java.util.Cloger;
 
 import java.io.File;
 import java.io.IOException;
+import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -41,6 +42,7 @@ public class CCSDIAMeta{
     public double nce = 0;
     public double rt_min = Double.MAX_VALUE;
     public double rt_max = 0;
+    public String ms_instrument = "";
 
     public double min_fragment_ion_intensity = Double.MAX_VALUE;
 
@@ -207,6 +209,101 @@ public class CCSDIAMeta{
             System.out.println("Fragment ion m/z range: " + this.fragment_ion_mz_min + "-" + this.fragment_ion_mz_max);
             System.out.println("Precursor ion m/z range: " + this.precursor_ion_mz_min + "-" + this.precursor_ion_mz_max);
         }
+        System.out.println("Retention time range: " + this.rt_min + "-" + this.rt_max);
+        System.out.println("Min fragment ion intensity: "+this.min_fragment_ion_intensity);
+    }
+
+    /**
+     * Extract MS meta data using SQL query directly on TIMS-TOF data.
+     * @param ms_file The input TIMS-TOF data file (.d format)
+     */
+    public void get_ms_run_meta_data_using_sql(String ms_file) {
+
+        File sql_File = new File(ms_file + File.separator + "analysis.tdf");
+        if(sql_File.isFile()){
+            Cloger.getInstance().logger.info("Extract MS meta information from file: " + sql_File.getAbsolutePath());
+        }else{
+            Cloger.getInstance().logger.error("Error: Cannot find the TIMS-TOF SQL database file: " + sql_File.getAbsolutePath());
+            System.exit(1);
+        }
+
+        try {
+            Connection connection = DriverManager.getConnection("jdbc:sqlite:" + sql_File.getAbsolutePath());
+
+            // for fragment ion m/z range
+            PreparedStatement pstmt = connection.prepareStatement("SELECT Value FROM GlobalMetadata WHERE Key='MzAcqRangeLower'");
+            ResultSet min_fragment_mz_res = pstmt.executeQuery();
+            double min_fragment_mz = min_fragment_mz_res.getDouble(1);
+
+            pstmt = connection.prepareStatement("SELECT Value FROM GlobalMetadata WHERE Key='MzAcqRangeUpper'");
+            ResultSet max_fragment_mz_res = pstmt.executeQuery();
+            double max_fragment_mz = max_fragment_mz_res.getDouble(1);
+
+            // for precursor ion m/z range
+            pstmt = connection.prepareStatement("SELECT MIN(IsolationMz - IsolationWidth/2) FROM DiaFrameMsMsWindows");
+            ResultSet min_precursor_mz_res = pstmt.executeQuery();
+            double min_precursor_mz = min_precursor_mz_res.getDouble(1);
+
+            pstmt = connection.prepareStatement("SELECT MAX(IsolationMz + IsolationWidth/2) FROM DiaFrameMsMsWindows");
+            ResultSet max_precursor_mz_res = pstmt.executeQuery();
+            double max_precursor_mz = max_precursor_mz_res.getDouble(1);
+
+            pstmt = connection.prepareStatement("SELECT MIN(Time) FROM Frames");
+            ResultSet min_rt_res = pstmt.executeQuery();
+            double min_rt_tmp = min_rt_res.getDouble(1)/60.0;
+
+            pstmt = connection.prepareStatement("SELECT MAX(Time) FROM Frames");
+            ResultSet max_rt_res = pstmt.executeQuery();
+            double max_rt_tmp = max_rt_res.getDouble(1)/60.0;
+
+            // Instrument name
+            pstmt = connection.prepareStatement("SELECT Value FROM GlobalMetadata WHERE Key='InstrumentName'");
+            ResultSet instrument_res = pstmt.executeQuery();
+            ms_instrument = instrument_res.getString(1);
+
+            pstmt.close();
+            connection.close();
+
+            System.out.println("Meta information extracted directly from the input file:");
+            System.out.println("Fragment ion m/z range: " + min_fragment_mz + "-" + max_fragment_mz);
+            System.out.println("Precursor ion m/z range: " + min_precursor_mz + "-" + max_precursor_mz);
+            System.out.println("Retention time range: " + min_rt_tmp + "-" + max_rt_tmp);
+            System.out.println("MS instrument: " + ms_instrument);
+            this.min_fragment_ion_intensity = 0.0;
+            System.out.println("Min fragment ion intensity: "+this.min_fragment_ion_intensity);
+
+            if (this.fragment_ion_mz_min > min_fragment_mz) {
+                this.fragment_ion_mz_min = min_fragment_mz;
+            }
+            if (this.fragment_ion_mz_max < max_fragment_mz) {
+                this.fragment_ion_mz_max = max_fragment_mz;
+            }
+
+            if(this.rt_min > min_rt_tmp){
+                this.rt_min = min_rt_tmp;
+            }
+            if(this.rt_max < max_rt_tmp){
+                this.rt_max = max_rt_tmp;
+            }
+
+            if(this.precursor_ion_mz_max < max_precursor_mz){
+                this.precursor_ion_mz_max = max_precursor_mz;
+            }
+            if(this.precursor_ion_mz_min > min_precursor_mz){
+                this.precursor_ion_mz_min = min_precursor_mz;
+            }
+            if(this.nce==0) {
+                this.nce = CParameter.NCE;
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
+        this.rt_max = this.rt_max + 0.1;
+
+        System.out.println("Fragment ion m/z range: " + this.fragment_ion_mz_min + "-" + this.fragment_ion_mz_max);
+        System.out.println("Precursor ion m/z range: " + this.precursor_ion_mz_min + "-" + this.precursor_ion_mz_max);
         System.out.println("Retention time range: " + this.rt_min + "-" + this.rt_max);
         System.out.println("Min fragment ion intensity: "+this.min_fragment_ion_intensity);
     }
