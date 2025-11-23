@@ -1081,6 +1081,10 @@ public class AIGear {
             p_res_files.get(i).put("ms2_intensity",get_file_path(ms2_intensity_file,folder));
             p_res_files.get(i).put("rt",get_file_path(rt_file,folder));
             p_res_files.get(i).put("ms2_mz",get_file_path(ms2_mz_file,folder));
+            if(ccs_enabled){
+                String ccs_file = res_files.get(i).get("ccs");
+                p_res_files.get(i).put("ccs",get_file_path(ccs_file,folder));
+            }
         }
 
         try {
@@ -1115,8 +1119,13 @@ public class AIGear {
             String folder = F.getParent() + File.separator + "pretrained_models";
             p_res_files.get(i).put("ms2",get_file_path(ms2_file,folder));
             p_res_files.get(i).put("ms2_intensity",get_file_path(ms2_intensity_file,folder));
+            // Using fine-tuned RT model
             p_res_files.get(i).put("rt",rt_file);
             p_res_files.get(i).put("ms2_mz",get_file_path(ms2_mz_file,folder));
+            if(ccs_enabled){
+                String ccs_file = res_files.get(i).get("ccs");
+                p_res_files.get(i).put("ccs",get_file_path(ccs_file,folder));
+            }
         }
 
         try {
@@ -1149,10 +1158,15 @@ public class AIGear {
             File F = new File(ms2_file);
             // get the folder of file ms2_file
             String folder = F.getParent() + File.separator + "pretrained_models";
+            // Using fine-tuned MS2 model
             p_res_files.get(i).put("ms2",ms2_file);
             p_res_files.get(i).put("ms2_intensity",ms2_intensity_file);
             p_res_files.get(i).put("rt",get_file_path(rt_file,folder));
             p_res_files.get(i).put("ms2_mz",ms2_mz_file);
+            if(ccs_enabled){
+                String ccs_file = res_files.get(i).get("ccs");
+                p_res_files.get(i).put("ccs",get_file_path(ccs_file,folder));
+            }
         }
 
         try {
@@ -1169,6 +1183,47 @@ public class AIGear {
             }
         } catch (IOException | SQLException e) {
             throw new RuntimeException(e);
+        }
+
+        // CCS only model
+        if(ccs_enabled){
+            p_res_files.clear();
+            p_res_files = new LinkedHashMap<>();
+            for(String i : res_files.keySet()){
+                System.out.println(i);
+                p_res_files.put(i, new HashMap<>());
+                String ms2_file = res_files.get(i).get("ms2");
+                String ms2_intensity_file = res_files.get(i).get("ms2_intensity");
+                String rt_file = res_files.get(i).get("rt");
+                String ms2_mz_file = res_files.get(i).get("ms2_mz");
+                String ccs_file = res_files.get(i).get("ccs");
+
+                File F = new File(ms2_file);
+                // get the folder of file ms2_file
+                String folder = F.getParent() + File.separator + "pretrained_models";
+                p_res_files.get(i).put("ms2",get_file_path(ms2_file,folder));
+                p_res_files.get(i).put("ms2_intensity",get_file_path(ms2_intensity_file,folder));
+                p_res_files.get(i).put("rt",get_file_path(rt_file,folder));
+                p_res_files.get(i).put("ms2_mz",get_file_path(ms2_mz_file,folder));
+                // Using fine-tuned CCS model
+                p_res_files.get(i).put("ccs",ccs_file);
+            }
+
+            try {
+                if(this.use_parquet) {
+                    if(this.export_spectral_library_format.equalsIgnoreCase("Skyline")) {
+                        generate_spectral_library_parquet_skyline(p_res_files, out_dir, "SkylineAI_spectral_library_ccs_only.tsv");
+                    }else if(this.export_spectral_library_format.equalsIgnoreCase("mzSpecLib")) {
+                        generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "SkylineAI_spectral_library_ccs_only.tsv");
+                    }else {
+                        generate_spectral_library_parquet(p_res_files, out_dir, "SkylineAI_spectral_library_ccs_only.tsv");
+                    }
+                }else {
+                    generate_spectral_library(p_res_files, out_dir, "SkylineAI_spectral_library_ccs_only.tsv");
+                }
+            } catch (IOException | SQLException e) {
+                throw new RuntimeException(e);
+            }
         }
 
 
@@ -1435,7 +1490,7 @@ public class AIGear {
             AIWorker.python_bin = this.python_bin;
             // perform spectrum and rt prediction.
             String mode = this.mod_ai.equalsIgnoreCase("-")?"general":this.mod_ai;
-            System.out.println("NCE: "+this.nce);
+            Cloger.getInstance().logger.info("NCE: "+this.nce);
             for(int i=0;i<input_files.size();i++){
                 // prediction
                 if(this.use_user_provided_ms_instrument) {

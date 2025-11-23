@@ -392,6 +392,14 @@ if __name__ == "__main__":
                            device=args.device,
                            mode_type=args.mode,
                            fast_mode=args.fast)
+        if args.ccs:
+            model_mgr_ccs = predict_ccs(model_dir=args.model_dir,
+                                pred_file=args.in_file,
+                                out_dir=args.out_dir,
+                                out_prefix=args.out_prefix,
+                                device=args.device,
+                                mode_type=args.mode,
+                                fast_mode=args.fast)
         pretrained_model_out_dir = os.path.join(args.out_dir, "pretrained_models")
         if not os.path.exists(pretrained_model_out_dir):
             os.makedirs(pretrained_model_out_dir)
@@ -412,6 +420,14 @@ if __name__ == "__main__":
                                 mode_type=args.mode,
                                 fast_mode=args.fast,
                                 mod2mass=args.mod2mass)
+        if args.ccs:
+            model_mgr_ccs = predict_ccs(model_dir="generic",
+                                pred_file=args.in_file,
+                                out_dir=pretrained_model_out_dir,
+                                out_prefix=args.out_prefix,
+                                device=args.device,
+                                mode_type=args.mode,
+                                fast_mode=args.fast)
     else:
         model_mgr = predict_rt(model_dir="generic", 
                                 pred_file=args.in_file, 
@@ -430,6 +446,14 @@ if __name__ == "__main__":
                                 mode_type=args.mode,
                                 fast_mode=args.fast,
                                 mod2mass=args.mod2mass)
+        if args.ccs:
+            model_mgr_ccs = predict_ccs(model_dir="generic",
+                                pred_file=args.in_file,
+                                out_dir=args.out_dir,
+                                out_prefix=args.out_prefix,
+                                device=args.device,
+                                mode_type=args.mode,
+                                fast_mode=args.fast)
     
     
 
