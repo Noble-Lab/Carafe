@@ -24,9 +24,9 @@ public class CallTimsQuery {
     /**
      * The retention time window size
      */
-    public double rt_win = 0.1;
+    public double rt_win = 5/60.0; // in minutes
 
-    public double mobility = 10.0;
+    public double mobility = 3.0;
 
     public double quad = 0.1;
 

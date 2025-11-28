@@ -20,7 +20,7 @@ import java.util.HashSet;
 
 import static main.java.ai.AIGear.getNeutralLossesMap;
 
-class PeptideFrag {
+public class PeptideFrag {
 
     public static boolean lossWaterNH3 = true;
     public static int max_fragment_ion_charge = 2;

@@ -5906,12 +5906,21 @@ public class AIGear {
                 psm_query.precursors.add(precursor_mz);
                 HashMap<Integer, ArrayList<Ion>> theoretical_ions = this.generate_theoretical_fragment_ions(peptide_obj,precursor_charge);
                 HashSet<Integer> possible_fragment_ion_charges = this.getPossibleFragmentIonCharges(precursor_charge);
+                // This is used to remove redundant ions
+                HashSet<String> ion_names = new HashSet<>();
+                String ion_id = "";
                 for(int k: theoretical_ions.keySet()){
                     for(Ion ion: theoretical_ions.get(k)){
                         if(ion.getSubType() == PeptideFragmentIon.B_ION || ion.getSubType() == PeptideFragmentIon.Y_ION){
                             PeptideFragmentIon fragmentIon = ((PeptideFragmentIon) ion);
                             for(int frag_charge: possible_fragment_ion_charges){
                                 double frag_mz = fragmentIon.getTheoreticMz(frag_charge);
+                                ion_id = fragmentIon.getNameWithNumber() + "_" + frag_mz;
+                                if(ion_names.contains(ion_id)){
+                                    continue;
+                                }else{
+                                    ion_names.add(ion_id);
+                                }
                                 psm_query.fragments.add(frag_mz);
                             }
                         }
