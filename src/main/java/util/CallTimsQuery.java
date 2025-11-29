@@ -33,6 +33,10 @@ public class CallTimsQuery {
     public double tol = 15.0;
     public String tolu = "ppm";
 
+    public double itol = 15.0;
+    public String itolu = "ppm";
+    public double itol_shift = 0.0;
+
 
     public void run_ms2_spectra_query(String ms_file, String psm_query_file, String out_file) {
         String tims_query_bin = get_jar_path() + File.separator + "timsquery";
@@ -169,7 +173,7 @@ public class CallTimsQuery {
     private void generate_timsquery_spectra_parameter_file(String out_file) throws IOException {
         BufferedWriter bw = new BufferedWriter(new FileWriter(out_file));
         bw.write("{\n");
-        bw.write("\"ms\": { \"ppm\": [" + this.tol + "," + this.tol + "]},\n");
+        bw.write("\"ms\": { \""+this.itolu+"\": [" + (this.itol-this.itol_shift) + "," + (this.itol+this.itol_shift) + "]},\n");
         bw.write("\"rt\": { \"minutes\": [" + this.rt_win + "," + this.rt_win + "]},\n");
         bw.write("\"mobility\": { \"percent\": [" + this.mobility + "," + this.mobility + "]},\n");
         bw.write("\"quad\": { \"absolute\": [" + this.quad + "," + this.quad + "]}\n");
@@ -180,7 +184,7 @@ public class CallTimsQuery {
     private void generate_timsquery_xic_parameter_file(String out_file) throws IOException {
         BufferedWriter bw = new BufferedWriter(new FileWriter(out_file));
         bw.write("{\n");
-        bw.write("\"ms\": { \"ppm\": [" + this.tol + "," + this.tol + "]},\n");
+        bw.write("\"ms\": { \""+this.itolu+"\": [" + (this.itol-this.itol_shift) + "," + (this.itol+this.itol_shift) + "]},\n");
         bw.write("\"rt\": { \"minutes\": [" + this.rt_win + "," + this.rt_win + "]},\n");
         bw.write("\"mobility\": { \"percent\": [" + this.mobility + "," + this.mobility + "]},\n");
         bw.write("\"quad\": { \"absolute\": [" + this.quad + "," + this.quad + "]}\n");
