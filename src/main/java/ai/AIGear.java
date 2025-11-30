@@ -5972,12 +5972,12 @@ public class AIGear {
             double ms1_error_shift = 0.0;
             if(!ms1_mz_errors.isEmpty()){
                 ms1_error_shift = Quantiles.median().compute(ms1_mz_errors);
-                Cloger.getInstance().logger.info("Median MS1 m/z error:"+ms1_error_shift+(is_fragment_ion_tolu_ppm?" ppm":" Da"));
+                Cloger.getInstance().logger.info("MS1 m/z error => error range: "+ Collections.min(ms1_mz_errors) + ", " + Collections.max(ms1_mz_errors) + ", median MS1 m/z error: "+ms1_error_shift+(is_fragment_ion_tolu_ppm?" ppm":" Da"));
             }
             double ms2_error_shift = 0.0;
             if(!ms2_mz_errors.isEmpty()){
                 ms2_error_shift = Quantiles.median().compute(ms2_mz_errors);
-                Cloger.getInstance().logger.info("Median MS2 m/z error:"+ms2_error_shift+(is_fragment_ion_tolu_ppm?" ppm":" Da"));
+                Cloger.getInstance().logger.info("MS2 m/z error => error range: "+ Collections.min(ms2_mz_errors) + ", " + Collections.max(ms2_mz_errors) + ", Median MS2 m/z error: "+ms2_error_shift+(is_fragment_ion_tolu_ppm?" ppm":" Da"));
             }
 
             CallTimsQuery callTimsQuery = new CallTimsQuery();
