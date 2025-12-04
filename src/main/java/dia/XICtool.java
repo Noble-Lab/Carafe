@@ -122,6 +122,33 @@ public class XICtool {
         return cor_matrix[best_i];
     }
 
+    /**
+     * Get the XIC of the best ion
+     * @param x: rows are ions, columns are scans
+     * @param best_ion_index The row index of the best ion
+     * @return The XIC of the best ion
+     */
+    public double[] get_best_ion_xic(RealMatrix x, int best_ion_index){
+        return x.getRow(best_ion_index);
+    }
+
+    /**
+     * Get the index of the maximum value in the array
+     * @param x The input array
+     * @return The index of the maximum value
+     */
+    public int get_max_index(double []x){
+        int max_index = 0;
+        double max_value = x[0];
+        for(int i=0;i<x.length;i++){
+            if(x[i]>max_value){
+                max_value = x[i];
+                max_index = i;
+            }
+        }
+        return max_index;
+    }
+
     public double weighted_mean(double []x, double []weights, boolean log_transform){
         double sum = 0;
         double sum_weights = 0;
@@ -247,6 +274,130 @@ public class XICtool {
     public PeptidePeak find_max_peak(double [] median_peaks, int apex_index){
         long max_index = apex_index;
         double max_int = median_peaks[apex_index];
+
+        PeptidePeak peak = new PeptidePeak();
+        peak.apex_index = max_index;
+        double int_limit = this.peak_boundary_low_intensity_limit * max_int;
+
+        if (max_index == 0L) {
+            // max_index = Math.round(median_peaks.length / 2.0);
+            peak.boundary_left_index = 0;
+        }else{
+            // for left index
+            double last_int = max_int;
+            boolean boundary_found = false;
+            int drop_n = 0;
+            for (int i = (int) max_index - 1; i >= 0; i--) {
+                if (median_peaks[i] < last_int) {
+                    last_int = median_peaks[i];
+                }else if(last_int > int_limit){
+                    drop_n = drop_n + 1;
+                    if(drop_n>=2){
+                        peak.boundary_left_index = i + 1;
+                        boundary_found = true;
+                        break;
+                    }else{
+                        last_int = median_peaks[i];
+                    }
+                } else {
+                    peak.boundary_left_index = i + 1;
+                    boundary_found = true;
+                    break;
+                }
+            }
+            if(!boundary_found){
+                peak.boundary_left_index = 0;
+            }
+
+            long left_index = peak.boundary_left_index;
+            long min_intensity_index = peak.boundary_left_index;
+            double min_intensity = max_int;
+            for (int i = (int) max_index - 1; i >= left_index; i--) {
+                if(median_peaks[i] < min_intensity){
+                    min_intensity = median_peaks[i];
+                    min_intensity_index = i;
+                }
+            }
+            peak.boundary_left_index = min_intensity_index;
+        }
+
+        if (max_index == median_peaks.length - 1) {
+            // max_index = Math.round(median_peaks.length / 2.0);
+            peak.boundary_right_index = median_peaks.length - 1;
+        }else{
+            // for right index
+            double last_int = max_int;
+            int drop_n = 0;
+            boolean boundary_found = false;
+            for (int i = (int) max_index + 1; i < median_peaks.length; i++) {
+                if (median_peaks[i] < last_int) {
+                    //System.out.println(i+"\t"+median_peaks[i]+"\t"+last_int+"\t"+int_limit);
+                    last_int = median_peaks[i];
+                }else if(last_int > int_limit){
+                    drop_n = drop_n + 1;
+                    if(drop_n>=2){
+                        peak.boundary_right_index = i - 1;
+                        boundary_found = true;
+                        break;
+                    }else{
+                        last_int = median_peaks[i];
+                    }
+                } else {
+                    peak.boundary_right_index = i - 1;
+                    boundary_found = true;
+                    break;
+                }
+            }
+            if(!boundary_found){
+                peak.boundary_right_index = median_peaks.length - 1;
+            }
+
+            long right_index = peak.boundary_right_index;
+            long min_intensity_index = peak.boundary_right_index;
+            double min_intensity = max_int;
+            for (int i = (int) max_index + 1; i <=right_index; i++) {
+                if(median_peaks[i] < min_intensity){
+                    min_intensity = median_peaks[i];
+                    min_intensity_index = i;
+                }
+            }
+            peak.boundary_right_index = min_intensity_index;
+        }
+
+        peak.min_smoothed_intensity = StatUtils.min(median_peaks, (int) peak.boundary_left_index, (int) (peak.boundary_right_index-peak.boundary_left_index+1L));
+        peak.min_smoothed_intensity = Math.max(peak.min_smoothed_intensity,0);
+
+        return peak;
+    }
+
+    /**
+     * Detect peak boundaries given the apex index
+     * @param median_peaks The smoothed intensity array
+     * @param apex_index The index of the apex (it might not be the maximum intensity)
+     * @return The peptide peak with boundaries
+     */
+    public PeptidePeak find_max_peak_v2(double [] median_peaks, int apex_index){
+        long max_index = apex_index;
+        double max_int = median_peaks[apex_index];
+
+        // move to the left to find the real maximum intensity
+        for(int i=apex_index-1;i>=0;i--){
+            if(median_peaks[i]>max_int){
+                max_int = median_peaks[i];
+                max_index = i;
+            }else{
+                break;
+            }
+        }
+        // move to the right to find the real maximum intensity
+        for(int i=apex_index+1;i<median_peaks.length;i++){
+            if(median_peaks[i]>max_int){
+                max_int = median_peaks[i];
+                max_index = i;
+            }else{
+                break;
+            }
+        }
 
         PeptidePeak peak = new PeptidePeak();
         peak.apex_index = max_index;

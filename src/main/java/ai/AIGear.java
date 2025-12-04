@@ -8811,7 +8811,9 @@ public class AIGear {
                                     peptideMatch.rt_end = peak.boundary_right_rt;
                                     peptideMatch.rt_apex = peak.apex_rt;
                                 }else{
-                                    System.err.println("The original apex index is not in the refined peak boundary:"+original_peak_index+","+
+                                    System.err.println("The original apex index is not in the refined peak boundary:"+
+                                            xicQueryResult.id+","+
+                                            original_peak_index+","+
                                             boundary_left_index+","+
                                             boundary_right_index+","+
                                             peak.apex_index+","+
@@ -8834,7 +8836,7 @@ public class AIGear {
                                     peptideMatch.rt_apex = peak.apex_rt;
                                 }
                             }else{
-                                System.out.println("No refining: "+peptideMatch.index+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
+                                System.out.println("No refining: "+xicQueryResult.id+"\t"+peptideMatch.index+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
                             }
                         }
                         peak.cor_to_best_ion = ms2index.detect_best_ion(pepXIC_smoothed, (int) peak.boundary_left_index, (int) peak.boundary_right_index, (int) peak.apex_index, peptideMatch);
@@ -9045,7 +9047,7 @@ public class AIGear {
                 }
             }
             XICtool xiCtool = new XICtool();
-            PeptidePeak new_peak = xiCtool.find_max_peak(median_peaks,(int) peak.apex_index);
+            PeptidePeak new_peak = xiCtool.find_max_peak_v2(median_peaks,(int) peak.apex_index);
             if ((new_peak.boundary_right_index - new_peak.boundary_left_index + 1) >= 2) {
                 // left_index = (int) peak.boundary_left_index;
                 peak.boundary_left_index = new_peak.boundary_left_index;
@@ -9132,16 +9134,106 @@ public class AIGear {
                 }
             }
             XICtool xiCtool = new XICtool();
-            PeptidePeak new_peak = xiCtool.find_max_peak(median_peaks,(int) peak.apex_index);
+            PeptidePeak new_peak = xiCtool.find_max_peak_v2(median_peaks,(int) peak.apex_index);
             if ((new_peak.boundary_right_index - new_peak.boundary_left_index + 1) >= 2) {
                 // left_index = (int) peak.boundary_left_index;
                 peak.boundary_left_index = new_peak.boundary_left_index;
                 peak.boundary_right_index = new_peak.boundary_right_index;
                 peak.apex_index = new_peak.apex_index;
+                // check if any of the boundaries overlaps with the apex index
+                if(peak.boundary_left_index==peak.apex_index){
+                    // move left boundary
+                    // Cloger.getInstance().logger.info(xicQueryResult.id);
+                    // Cloger.getInstance().logger.info("Left boundary overlaps with apex index, adjusting...");
+                    double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
+                    double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
+                    PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
+                    peak.boundary_left_index = tmp_peak.boundary_left_index;
+                    peak.apex_index = tmp_peak.apex_index;
+                }else if(peak.boundary_right_index==peak.apex_index){
+                    // move right boundary
+                    // Cloger.getInstance().logger.info(xicQueryResult.id);
+                    // Cloger.getInstance().logger.info("Right boundary overlaps with apex index, adjusting...");
+                    double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
+                    double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
+                    PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
+                    peak.boundary_right_index = tmp_peak.boundary_right_index;
+                    peak.apex_index = tmp_peak.apex_index;
+                }
                 peak.min_smoothed_intensity = new_peak.min_smoothed_intensity;
                 // refine peak
                 peak.cor_to_best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
                 xiCtool.refine_peak(new_x,peak,peak.cor_to_best_ion,0.75,false);
+                if(peak.boundary_left_index==peak.apex_index){
+                    // move left boundary
+                    // Cloger.getInstance().logger.info(xicQueryResult.id);
+                    // Cloger.getInstance().logger.info("Left boundary overlaps with apex index, adjusting...");
+                    double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
+                    double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
+                    PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
+                    peak.boundary_left_index = tmp_peak.boundary_left_index;
+                    peak.apex_index = tmp_peak.apex_index;
+                    // print out peak.cor_to_best_ion
+                    // System.out.println();
+                    // for(int i=0;i<peak.cor_to_best_ion.length;i++){
+                    //     System.out.print(String.format("%.4f",peak.cor_to_best_ion[i])+"\t");
+                    // }
+                    // System.out.println();
+                    peak.cor_to_best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
+                    // print out peak.cor_to_best_ion
+                    // for(int i=0;i<peak.cor_to_best_ion.length;i++){
+                    //     System.out.print(String.format("%.4f",peak.cor_to_best_ion[i])+"\t");
+                    // }
+                    // System.out.println();
+                    // System.out.println();
+                    // System.out.println();
+                }else if(peak.boundary_right_index==peak.apex_index){
+                    // move right boundary
+                    // Cloger.getInstance().logger.info(xicQueryResult.id);
+                    // Cloger.getInstance().logger.info("Right boundary overlaps with apex index, adjusting...");
+                    double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
+                    double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
+                    PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
+                    peak.boundary_right_index = tmp_peak.boundary_right_index;
+                    peak.apex_index = tmp_peak.apex_index;
+                    // print out peak.cor_to_best_ion
+                    // System.out.println();
+                    // for(int i=0;i<peak.cor_to_best_ion.length;i++){
+                    //     System.out.print(String.format("%.4f",peak.cor_to_best_ion[i])+"\t");
+                    // }
+                    // System.out.println();
+                    peak.cor_to_best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
+                    // print out peak.cor_to_best_ion
+                    // for(int i=0;i<peak.cor_to_best_ion.length;i++){
+                    //     System.out.print(String.format("%.4f",peak.cor_to_best_ion[i])+"\t");
+                    // }
+                    // System.out.println();
+                    // System.out.println();
+                    // System.out.println();
+                }
+                // check if peak boundaries still valid
+                double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
+                double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
+                // if(xicQueryResult.id==11006){
+                //     System.out.println("best ion mz:"+peak.fragment_ions_mz.get(xiCtool.get_max_index(tmp_cor2best_ion)));
+                //     System.out.println(peak.boundary_left_index+"\t"+peak.apex_index+"\t"+peak.boundary_right_index);
+                //     System.out.println(xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0+"\t"+
+                //             xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0+"\t"+
+                //             xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0);
+                // }
+                PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
+                peak.boundary_left_index = tmp_peak.boundary_left_index;
+                peak.apex_index = tmp_peak.apex_index;
+                peak.boundary_right_index = tmp_peak.boundary_right_index;
+                // debug only
+                // if(xicQueryResult.id==11006){
+                //     System.out.println("best ion mz:"+peak.fragment_ions_mz.get(xiCtool.get_max_index(tmp_cor2best_ion)));
+                //     System.out.println(peak.boundary_left_index+"\t"+peak.apex_index+"\t"+peak.boundary_right_index);
+                //     System.out.println(xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0+"\t"+
+                //             xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0+"\t"+
+                //             xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0);
+                // }
+
                 peak.boundary_left_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0;
                 peak.boundary_right_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0;
                 peak.apex_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0;
