@@ -29,18 +29,31 @@ import java.util.*;
 
 public class FileIO {
 
-    public static Schema getSchema4PredictionInput(){
+    public static Schema getSchema4PredictionInput(boolean add_ce){
         // Input file for MS2 and RT prediction
         // "pepID sequence mz charge mods mod_sites"
-        return SchemaBuilder.record("PeptideForm")
-                .fields()
-                .requiredInt("pepID")
-                .requiredString("sequence")
-                .requiredDouble("mz")
-                .requiredInt("charge")
-                .requiredString("mods")
-                .requiredString("mod_sites")
-                .endRecord();
+        if(add_ce){
+            return SchemaBuilder.record("PeptideForm")
+                    .fields()
+                    .requiredInt("pepID")
+                    .requiredString("sequence")
+                    .requiredDouble("mz")
+                    .requiredInt("charge")
+                    .requiredDouble("nce")
+                    .requiredString("mods")
+                    .requiredString("mod_sites")
+                    .endRecord();
+        }else {
+            return SchemaBuilder.record("PeptideForm")
+                    .fields()
+                    .requiredInt("pepID")
+                    .requiredString("sequence")
+                    .requiredDouble("mz")
+                    .requiredInt("charge")
+                    .requiredString("mods")
+                    .requiredString("mod_sites")
+                    .endRecord();
+        }
     }
 
     public static Schema getSchema4SpectralLib(){

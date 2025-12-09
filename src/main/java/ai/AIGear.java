@@ -404,6 +404,16 @@ public class AIGear {
      */
     public String ccs_merge_method = "mean";
 
+    /**
+     * Use a fixed CE or NCE for all peptides during model training and prediction. Default is true.
+     */
+    public boolean use_fixed_ce = true;
+
+    /**
+     * CCS DIA meta information
+     */
+    private CCSDIAMeta ccs_dia_meta = new CCSDIAMeta();
+
 
     /**
      * The format of spectral library: DIA-NN, EncyclopeDIA, Skyline (blib) or mzSpecLib
@@ -1276,12 +1286,17 @@ public class AIGear {
         }
         Cloger.getInstance().logger.info("Generating peptide forms: " + all_peptide_forms.size());
 
+        // decide whether to add nce column
+        boolean add_nce_column = false;
+        if(this.ccs_enabled && !this.use_fixed_ce) {
+            add_nce_column = true;
+        }
         // generate input files for prediction
         ArrayList<String> input_files = new ArrayList<>();
         if(this.use_parquet) {
             System.out.println("Use parquet format ...");
             ParquetWriter<GenericRecord> pWriter = null;
-            Schema schema = FileIO.getSchema4PredictionInput();
+            Schema schema = FileIO.getSchema4PredictionInput(add_nce_column);
             int i_peptide = 0;
             int k = 0;
             boolean finished = false;
@@ -1296,9 +1311,17 @@ public class AIGear {
                         break;
                     }
                     if(precursor_charge_list.isEmpty()) {
-                        pep_out = get_InputRecord_for_prediction(all_peptide_forms.get(i_peptide), pepID, schema);
+                        if(add_nce_column){
+                            pep_out = get_InputRecord_for_prediction_ce(all_peptide_forms.get(i_peptide), pepID, schema);
+                        }else {
+                            pep_out = get_InputRecord_for_prediction(all_peptide_forms.get(i_peptide), pepID, schema);
+                        }
                     }else{
-                        pep_out = get_InputRecord_for_prediction(all_peptide_forms.get(i_peptide), pepID, schema,precursor_charge_list.get(i_peptide));
+                        if(add_nce_column){
+                            pep_out = get_InputRecord_for_prediction_ce(all_peptide_forms.get(i_peptide), pepID, schema,precursor_charge_list.get(i_peptide));
+                        }else {
+                            pep_out = get_InputRecord_for_prediction(all_peptide_forms.get(i_peptide), pepID, schema, precursor_charge_list.get(i_peptide));
+                        }
                     }
                     if (i == 0) {
                         // first row in the batch
@@ -1372,9 +1395,17 @@ public class AIGear {
                         break;
                     }
                     if(precursor_charge_list.isEmpty()) {
-                        pep_out = get_input_for_prediction(all_peptide_forms.get(i_peptide), pepID);
+                        if(add_nce_column){
+                            pep_out = get_input_for_prediction_ce(all_peptide_forms.get(i_peptide), pepID);
+                        }else {
+                            pep_out = get_input_for_prediction(all_peptide_forms.get(i_peptide), pepID);
+                        }
                     }else{
-                        pep_out = get_input_for_prediction(all_peptide_forms.get(i_peptide), pepID,precursor_charge_list.get(i_peptide));
+                        if(add_nce_column){
+                            pep_out = get_input_for_prediction_ce(all_peptide_forms.get(i_peptide), pepID, precursor_charge_list.get(i_peptide));
+                        }else {
+                            pep_out = get_input_for_prediction(all_peptide_forms.get(i_peptide), pepID, precursor_charge_list.get(i_peptide));
+                        }
                     }
                     if (i == 0) {
                         // first row in the batch
@@ -1383,7 +1414,11 @@ public class AIGear {
                         input_files.add(o_file);
                         pWriter = new BufferedWriter(new FileWriter(o_file));
                         file_is_closed = false;
-                        pWriter.write("pepID\tsequence\tmz\tcharge\tmods\tmod_sites\n");
+                        if(add_nce_column) {
+                            pWriter.write("pepID\tsequence\tmz\tcharge\tnce\tmods\tmod_sites\n");
+                        }else{
+                            pWriter.write("pepID\tsequence\tmz\tcharge\tmods\tmod_sites\n");
+                        }
                         if (!pep_out.isEmpty()) {
                             pWriter.write(pep_out);
                             pepID++;
@@ -1968,6 +2003,36 @@ public class AIGear {
     }
 
     /**
+     * Generate input for a peptide for prediction. Different precursor charges are considered.
+     * @param peptide A Peptide object containing the peptide sequence and modifications when available.
+     * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
+     * @return A string formatted for prediction input.
+     */
+    private String get_input_for_prediction_ce(Peptide peptide, int pepID){
+        StringBuilder stringBuilder = new StringBuilder();
+        double mz;
+        String [] mods = convert_modification(peptide);
+        for(int charge: this.precursor_charges){
+            mz = this.get_mz(peptide.getMass(),charge);
+            if(mz >= CParameter.minPeptideMz && mz <= CParameter.maxPeptideMz){
+                // sequence, charge, mods, mod_sites
+                stringBuilder.append(pepID).append("\t")
+                        .append(peptide.getSequence()).append("\t")
+                        .append(mz).append("\t")
+                        .append(charge).append("\t")
+                        .append(get_ce_for_mz(mz)).append("\t")
+                        .append(mods[0]).append("\t")
+                        .append(mods[1]).append("\n");
+            }
+        }
+        return stringBuilder.toString();
+    }
+
+    public double get_ce_for_mz(double mz){
+        return this.ccs_dia_meta.get_ce_for_mz(mz);
+    }
+
+    /**
      * Generate a single line of input for a peptide for prediction with a specific precursor charge.
      * @param peptide A Peptide object containing the peptide sequence and modifications when available.
      * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
@@ -1985,6 +2050,31 @@ public class AIGear {
                     .append(peptide.getSequence()).append("\t")
                     .append(mz).append("\t")
                     .append(precursor_charge).append("\t")
+                    .append(mods[0]).append("\t")
+                    .append(mods[1]).append("\n");
+        }
+        return stringBuilder.toString();
+    }
+
+    /**
+     * Generate a single line of input for a peptide for prediction with a specific precursor charge.
+     * @param peptide A Peptide object containing the peptide sequence and modifications when available.
+     * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
+     * @param precursor_charge The precursor charge of the peptide.
+     * @return A single line string formatted for prediction input.
+     */
+    private String get_input_for_prediction_ce(Peptide peptide, int pepID, int precursor_charge){
+        StringBuilder stringBuilder = new StringBuilder();
+        double mz;
+        String [] mods = convert_modification(peptide);
+        mz = this.get_mz(peptide.getMass(),precursor_charge);
+        if(mz >= CParameter.minPeptideMz && mz <= CParameter.maxPeptideMz){
+            // sequence, charge, mods, mod_sites
+            stringBuilder.append(pepID).append("\t")
+                    .append(peptide.getSequence()).append("\t")
+                    .append(mz).append("\t")
+                    .append(precursor_charge).append("\t")
+                    .append(get_ce_for_mz(mz)).append("\t")
                     .append(mods[0]).append("\t")
                     .append(mods[1]).append("\n");
         }
@@ -2021,6 +2111,36 @@ public class AIGear {
     }
 
     /**
+     * Generate input records for a peptide for prediction. Different precursor charges are considered.
+     * @param peptide A Peptide object containing the peptide sequence and modifications when available.
+     * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
+     * @param schema The Avro schema for the input records.
+     * @return An ArrayList of GenericRecord objects formatted for prediction input.
+     */
+    private ArrayList<GenericRecord> get_InputRecord_for_prediction_ce(Peptide peptide, int pepID, Schema schema){
+        // StringBuilder stringBuilder = new StringBuilder();
+        double mz;
+        String [] mods = convert_modification(peptide);
+        ArrayList<GenericRecord> records = new ArrayList<>();
+        for(int charge: this.precursor_charges){
+            mz = this.get_mz(peptide.getMass(),charge);
+            if(mz >= CParameter.minPeptideMz && mz <= CParameter.maxPeptideMz){
+                // sequence, charge, mods, mod_sites
+                GenericRecord record = new GenericData.Record(schema);
+                record.put("pepID", pepID);
+                record.put("sequence", peptide.getSequence());
+                record.put("mz", mz);
+                record.put("charge", charge);
+                record.put("nce", get_ce_for_mz(mz));
+                record.put("mods", mods[0]);
+                record.put("mod_sites", mods[1]);
+                records.add(record);
+            }
+        }
+        return records;
+    }
+
+    /**
      * Generate an input record for a peptide for prediction with a specific precursor charge.
      * @param peptide A Peptide object containing the peptide sequence and modifications when available.
      * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
@@ -2040,6 +2160,34 @@ public class AIGear {
             record.put("sequence", peptide.getSequence());
             record.put("mz", mz);
             record.put("charge", precursor_charge);
+            record.put("mods", mods[0]);
+            record.put("mod_sites", mods[1]);
+            records.add(record);
+        }
+        return records;
+    }
+
+    /**
+     * Generate an input record for a peptide for prediction with a specific precursor charge.
+     * @param peptide A Peptide object containing the peptide sequence and modifications when available.
+     * @param pepID Peptide ID, which is the index of the peptide in a peptide List<Peptide>
+     * @param schema The Avro schema for the input records.
+     * @param precursor_charge The precursor charge of the peptide.
+     * @return An ArrayList of GenericRecord objects formatted for prediction input.
+     */
+    private ArrayList<GenericRecord> get_InputRecord_for_prediction_ce(Peptide peptide, int pepID, Schema schema, int precursor_charge){
+        double mz;
+        String [] mods = convert_modification(peptide);
+        ArrayList<GenericRecord> records = new ArrayList<>();
+        mz = this.get_mz(peptide.getMass(),precursor_charge);
+        if(mz >= CParameter.minPeptideMz && mz <= CParameter.maxPeptideMz){
+            // sequence, charge, mods, mod_sites
+            GenericRecord record = new GenericData.Record(schema);
+            record.put("pepID", pepID);
+            record.put("sequence", peptide.getSequence());
+            record.put("mz", mz);
+            record.put("charge", precursor_charge);
+            record.put("nce", get_ce_for_mz(mz));
             record.put("mods", mods[0]);
             record.put("mod_sites", mods[1]);
             records.add(record);
@@ -5683,7 +5831,7 @@ public class AIGear {
         int frag_stop_idx = 0;
         BufferedWriter psmWriter = new BufferedWriter(new FileWriter(this.out_dir+"/psm_pdv.txt"));
         //psmWriter.write(this.psm_head_line+"\tspectrum_title\tmz\tcharge\tpeptide\tmodification\tmods\tmod_sites\tmax_fragment_ion_valid\tmax_cor_mz\tfrag_start_idx\tfrag_stop_idx\n");
-        psmWriter.write("psm_id\tspectrum_title\tms2_scan\tmz\tcharge\tpeptide\tmodification\tmods\tmod_sites\tmax_fragment_ion_valid\tmax_cor_mz\tfrag_start_idx\tfrag_stop_idx\tn_valid_fragment_ions\tn_total_matched_ions\tvalid\n");
+        psmWriter.write("psm_id\tspectrum_title\tms2_scan\tmz\tcharge\tnce\tpeptide\tmodification\tmods\tmod_sites\tmax_fragment_ion_valid\tmax_cor_mz\tfrag_start_idx\tfrag_stop_idx\tn_valid_fragment_ions\tn_total_matched_ions\tvalid\n");
         BufferedWriter msWriter = new BufferedWriter(new FileWriter(this.out_dir+"/ms_pdv.mgf"));
         BufferedWriter fragWriter = new BufferedWriter(new FileWriter(this.out_dir+"/fragment_intensity_df.tsv"));
         fragWriter.write(this.fragment_ion_intensity_head_line+"\n");
@@ -5771,6 +5919,9 @@ public class AIGear {
             }
             // meta.load_ms_data(ms_file);
             meta.get_ms_run_meta_data_using_sql(ms_file);
+            meta.generate_mz2ce_map();
+            this.ccs_dia_meta = meta;
+            this.use_fixed_ce = false;
             CParameter.minPeptideMz = meta.precursor_ion_mz_min - 0.5;
             CParameter.maxPeptideMz = meta.precursor_ion_mz_max + 0.5;
             CParameter.min_fragment_ion_mz = meta.fragment_ion_mz_min - 0.5;
@@ -6591,8 +6742,21 @@ public class AIGear {
                             n_total_psm_matches_valid++;
                             frag_start_idx = frag_stop_idx;
                             frag_stop_idx = frag_start_idx + index2peptideMatch.get(row_i).ion_intensity_matrix.length;
-                            psmWriter.write(index2peptideMatch.get(row_i).id+"\t"+spectrum_title+"\t"+index2peptideMatch.get(row_i).scan+ "\t" +pdv_precursor_mz +"\t" +pdv_precursor_charge +"\t" +pdv_peptide + "\t" +pdv_modification+  "\t" + out_mod[0] + "\t" + out_mod[1] + "\t1\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
-                                    "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t1\n");
+                            psmWriter.write(index2peptideMatch.get(row_i).id+"\t"+
+                                    spectrum_title+"\t"+
+                                    index2peptideMatch.get(row_i).scan+ "\t" +
+                                    pdv_precursor_mz +"\t" +
+                                    pdv_precursor_charge +"\t" +
+                                    meta.get_ce_for_mz(pdv_precursor_mz) + "\t" +
+                                    pdv_peptide + "\t" +
+                                    pdv_modification+  "\t" +
+                                    out_mod[0] + "\t" +
+                                    out_mod[1] + "\t1\t" +
+                                    index2peptideMatch.get(row_i).max_cor_mz + "\t" +
+                                    frag_start_idx + "\t" +
+                                    frag_stop_idx + "\t" +
+                                    n_valid_fragment_ions + "\t" +
+                                    n_total_fragment_ions + "\t1\n");
                             if(!pMatches.isEmpty()){
                                 for(PeptideMatch pMatch: pMatches){
                                     n_total_psm_matches_valid++;
@@ -6600,7 +6764,11 @@ public class AIGear {
                                     frag_stop_idx = frag_start_idx + pMatch.ion_intensity_matrix.length;
                                     n_total_fragment_ions = get_n_matched_fragment_ions(pMatch.ion_intensity_matrix);
                                     // TODO: update spectrum_title
-                                    psmWriter.write(index2peptideMatch.get(row_i).id+"-"+pMatch.scan+"\t"+spectrum_title +"\t"+pMatch.scan+ "\t" + pdv_precursor_mz + "\t" + pdv_precursor_charge + "\t" + pdv_peptide + "\t" + pdv_modification + "\t" + out_mod[0] + "\t" + out_mod[1] + "\t1\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
+                                    psmWriter.write(index2peptideMatch.get(row_i).id+"-"+pMatch.scan+"\t"+spectrum_title +"\t"+pMatch.scan+ "\t" +
+                                            pdv_precursor_mz + "\t" +
+                                            pdv_precursor_charge + "\t" +
+                                            meta.get_ce_for_mz(pdv_precursor_mz) + "\t" +
+                                            pdv_peptide + "\t" + pdv_modification + "\t" + out_mod[0] + "\t" + out_mod[1] + "\t1\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
                                             "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t1\n");
                                 }
                             }
@@ -6611,14 +6779,22 @@ public class AIGear {
                             if (!this.export_valid_matches_only) {
                                 frag_start_idx = frag_stop_idx;
                                 frag_stop_idx = frag_start_idx + index2peptideMatch.get(row_i).ion_intensity_matrix.length;
-                                psmWriter.write(index2peptideMatch.get(row_i).id+"\t"+spectrum_title+ "\t"+index2peptideMatch.get(row_i).scan+ "\t" +pdv_precursor_mz +"\t" +pdv_precursor_charge +"\t" +pdv_peptide + "\t" +pdv_modification+ "\t" + out_mod[0] + "\t" + out_mod[1] + "\t0\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
+                                psmWriter.write(index2peptideMatch.get(row_i).id+"\t"+spectrum_title+ "\t"+index2peptideMatch.get(row_i).scan+ "\t" +
+                                        pdv_precursor_mz +"\t" +
+                                        pdv_precursor_charge +"\t" +
+                                        meta.get_ce_for_mz(pdv_precursor_mz) + "\t" +
+                                        pdv_peptide + "\t" +pdv_modification+ "\t" + out_mod[0] + "\t" + out_mod[1] + "\t0\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
                                         "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t0\n");
                                 if(!pMatches.isEmpty()){
                                     for(PeptideMatch pMatch: pMatches){
                                         frag_start_idx = frag_stop_idx;
                                         frag_stop_idx = frag_start_idx + pMatch.ion_intensity_matrix.length;
                                         n_total_fragment_ions = get_n_matched_fragment_ions(pMatch.ion_intensity_matrix);
-                                        psmWriter.write(index2peptideMatch.get(row_i).id+"-"+pMatch.scan+"\t"+spectrum_title + "\t"+pMatch.scan+"\t" + pdv_precursor_mz + "\t" + pdv_precursor_charge + "\t" + pdv_peptide + "\t" + pdv_modification + "\t" + out_mod[0] + "\t" + out_mod[1] + "\t1\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
+                                        psmWriter.write(index2peptideMatch.get(row_i).id+"-"+pMatch.scan+"\t"+spectrum_title + "\t"+pMatch.scan+"\t" +
+                                                pdv_precursor_mz + "\t" +
+                                                pdv_precursor_charge + "\t" +
+                                                meta.get_ce_for_mz(pdv_precursor_mz) + "\t" +
+                                                pdv_peptide + "\t" + pdv_modification + "\t" + out_mod[0] + "\t" + out_mod[1] + "\t1\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
                                                 "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t0\n");
                                     }
                                 }

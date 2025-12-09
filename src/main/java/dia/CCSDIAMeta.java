@@ -33,6 +33,16 @@ public class CCSDIAMeta{
                                         double isolation_width){
     }
 
+    /**
+     * A map from m/z to collision energy
+     */
+    public HashMap<Integer,Double> mz2ce = new HashMap<>();
+
+    /**
+     * The step size for m/z in "mz2ce" (0.1 m/z units, represented as integer 10)
+     */
+    private final int ce_map_mz_step_size = 10; // 0.1 m/z
+
     public int ms_level = 2;
     public double fragment_ion_mz_bin_size = 0.05;
     public double fragment_ion_mz_min = Double.MAX_VALUE;
@@ -261,6 +271,23 @@ public class CCSDIAMeta{
             ResultSet instrument_res = pstmt.executeQuery();
             ms_instrument = instrument_res.getString(1);
 
+            // extract isolation window information
+            pstmt = connection.prepareStatement("SELECT IsolationMz, IsolationWidth, CollisionEnergy FROM DiaFrameMsMsWindows ORDER BY IsolationMz ASC");
+            ResultSet iso_win_res = pstmt.executeQuery();
+            while(iso_win_res.next()){
+                double isolation_mz = iso_win_res.getDouble("IsolationMz");
+                double isolation_width = iso_win_res.getDouble("IsolationWidth");
+                double ce = iso_win_res.getDouble("CollisionEnergy");
+                double [] iso_win_range = get_isolation_window(isolation_mz,isolation_width);
+                String isoWinID = IsolationWindow.generate_id(iso_win_range[0],iso_win_range[1]);
+                if(!this.isolationWindowMap.containsKey(isoWinID)){
+                    this.isolationWindowMap.put(isoWinID,new IsolationWindow(iso_win_range[0],iso_win_range[1]));
+                    this.isolationWindowMap.get(isoWinID).ce = ce;
+                }
+                System.out.println("Isolation window: "+isoWinID+" -> "+iso_win_range[0]+" - "+iso_win_range[1]+", CE: "+ce);
+            }
+
+
             pstmt.close();
             connection.close();
 
@@ -314,6 +341,68 @@ public class CCSDIAMeta{
 
     public static double[] get_isolation_window(double isolation_mz, double isolation_width){
         return new double[]{isolation_mz - isolation_width/2.0, isolation_mz + isolation_width/2.0};
+    }
+
+    /**
+     * Generate a map from m/z to collision energy
+     */
+    public void generate_mz2ce_map(){
+        // iterate isolationWindowMap
+        for(String isoWinID: this.isolationWindowMap.keySet()){
+            IsolationWindow isoWin = this.isolationWindowMap.get(isoWinID);
+            // for each isolation window, consider all values from mz_lower + 0.2 to mz_upper - 0.2 with step size 0.1
+            // convert to integer by rounding with multiplying 10
+            int mz_lower_int = (int)Math.round((isoWin.mz_lower + 0.2) * ce_map_mz_step_size);
+            int mz_upper_int = (int)Math.round((isoWin.mz_upper - 0.2) * ce_map_mz_step_size);
+            double ce =  this.isolationWindowMap.get(isoWinID).ce;
+            for(int mz_int = mz_lower_int; mz_int <= mz_upper_int; mz_int +=1){
+                this.mz2ce.put(mz_int,ce);
+            }
+        }
+    }
+
+    public double get_ce_for_mz(double mz){
+        int mz_int = (int)Math.round(mz * ce_map_mz_step_size);
+        if(this.mz2ce.containsKey(mz_int)){
+            return this.mz2ce.get(mz_int);
+        }else{
+            // check isolationWindowMap
+            double ce = -1;
+            for(String isoWinID: this.isolationWindowMap.keySet()){
+                IsolationWindow isoWin = this.isolationWindowMap.get(isoWinID);
+                if(mz >= isoWin.mz_lower && mz <= isoWin.mz_upper){
+                    ce = isoWin.ce;
+                    break;
+                }
+            }
+            if(ce <= 0){
+                Cloger.getInstance().logger.info("Use default CE for m/z: "+mz + " -> "+ CParameter.NCE);
+                // if mz is less than the min mz in the map, use the CE of the lowest mz window
+                double min_mz_lower = Double.MAX_VALUE;
+                double max_mz_upper = 0;
+                double ce_min = CParameter.NCE;
+                double ce_max = CParameter.NCE;
+                for(String isoWinID: this.isolationWindowMap.keySet()){
+                    IsolationWindow isoWin = this.isolationWindowMap.get(isoWinID);
+                    if(isoWin.mz_lower < min_mz_lower){
+                        min_mz_lower = isoWin.mz_lower;
+                        ce_min = isoWin.ce;
+                    }
+                    if(isoWin.mz_upper > max_mz_upper) {
+                        max_mz_upper = isoWin.mz_upper;
+                        ce_max = isoWin.ce;
+                    }
+                }
+                if(mz <= min_mz_lower){
+                    ce = ce_min;
+                }else if(mz >= max_mz_upper){
+                    ce = ce_max;
+                }else{
+                    ce = CParameter.NCE;
+                }
+            }
+            return ce;
+        }
     }
 
 }

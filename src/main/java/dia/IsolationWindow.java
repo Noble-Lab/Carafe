@@ -6,6 +6,11 @@ public class IsolationWindow {
     public double mz_lower = 0;
     public double mz_upper = 0;
 
+    /**
+     * Collision energy. -1 if not set. This is useful for timsTOF DIA data where CE is stored per isolation window.
+     */
+    public double ce = -1;
+
     public String id;
 
     public IsolationWindow(double mz1,double mz2){
