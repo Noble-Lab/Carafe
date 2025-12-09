@@ -298,6 +298,77 @@ public class CCSDIAIndex {
         return cor_matrix[best_i];
     }
 
+    /**
+     * Calculate the correlation of each ion to the best ion specified by best_ion_index
+     * @param x XIC matrix
+     * @param index_start peak start index
+     * @param index_end peak end index
+     * @param index_apex peak apex index
+     * @param pMatch PeptideMatch object
+     * @param best_ion_index index of the best ion
+     * @return correlation array of each ion to the best ion
+     */
+    public double[] detect_best_ion(RealMatrix x, int index_start, int index_end, int index_apex, PeptideMatch pMatch, int best_ion_index){
+        RealMatrix x_peak = x.getSubMatrix(0,x.getRowDimension()-1,index_start,index_end);
+
+        double []max_intensity_list = x.getColumn(index_apex);
+        double max_intensity = StatUtils.max(max_intensity_list);
+        // double []cor = new double[x_peak.getRowDimension()];
+        int n_ions = x_peak.getRowDimension();
+        double [][] cor_matrix = new double[n_ions][n_ions];
+        double left_boundary_median_intensity = Quantiles.median().compute(x.getColumn(index_start))*1.5;
+        double right_boundary_median_intensity = Quantiles.median().compute(x.getColumn(index_end))*1.5;
+
+        int [] skewed_peaks = new int[n_ions];
+        for(int i=0;i<n_ions;i++){
+            cor_matrix[i][i] = 1;
+            for(int j=0;j<n_ions;j++){
+                if(i!=j) {
+                    cor_matrix[i][j] = new PearsonsCorrelation().correlation(x_peak.getRow(i), x_peak.getRow(j));
+                    if (Double.isNaN(cor_matrix[i][j]) || cor_matrix[i][j] < 0) {
+                        cor_matrix[i][j] = 0;
+                    }
+                    cor_matrix[j][i] = cor_matrix[i][j];
+                }
+            }
+
+            boolean left_boundary_skewed;
+            boolean right_boundary_skewed;
+            if(max_intensity_list[i] >= 0.5 * max_intensity){
+                left_boundary_skewed = x.getRow(i)[index_start] > left_boundary_median_intensity && x.getRow(i)[index_start] > 0.10 * max_intensity_list[i];
+                right_boundary_skewed = x.getRow(i)[index_end] > right_boundary_median_intensity && x.getRow(i)[index_end] > 0.10 * max_intensity_list[i];
+            }else{
+                left_boundary_skewed = x.getRow(i)[index_start] > left_boundary_median_intensity && x.getRow(i)[index_start] > 0.25 * max_intensity_list[i];
+                right_boundary_skewed = x.getRow(i)[index_end] > right_boundary_median_intensity && x.getRow(i)[index_end] > 0.25 * max_intensity_list[i];
+            }
+
+            if(left_boundary_skewed || right_boundary_skewed){
+                if(left_boundary_skewed && right_boundary_skewed){
+                    skewed_peaks[i] = 2;
+                }else {
+                    skewed_peaks[i] = 1;
+                }
+            }
+        }
+
+        pMatch.skewed_peaks = skewed_peaks;
+
+        double max_cor = -1;
+        double cur_cor = -1;
+        int best_i = 0;
+        for(int i=0;i<n_ions;i++) {
+            if(skewed_peaks[i] >= 1){
+                continue;
+            }
+            cur_cor = weighted_mean(cor_matrix[i], max_intensity_list, false);
+            if(max_cor < cur_cor){
+                max_cor = cur_cor;
+                best_i = i;
+            }
+        }
+        return cor_matrix[best_ion_index];
+    }
+
     private double weighted_mean(double []x, double []weights, boolean log_transform){
         double sum = 0;
         double sum_weights = 0;

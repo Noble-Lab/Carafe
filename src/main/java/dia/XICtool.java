@@ -139,7 +139,7 @@ public class XICtool {
      */
     public int get_max_index(double []x){
         int max_index = 0;
-        double max_value = x[0];
+        double max_value = Double.NEGATIVE_INFINITY;
         for(int i=0;i<x.length;i++){
             if(x[i]>max_value){
                 max_value = x[i];

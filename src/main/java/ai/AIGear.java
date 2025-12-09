@@ -423,22 +423,22 @@ public class AIGear {
     /**
      * PTM site probability cutoff. Default is 0.75. This is only used during PTM model training data generation
      */
-    double ptm_site_prob_cutoff = 0.75;
+    public double ptm_site_prob_cutoff = 0.75;
 
     /**
      * PTM q-value cutoff. This is only used during PTM model training data generation.
      */
-    double ptm_site_qvalue_cutoff = 1.0;
+    public double ptm_site_qvalue_cutoff = 1.0;
 
     /**
      * For n-terminal fragment ions (such as b-ion) with number <= n_ion_min, they will be considered as invalid.
      */
-    private int n_ion_min = 0;
+    public int n_ion_min = 0;
 
     /**
      * For c-terminal fragment ions (such as y-ion) with number <= n_ion_min, they will be considered as invalid.
      */
-    private int c_ion_min = 0;
+    public int c_ion_min = 0;
 
     /**
      * A global random seed used for reproducibility.
@@ -5830,6 +5830,12 @@ public class AIGear {
 
             List<PSMQuery> psm_query_list = new ArrayList<>();
 
+            // for debugging
+            // invalid max fragment ion intensity
+            HashSet<Integer>  invalid_max_fragment_ion_intensity_indices = new HashSet<>();
+            // less than min_n_high_quality_fragment_ions
+            HashSet<Integer>  invalid_min_n_high_quality_fragment_ions_indices = new HashSet<>();
+
             // Get the MS1 and MS2 m/z error from DIA-NN search result
             ArrayList<Double> ms1_mz_errors = new ArrayList<>(this.ms_file2psm.get(ms_file).size());
             ArrayList<Double> ms2_mz_errors = new ArrayList<>(this.ms_file2psm.get(ms_file).size());
@@ -6034,6 +6040,7 @@ public class AIGear {
             // diaIndex.index(ms_file);
             diaIndex.sg_smoothing_data_points = this.sg_smoothing_data_points;
 
+            // First round of peak refinement
             HashMap<Integer, PeptideMatch> index2peptideMatch = new HashMap<>();
             row_i = -1;
             // for (String line : isoWinID2PSMs.get(isoWinID)) {
@@ -6075,35 +6082,28 @@ public class AIGear {
                 index2peptideMatch.get(row_i).peptide = peptideObj;
                 index2peptideMatch.get(row_i).im = Double.parseDouble(d[hIndex.get("IM")]);
 
-
-                // for testing
-                if(test_mode){
-                    index2peptideMatch.get(row_i).ion_matrix_map.put("spectrum_centric", new int[peptide.length() - 1][n_ion_types]);
-                    index2peptideMatch.get(row_i).ion_matrix_map.put("peptide_centric_cor", new int[peptide.length() - 1][n_ion_types]);
-                    index2peptideMatch.get(row_i).ion_matrix_map.put("peptide_centric_shape", new int[peptide.length() - 1][n_ion_types]);
-                    index2peptideMatch.get(row_i).ion_matrix_map.put("low_mass", new int[peptide.length() - 1][n_ion_types]);
-                    index2peptideMatch.get(row_i).ion_matrix_map.put("peptide_centric", new int[peptide.length() - 1][n_ion_types]);
-                }
-
-                if(!psm_query_results.containsKey(row_i)){
-                    if(!un_recognized_PSMs.containsKey(line)){
-                        un_recognized_PSMs.put(line,0);
-                    }
-                    System.out.println("Spectrum is invalid:"+row_i);
-                    System.out.println(line);
-                    invalid_psm_indices.add(row_i);
-                    continue;
-                }else{
-                    un_recognized_PSMs.put(line,1);
-                }
                 // ArrayList<IonMatch> matched_ions = get_matched_ions(peptideObj, psm_query_results.get(row_i), precursor_charge, this.max_fragment_ion_charge, lossWaterNH3);
-                ArrayList<IonMatch> matched_ions = get_matched_ions(peptideObj, precursor_charge, 60.0*index2peptideMatch.get(row_i).rt_apex, xic_query_results.get(row_i), this.max_fragment_ion_charge, lossWaterNH3);
+                // ArrayList<IonMatch> matched_ions = get_matched_ions(peptideObj, precursor_charge, 60.0*index2peptideMatch.get(row_i).rt_apex, xic_query_results.get(row_i), this.max_fragment_ion_charge, lossWaterNH3);
+                ArrayList<IonMatch> matched_ions = new ArrayList<>();
+                // double matched_apex_rt = get_matched_ions(peptideObj, precursor_charge, 60.0*index2peptideMatch.get(row_i).rt_apex, xic_query_results.get(row_i), this.max_fragment_ion_charge, lossWaterNH3, matched_ions);
+                double matched_apex_rt = get_matched_ions(peptideObj, precursor_charge,
+                        60.0*index2peptideMatch.get(row_i).rt_apex,
+                        60.0*index2peptideMatch.get(row_i).rt_start,
+                        60.0*index2peptideMatch.get(row_i).rt_end,
+                        xic_query_results.get(row_i),
+                        this.max_fragment_ion_charge,
+                        lossWaterNH3,
+                        matched_ions);
+                if(matched_apex_rt > 0){
+                    index2peptideMatch.get(row_i).rt_apex = matched_apex_rt;
+                }
                 List<Double> matched_ion_mzs = new ArrayList<>();
                 // b or y
                 String ion_type = "";
                 List<String> matched_ion_types = new ArrayList<>();
                 // 1, 2, 3, ...
                 List<Integer> matched_ion_numbers = new ArrayList<>();
+                HashMap<Double,Double> mz2intensity = new HashMap<>();
 
                 // max fragment ion intensity
                 double max_fragment_ion_intensity = -1.0;
@@ -6113,12 +6113,12 @@ public class AIGear {
                 if (!matched_ions.isEmpty()) {
                     // use psm_id not psm_i for now
                     //if (!this.scan2mz2count.containsKey(apex_scan)) {
-                    if (!this.scan2mz2count.containsKey(psm_id)) {
+                    //if (!this.scan2mz2count.containsKey(psm_id)) {
                         //this.scan2mz2count.put(apex_scan, new ConcurrentHashMap<>());
-                        this.scan2mz2count.put(psm_id, new ConcurrentHashMap<>());
-                    }
+                    //    this.scan2mz2count.put(psm_id, new ConcurrentHashMap<>());
+                    //}
+                    index2peptideMatch.get(row_i).matched_ions = matched_ions;
                     for (IonMatch ionMatch : matched_ions) {
-                        index2peptideMatch.get(row_i).matched_ions = matched_ions;
                         if (ionMatch.ion.getSubType() == PeptideFragmentIon.B_ION || ionMatch.ion.getSubType() == PeptideFragmentIon.Y_ION) {
                             // add fragment ion number
                             PeptideFragmentIon fragmentIon = ((PeptideFragmentIon) ionMatch.ion);
@@ -6144,6 +6144,139 @@ public class AIGear {
                             //} else {
                             //    this.scan2mz2count.get(apex_scan).put(ionMatch.peakMz, 1);
                             //}
+                            // use psm_id not apex_scan for now: psm_id is unique to each PSM.
+                            //if (this.scan2mz2count.get(psm_id).containsKey(ionMatch.peakMz)) {
+                            //    this.scan2mz2count.get(psm_id).put(ionMatch.peakMz, this.scan2mz2count.get(psm_id).get(ionMatch.peakMz) + 1);
+                            //} else {
+                            //    this.scan2mz2count.get(psm_id).put(ionMatch.peakMz, 1);
+                            //}
+                            matched_ion_mzs.add(ionMatch.peakMz);
+                            matched_ion_types.add(ion_type);
+                            matched_ion_numbers.add(ion_number);
+                            mz2intensity.put(ionMatch.peakMz, ionMatch.peakIntensity);
+
+                            // If the fragment ion number is <= the minimum number of fragment ion used for spectral library generation,
+                            // we don't consider it in getting the max intensity of fragment ions.
+                            if(use_all_peaks || (max_fragment_ion_intensity<=ionMatch.peakIntensity && ion_number >= this.lf_frag_n_min)){
+                                max_fragment_ion_intensity = ionMatch.peakIntensity;
+                                max_fragment_ion_row_index = fragment_ion_row_index;
+                                max_fragment_ion_column_index = ion_type_column_index;
+                            }
+                        }
+                    }
+                }//else{
+                    // invalid_psm_indices.add(row_i);
+                    // System.out.println("No match: "+row_i + " => "+line);
+                    // System.out.println("Match information: query apex RT="+index2peptideMatch.get(row_i).rt_apex+", return apex RT="+matched_apex_rt);
+                //}
+                if(!matched_ion_mzs.isEmpty()) {
+                    index2peptideMatch.get(row_i).libSpectrum.spectrum.mz = new double[matched_ion_mzs.size()];
+                    index2peptideMatch.get(row_i).libSpectrum.ion_types = new String[matched_ion_mzs.size()];
+                    index2peptideMatch.get(row_i).libSpectrum.ion_numbers = new int[matched_ion_mzs.size()];
+                    index2peptideMatch.get(row_i).libSpectrum.spectrum.intensity = new double[matched_ion_mzs.size()];
+                    for (int i = 0; i < matched_ion_mzs.size(); i++) {
+                        index2peptideMatch.get(row_i).libSpectrum.spectrum.mz[i] = matched_ion_mzs.get(i);
+                        index2peptideMatch.get(row_i).libSpectrum.ion_types[i] = matched_ion_types.get(i);
+                        index2peptideMatch.get(row_i).libSpectrum.ion_numbers[i] = matched_ion_numbers.get(i);
+                        index2peptideMatch.get(row_i).libSpectrum.spectrum.intensity[i] = mz2intensity.get(matched_ion_mzs.get(i));
+                    }
+                    index2peptideMatch.get(row_i).max_fragment_ion_intensity = max_fragment_ion_intensity;
+                    index2peptideMatch.get(row_i).max_fragment_ion_row_index = max_fragment_ion_row_index;
+                    index2peptideMatch.get(row_i).max_fragment_ion_column_index = max_fragment_ion_column_index;
+                }//else{
+                    // invalid_psm_indices.add(row_i);
+                //}
+
+            }
+
+            // refine peak apex using refined peak detection.
+            // use the apex fragment ion matches for downstream analysis
+            row_i = -1;
+            // for (String line : isoWinID2PSMs.get(isoWinID)) {
+            for(String line: this.ms_file2psm.get(ms_file)) {
+                row_i++;
+                if (invalid_psm_indices.contains(row_i)) {
+                    continue;
+                }
+                PeptideMatch peptideMatch = index2peptideMatch.get(row_i);
+
+                String[] d = line.split("\t");
+                String peptide = d[hIndex.get("Stripped.Sequence")];
+
+                // intensity
+                peptideMatch.ion_intensity_matrix = new double[peptide.length() - 1][n_ion_types];
+                peptideMatch.ion_mz_matrix = new double[peptide.length() - 1][n_ion_types];
+                // 0: valid, >=1 invalid
+                peptideMatch.ion_matrix = new int[peptide.length() - 1][n_ion_types];
+                peptideMatch.index = get_rt_index(xic_query_results.get(row_i).retention_time_results_seconds,true, index2peptideMatch.get(row_i).rt_apex);
+
+
+                // for testing
+                if(test_mode){
+                    index2peptideMatch.get(row_i).ion_matrix_map.put("spectrum_centric", new int[peptide.length() - 1][n_ion_types]);
+                    index2peptideMatch.get(row_i).ion_matrix_map.put("peptide_centric_cor", new int[peptide.length() - 1][n_ion_types]);
+                    index2peptideMatch.get(row_i).ion_matrix_map.put("peptide_centric_shape", new int[peptide.length() - 1][n_ion_types]);
+                    index2peptideMatch.get(row_i).ion_matrix_map.put("low_mass", new int[peptide.length() - 1][n_ion_types]);
+                    index2peptideMatch.get(row_i).ion_matrix_map.put("peptide_centric", new int[peptide.length() - 1][n_ion_types]);
+                }
+
+                // xic_query_ccs(xic_query_results.get(row_i),psm_query_results.get(row_i),peptideMatch,diaIndex);
+                // refine peak apex and peak boundaries
+                xic_query_ccs(xic_query_results.get(row_i),index2peptideMatch.get(row_i).libSpectrum.spectrum.mz,peptideMatch,diaIndex);
+                ArrayList<IonMatch> matched_ions = new ArrayList<>();
+                // get the matched ions again using the refined apex RT
+                double matched_apex_rt = get_matched_ions(index2peptideMatch.get(row_i).peptide, index2peptideMatch.get(row_i).precursor_charge, 60.0*index2peptideMatch.get(row_i).rt_apex, xic_query_results.get(row_i), this.max_fragment_ion_charge, lossWaterNH3, matched_ions);
+                if(matched_apex_rt > 0){
+                    index2peptideMatch.get(row_i).rt_apex = matched_apex_rt;
+                }
+                List<Double> matched_ion_mzs = new ArrayList<>();
+                // b or y
+                String ion_type = "";
+                List<String> matched_ion_types = new ArrayList<>();
+                // 1, 2, 3, ...
+                List<Integer> matched_ion_numbers = new ArrayList<>();
+                HashMap<Double,Double> mz2intensity = new HashMap<>();
+
+                // max fragment ion intensity
+                double max_fragment_ion_intensity = -1.0;
+                int max_fragment_ion_row_index = -1;
+                int max_fragment_ion_column_index = -1;
+
+                if (!matched_ions.isEmpty()) {
+                    // use psm_id not psm_i for now
+                    //if (!this.scan2mz2count.containsKey(apex_scan)) {
+                    if (!this.scan2mz2count.containsKey(psm_id)) {
+                        //this.scan2mz2count.put(apex_scan, new ConcurrentHashMap<>());
+                        this.scan2mz2count.put(psm_id, new ConcurrentHashMap<>());
+                    }
+                    index2peptideMatch.get(row_i).matched_ions = matched_ions;
+                    for (IonMatch ionMatch : matched_ions) {
+                        if (ionMatch.ion.getSubType() == PeptideFragmentIon.B_ION || ionMatch.ion.getSubType() == PeptideFragmentIon.Y_ION) {
+                            // add fragment ion number
+                            PeptideFragmentIon fragmentIon = ((PeptideFragmentIon) ionMatch.ion);
+                            int ion_number = fragmentIon.getNumber();
+                            int ion_type_column_index = this.get_ion_type_column_index(ionMatch);
+                            // for y ion
+                            if(ionMatch.ion.getSubType() == PeptideFragmentIon.Y_ION){
+                                fragment_ion_row_index = index2peptideMatch.get(row_i).peptide.getSequence().length() - ion_number - 1;
+                                ion_type = "y";
+                            }else if (ionMatch.ion.getSubType() == PeptideFragmentIon.B_ION){
+                                fragment_ion_row_index = ion_number - 1;
+                                ion_type = "b";
+                            }else{
+                                System.err.println("Unrecognized fragment ion type:"+ionMatch.ion.getSubType()+","+ionMatch.ion.getSubTypeAsString());
+                                System.exit(1);
+                            }
+
+                            index2peptideMatch.get(row_i).mz2index.put(ionMatch.peakMz, new int[]{fragment_ion_row_index, ion_type_column_index});
+                            index2peptideMatch.get(row_i).ion_intensity_matrix[fragment_ion_row_index][ion_type_column_index] = ionMatch.peakIntensity;
+                            index2peptideMatch.get(row_i).ion_mz_matrix[fragment_ion_row_index][ion_type_column_index] = ionMatch.peakMz;
+                            //if (this.scan2mz2count.get(apex_scan).containsKey(ionMatch.peakMz)) {
+                            //    this.scan2mz2count.get(apex_scan).put(ionMatch.peakMz, this.scan2mz2count.get(apex_scan).get(ionMatch.peakMz) + 1);
+                            //} else {
+                            //    this.scan2mz2count.get(apex_scan).put(ionMatch.peakMz, 1);
+                            //}
+                            // use psm_id not apex_scan for now: psm_id is unique to each PSM.
                             if (this.scan2mz2count.get(psm_id).containsKey(ionMatch.peakMz)) {
                                 this.scan2mz2count.get(psm_id).put(ionMatch.peakMz, this.scan2mz2count.get(psm_id).get(ionMatch.peakMz) + 1);
                             } else {
@@ -6152,6 +6285,7 @@ public class AIGear {
                             matched_ion_mzs.add(ionMatch.peakMz);
                             matched_ion_types.add(ion_type);
                             matched_ion_numbers.add(ion_number);
+                            mz2intensity.put(ionMatch.peakMz, ionMatch.peakIntensity);
 
                             // If the fragment ion number is <= the minimum number of fragment ion used for spectral library generation,
                             // we don't consider it in getting the max intensity of fragment ions.
@@ -6163,8 +6297,10 @@ public class AIGear {
                         }
                     }
                 }else{
+                    index2peptideMatch.get(row_i).matched_ions = new ArrayList<>();
                     invalid_psm_indices.add(row_i);
-                    System.out.println("No match!");
+                    System.out.println("No match: "+row_i + " => "+line);
+                    System.out.println("Match information: query apex RT="+index2peptideMatch.get(row_i).rt_apex+", return apex RT="+matched_apex_rt);
                 }
                 if(!matched_ion_mzs.isEmpty()) {
                     index2peptideMatch.get(row_i).libSpectrum.spectrum.mz = new double[matched_ion_mzs.size()];
@@ -6175,6 +6311,7 @@ public class AIGear {
                         index2peptideMatch.get(row_i).libSpectrum.spectrum.mz[i] = matched_ion_mzs.get(i);
                         index2peptideMatch.get(row_i).libSpectrum.ion_types[i] = matched_ion_types.get(i);
                         index2peptideMatch.get(row_i).libSpectrum.ion_numbers[i] = matched_ion_numbers.get(i);
+                        index2peptideMatch.get(row_i).libSpectrum.spectrum.intensity[i] = mz2intensity.get(matched_ion_mzs.get(i));
                     }
                     index2peptideMatch.get(row_i).max_fragment_ion_intensity = max_fragment_ion_intensity;
                     index2peptideMatch.get(row_i).max_fragment_ion_row_index = max_fragment_ion_row_index;
@@ -6470,6 +6607,7 @@ public class AIGear {
                             fragment_export = true;
                         } else {
                             n_total_matches_max_fragment_ion_invalid++;
+                            invalid_max_fragment_ion_intensity_indices.add(row_i);
                             if (!this.export_valid_matches_only) {
                                 frag_start_idx = frag_stop_idx;
                                 frag_stop_idx = frag_start_idx + index2peptideMatch.get(row_i).ion_intensity_matrix.length;
@@ -6642,6 +6780,7 @@ public class AIGear {
                         }
                     }else{
                         n_less_than_min_n_high_quality_fragment_ions++;
+                        invalid_min_n_high_quality_fragment_ions_indices.add(row_i);
                     }
                 }else{
                     n_less_than_min_n_fragment_ions++;
@@ -6658,6 +6797,43 @@ public class AIGear {
                 }
                 if(n_un_recognized_PSMs >= 1){
                     System.out.println("Spectrum not found:"+ n_un_recognized_PSMs);
+                }
+            }
+
+            // for debug
+            if(export_xic){
+                // export the xic query input
+                List<PSMQuery> tmp_psm_query_list = new ArrayList<>();
+                for(PSMQuery psm_q: psm_query_list){
+                    if(invalid_max_fragment_ion_intensity_indices.contains(psm_q.id)){
+                        tmp_psm_query_list.add(psm_q);
+                    }
+                }
+                if(!tmp_psm_query_list.isEmpty()){
+                    // Pretty-printed JSON string
+                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, true);
+                    // Write to file
+                    String tmp_psm_query_file = this.out_dir + File.separator + "invalid_max_fragment_ion_intensity_psm_query.json";
+                    try (FileWriter writer = new FileWriter(tmp_psm_query_file)) {
+                        writer.write(tmp_json);
+                    }
+                    tmp_psm_query_list.clear();
+                }
+
+                for(PSMQuery psm_q: psm_query_list){
+                    if(invalid_min_n_high_quality_fragment_ions_indices.contains(psm_q.id)){
+                        tmp_psm_query_list.add(psm_q);
+                    }
+                }
+                if(!tmp_psm_query_list.isEmpty()){
+                    // Pretty-printed JSON string
+                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, true);
+                    // Write to file
+                    String tmp_psm_query_file = this.out_dir + File.separator + "invalid_min_n_high_quality_fragment_ions_psm_query.json";
+                    try (FileWriter writer = new FileWriter(tmp_psm_query_file)) {
+                        writer.write(tmp_json);
+                    }
+                    tmp_psm_query_list.clear();
                 }
             }
         }
@@ -6711,7 +6887,7 @@ public class AIGear {
      * @param apex_rt Apex retention time
      * @return Index of the closest retention time
      */
-    private int get_rt_index(List<Double> rts, boolean unit_second, double apex_rt){
+    public int get_rt_index(List<Double> rts, boolean unit_second, double apex_rt){
         double min_diff = Double.POSITIVE_INFINITY;
         int index = -1;
         double rt;
@@ -7539,7 +7715,7 @@ public class AIGear {
      * @param peptide Peptide sequence
      * @return A string containing the modification information
      */
-    String get_modification_diann(String mod_seq, String peptide){
+    public String get_modification_diann(String mod_seq, String peptide){
         // AAAAC(UniMod:4)LDK2
         // AGEVLNQPM(UniMod:35)MMAAR2
         // AAAAAAAATMALAAPS(UniMod:21)SPTPESPTMLTK
@@ -7691,7 +7867,7 @@ public class AIGear {
      * @param ion_valid_matrix Ion intensity valid matrix. The same shape with ion_intensity_matrix
      * @return The number of valid fragment ions
      */
-    private int get_n_valid_fragment_ions(double [][] ion_intensity_matrix, int [][] ion_valid_matrix){
+    public int get_n_valid_fragment_ions(double [][] ion_intensity_matrix, int [][] ion_valid_matrix){
         int n = 0;
         for (int i = 0; i < ion_intensity_matrix.length; i++) {
             for (int j = 0; j < ion_intensity_matrix[i].length; j++) {
@@ -7708,7 +7884,7 @@ public class AIGear {
      * @param ion_intensity_matrix Ion intensity matrix
      * @return The number of matched fragment ions
      */
-    private int get_n_matched_fragment_ions(double [][] ion_intensity_matrix){
+    public int get_n_matched_fragment_ions(double [][] ion_intensity_matrix){
         int n = 0;
         for (int i = 0; i < ion_intensity_matrix.length; i++) {
             for (int j = 0; j < ion_intensity_matrix[i].length; j++) {
@@ -7725,7 +7901,7 @@ public class AIGear {
      * @param modification A modification string. Multiple modifications are separated by ";".
      * @return An array of two strings: the first string contains modification names, and the second string contains modification positions.
      */
-    private String[] convert_modification(String modification){
+    public String[] convert_modification(String modification){
         if(modification.equalsIgnoreCase("-")){
             return new String[]{"",""};
         }else {
@@ -8655,7 +8831,7 @@ public class AIGear {
         }
     }
 
-    private void xic_query_ccs(XICQueryResult xicQueryResult, double[] matched_mzs, PeptideMatch peptideMatch, CCSDIAIndex ms2index) {
+    public void xic_query_ccs(XICQueryResult xicQueryResult, double[] matched_mzs, PeptideMatch peptideMatch, CCSDIAIndex ms2index) {
         LibSpectrum libSpectrum = peptideMatch.libSpectrum;
         boolean is_ppm = CParameter.itolu.equalsIgnoreCase("ppm");
         // only contain fragment ions with intensity > 0 from spectra query
@@ -8797,19 +8973,21 @@ public class AIGear {
                 }
 
                 if(peak.boundary_right_index >= peak.apex_index) {
-
+                    boolean refined_peak_boundary = false;
                     try {
                         if(refine_peak_boundary){
                             long original_peak_index = peak.apex_index;
                             long boundary_left_index = peak.boundary_left_index;
                             long boundary_right_index = peak.boundary_right_index;
                             boolean is_refined = refine_peak_boundary_detection_ccs(pepXIC_smoothed, peak, xicQueryResult, libSpectrum);
+
                             if(is_refined){
                                 if(peak.boundary_left_index <= original_peak_index && original_peak_index <= peak.boundary_right_index ){
                                     //peak.apex_index = original_peak_index;
                                     peptideMatch.rt_start = peak.boundary_left_rt;
                                     peptideMatch.rt_end = peak.boundary_right_rt;
                                     peptideMatch.rt_apex = peak.apex_rt;
+                                    refined_peak_boundary = true;
                                 }else{
                                     System.err.println("The original apex index is not in the refined peak boundary:"+
                                             xicQueryResult.id+","+
@@ -8839,7 +9017,17 @@ public class AIGear {
                                 System.out.println("No refining: "+xicQueryResult.id+"\t"+peptideMatch.index+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
                             }
                         }
-                        peak.cor_to_best_ion = ms2index.detect_best_ion(pepXIC_smoothed, (int) peak.boundary_left_index, (int) peak.boundary_right_index, (int) peak.apex_index, peptideMatch);
+                        if(refined_peak_boundary){
+                            // when peak is refined successfully, use the best ion already calculated in the refining step
+                            if(peak.best_ion_index >=0) {
+                                peak.cor_to_best_ion = ms2index.detect_best_ion(pepXIC_smoothed, (int) peak.boundary_left_index, (int) peak.boundary_right_index, (int) peak.apex_index, peptideMatch, peak.best_ion_index);
+                            }else{
+                                peak.cor_to_best_ion = ms2index.detect_best_ion(pepXIC_smoothed, (int) peak.boundary_left_index, (int) peak.boundary_right_index, (int) peak.apex_index, peptideMatch);
+                            }
+                        }else {
+                            // when peak is not refined, calculate the best ion using all fragment ions
+                            peak.cor_to_best_ion = ms2index.detect_best_ion(pepXIC_smoothed, (int) peak.boundary_left_index, (int) peak.boundary_right_index, (int) peak.apex_index, peptideMatch);
+                        }
                         peptideMatch.peak = peak;
                         for (int j = 0; j < fragment_ions.size(); j++) {
                             peptideMatch.mz2cor.put(fragment_ions.get(j), peak.cor_to_best_ion[j]);
@@ -8850,6 +9038,7 @@ public class AIGear {
                         peptideMatch.smoothed_fragment_intensities = pepXIC_smoothed;
                         peptideMatch.raw_fragment_intensities = frag_int;
                         peptideMatch.xic_rt_values = index2rt;
+                        peptideMatch.rt_apex = xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0;
                     } catch (NumberIsTooSmallException e) {
                         System.out.println("index_start: " + peak.boundary_left_index);
                         System.out.println("index_end: " + peak.boundary_right_index);
@@ -9123,7 +9312,12 @@ public class AIGear {
                 scan_index[k] = i;
                 k = k + 1;
             }
-            RealMatrix new_x = x.getSubMatrix(sorted_index2intensity.keySet().stream().mapToInt(i -> i).toArray(), scan_index);
+            // get the sorted keys of sorted_index2intensity to an int[]
+            int [] top_ion_indices = sorted_index2intensity.keySet().stream().mapToInt(i -> i).toArray();
+            // sort the int[] in ascending order: small to large
+            Arrays.sort(top_ion_indices);
+            // new_x only contain the top 12 fragment ions
+            RealMatrix new_x = x.getSubMatrix(top_ion_indices, scan_index);
             double[] median_peaks = new double[n_scans];
             if (sorted_index2intensity.size() == 1) {
                 median_peaks = new_x.getRow(0);
@@ -9143,8 +9337,6 @@ public class AIGear {
                 // check if any of the boundaries overlaps with the apex index
                 if(peak.boundary_left_index==peak.apex_index){
                     // move left boundary
-                    // Cloger.getInstance().logger.info(xicQueryResult.id);
-                    // Cloger.getInstance().logger.info("Left boundary overlaps with apex index, adjusting...");
                     double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
                     double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
                     PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
@@ -9152,8 +9344,6 @@ public class AIGear {
                     peak.apex_index = tmp_peak.apex_index;
                 }else if(peak.boundary_right_index==peak.apex_index){
                     // move right boundary
-                    // Cloger.getInstance().logger.info(xicQueryResult.id);
-                    // Cloger.getInstance().logger.info("Right boundary overlaps with apex index, adjusting...");
                     double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
                     double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
                     PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
@@ -9166,73 +9356,30 @@ public class AIGear {
                 xiCtool.refine_peak(new_x,peak,peak.cor_to_best_ion,0.75,false);
                 if(peak.boundary_left_index==peak.apex_index){
                     // move left boundary
-                    // Cloger.getInstance().logger.info(xicQueryResult.id);
-                    // Cloger.getInstance().logger.info("Left boundary overlaps with apex index, adjusting...");
                     double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
                     double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
                     PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
                     peak.boundary_left_index = tmp_peak.boundary_left_index;
                     peak.apex_index = tmp_peak.apex_index;
-                    // print out peak.cor_to_best_ion
-                    // System.out.println();
-                    // for(int i=0;i<peak.cor_to_best_ion.length;i++){
-                    //     System.out.print(String.format("%.4f",peak.cor_to_best_ion[i])+"\t");
-                    // }
-                    // System.out.println();
                     peak.cor_to_best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
-                    // print out peak.cor_to_best_ion
-                    // for(int i=0;i<peak.cor_to_best_ion.length;i++){
-                    //     System.out.print(String.format("%.4f",peak.cor_to_best_ion[i])+"\t");
-                    // }
-                    // System.out.println();
-                    // System.out.println();
-                    // System.out.println();
                 }else if(peak.boundary_right_index==peak.apex_index){
                     // move right boundary
-                    // Cloger.getInstance().logger.info(xicQueryResult.id);
-                    // Cloger.getInstance().logger.info("Right boundary overlaps with apex index, adjusting...");
                     double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
                     double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
                     PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
                     peak.boundary_right_index = tmp_peak.boundary_right_index;
                     peak.apex_index = tmp_peak.apex_index;
-                    // print out peak.cor_to_best_ion
-                    // System.out.println();
-                    // for(int i=0;i<peak.cor_to_best_ion.length;i++){
-                    //     System.out.print(String.format("%.4f",peak.cor_to_best_ion[i])+"\t");
-                    // }
-                    // System.out.println();
                     peak.cor_to_best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
-                    // print out peak.cor_to_best_ion
-                    // for(int i=0;i<peak.cor_to_best_ion.length;i++){
-                    //     System.out.print(String.format("%.4f",peak.cor_to_best_ion[i])+"\t");
-                    // }
-                    // System.out.println();
-                    // System.out.println();
-                    // System.out.println();
                 }
                 // check if peak boundaries still valid
                 double [] tmp_cor2best_ion = xiCtool.detect_best_ion(new_x,(int) peak.boundary_left_index, (int) peak.boundary_right_index,(int) peak.apex_index);
                 double [] best_ion_xic = xiCtool.get_best_ion_xic(new_x, xiCtool.get_max_index(tmp_cor2best_ion));
-                // if(xicQueryResult.id==11006){
-                //     System.out.println("best ion mz:"+peak.fragment_ions_mz.get(xiCtool.get_max_index(tmp_cor2best_ion)));
-                //     System.out.println(peak.boundary_left_index+"\t"+peak.apex_index+"\t"+peak.boundary_right_index);
-                //     System.out.println(xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0+"\t"+
-                //             xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0+"\t"+
-                //             xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0);
-                // }
+
                 PeptidePeak tmp_peak = xiCtool.find_max_peak_v2(best_ion_xic,(int) peak.apex_index);
                 peak.boundary_left_index = tmp_peak.boundary_left_index;
                 peak.apex_index = tmp_peak.apex_index;
                 peak.boundary_right_index = tmp_peak.boundary_right_index;
-                // debug only
-                // if(xicQueryResult.id==11006){
-                //     System.out.println("best ion mz:"+peak.fragment_ions_mz.get(xiCtool.get_max_index(tmp_cor2best_ion)));
-                //     System.out.println(peak.boundary_left_index+"\t"+peak.apex_index+"\t"+peak.boundary_right_index);
-                //     System.out.println(xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0+"\t"+
-                //             xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0+"\t"+
-                //             xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0);
-                // }
+                peak.best_ion_index = top_ion_indices[xiCtool.get_max_index(tmp_cor2best_ion)];
 
                 peak.boundary_left_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0;
                 peak.boundary_right_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0;
@@ -9313,7 +9460,7 @@ public class AIGear {
      * @param ionMatch A IonMatch object which contains the information for a single fragment ion match
      * @return The column index of the ion type in the fragment ion intensity matrix.
      */
-    private int get_ion_type_column_index(IonMatch ionMatch){
+    public int get_ion_type_column_index(IonMatch ionMatch){
         String ion_type = "";
         if(ionMatch.ion.getSubType() == PeptideFragmentIon.B_ION){
             ion_type = "b";
@@ -9354,7 +9501,7 @@ public class AIGear {
      * @param charge The charge state of the fragment ion
      * @return The column index of the ion type in the fragment ion intensity matrix.
      */
-    private int get_ion_type_column_index(Ion ion, int charge){
+    public int get_ion_type_column_index(Ion ion, int charge){
         String ion_type = "";
         if(ion.getSubType() == PeptideFragmentIon.B_ION){
             ion_type = "b";
@@ -9395,7 +9542,7 @@ public class AIGear {
      * @param max_fragment_ion_charge The maximum fragment ion charge to consider
      * @param lossWaterNH3 A boolean value indicating whether to consider neutral losses of water and ammonia
      */
-    private void set_ion_type_column_index(String fragmentation_type, int max_fragment_ion_charge, boolean lossWaterNH3){
+    public void set_ion_type_column_index(String fragmentation_type, int max_fragment_ion_charge, boolean lossWaterNH3){
         if(fragmentation_type.equalsIgnoreCase("hcd") || fragmentation_type.equalsIgnoreCase("cid")){
             ArrayList<String> col_names = new ArrayList<>();
 
@@ -9671,9 +9818,10 @@ public class AIGear {
      * @param xic_data A XICQueryResult object containing the matched fragment ion information
      * @param max_fragment_ion_charge Maximum fragment ion charge state to consider
      * @param lossWaterNH3 A boolean value indicating whether to consider neutral losses of water and ammonia
-     * @return An ArrayList containing the matched fragment ion information.
+     * @param ion_matches An ArrayList to store the matched fragment ion information
+     * @return The apex retention time of the peptide precursor in minute. A value of -1 indicates no matched ions found.
      */
-    private ArrayList<IonMatch> get_matched_ions(Peptide objPeptide, int precursor_charge, double apex_rt_in_seconds, XICQueryResult xic_data, int max_fragment_ion_charge, boolean lossWaterNH3) {
+    public double get_matched_ions(Peptide objPeptide, int precursor_charge, double apex_rt_in_seconds, XICQueryResult xic_data, int max_fragment_ion_charge, boolean lossWaterNH3, ArrayList<IonMatch> ion_matches) {
 
         PeptideSpectrumAnnotator peptideSpectrumAnnotator = new PeptideSpectrumAnnotator();
 
@@ -9761,23 +9909,61 @@ public class AIGear {
             }
         }
 
-        ArrayList<IonMatch> ion_matches = new ArrayList<>();
+        // move to both sides to find the closest RT with matched ions if no matched ions found at the apex RT
+        if(fragment_mz2intensity.isEmpty()){
+            int left_index = apex_rt_index - 1;
+            int right_index = apex_rt_index + 1;
+            // get the sum of fragment ion intensities at each RT and pick the RT with the highest sum
+            double left_sum = 0.0;
+            double right_sum = 0.0;
+            for(int i=0;i<xic_data.fragment_mzs.size();i++){
+                if(xic_data.fragment_intensities.get(i).get(left_index)>0) {
+                    left_sum = left_sum + xic_data.fragment_intensities.get(i).get(left_index);
+                }
+            }
+            for(int i=0;i<xic_data.fragment_mzs.size();i++){
+                if(xic_data.fragment_intensities.get(i).get(right_index)>0) {
+                    right_sum = right_sum + xic_data.fragment_intensities.get(i).get(right_index);
+                }
+            }
+
+            if(left_sum>=right_sum && left_sum>0){
+                apex_rt_index = left_index;
+                for(int i=0;i<xic_data.fragment_mzs.size();i++){
+                    if(xic_data.fragment_intensities.get(i).get(apex_rt_index)>0) {
+                        fragment_mz2intensity.put(xic_data.fragment_mzs.get(i), xic_data.fragment_intensities.get(i).get(apex_rt_index));
+                    }
+                }
+            }else if(right_sum>left_sum && right_sum>0) {
+                apex_rt_index = right_index;
+                for (int i = 0; i < xic_data.fragment_mzs.size(); i++) {
+                    if (xic_data.fragment_intensities.get(i).get(apex_rt_index) > 0) {
+                        fragment_mz2intensity.put(xic_data.fragment_mzs.get(i), xic_data.fragment_intensities.get(i).get(apex_rt_index));
+                    }
+                }
+            }
+        }
+
+        // ArrayList<IonMatch> ion_matches = new ArrayList<>();
 
         HashMap<Integer, ArrayList<Ion>> theoretical_ions = this.generate_theoretical_fragment_ions(objPeptide,precursor_charge);
         HashSet<Integer> possible_fragment_ion_charges = this.getPossibleFragmentIonCharges(precursor_charge);
+        // This is used to avoid adding the same matched ion multiple times
+        HashSet<Double> matched_mzs = new HashSet<>();
         for(int k: theoretical_ions.keySet()){
             for(Ion ion: theoretical_ions.get(k)){
                 if(ion.getSubType() == PeptideFragmentIon.B_ION || ion.getSubType() == PeptideFragmentIon.Y_ION){
                     PeptideFragmentIon fragmentIon = ((PeptideFragmentIon) ion);
                     for(int frag_charge: possible_fragment_ion_charges){
                         double frag_mz = fragmentIon.getTheoreticMz(frag_charge);
-                        if(fragment_mz2intensity.containsKey(frag_mz)) {
+                        if(fragment_mz2intensity.containsKey(frag_mz) && !matched_mzs.contains(frag_mz)) {
                             IonMatch ionMatch = new IonMatch();
                             ionMatch.ion = ion;
                             ionMatch.charge = frag_charge;
                             ionMatch.peakIntensity = fragment_mz2intensity.get(frag_mz);
                             ionMatch.peakMz = frag_mz;
                             ion_matches.add(ionMatch);
+                            matched_mzs.add(frag_mz);
                         }
                     }
                 }
@@ -9787,9 +9973,149 @@ public class AIGear {
 
         if (ion_matches.isEmpty()) {
             System.err.println("No ions matched!");
-            return (new ArrayList<>());
+            // return (new ArrayList<>());
+            return -1;
         }else{
-            return ion_matches;
+            // return ion_matches;
+            return xic_data.retention_time_results_seconds.get(apex_rt_index)/60.0;
+        }
+
+    }
+
+
+    /**
+     * Get the matched fragment ions for a given peptide and spectrum: considering RT range (all matches within the peak boundary).
+     * @param objPeptide A Peptide object containing peptide sequence and modification information
+     * @param precursor_charge Precursor charge state
+     * @param apex_rt_in_seconds The apex retention time of the peptide precursor
+     * @param start_rt_in_seconds The start retention time of the peptide precursor
+     * @param end_rt_in_seconds The end retention time of the peptide precursor
+     * @param xic_data A XICQueryResult object containing the matched fragment ion information
+     * @param max_fragment_ion_charge Maximum fragment ion charge state to consider
+     * @param lossWaterNH3 A boolean value indicating whether to consider neutral losses of water and ammonia
+     * @param ion_matches An ArrayList to store the matched fragment ion information
+     * @return The apex retention time of the peptide precursor in minute. A value of -1 indicates no matched ions found.
+     */
+    public double get_matched_ions(Peptide objPeptide, int precursor_charge, double apex_rt_in_seconds, double start_rt_in_seconds, double end_rt_in_seconds,  XICQueryResult xic_data, int max_fragment_ion_charge, boolean lossWaterNH3, ArrayList<IonMatch> ion_matches) {
+
+        PeptideSpectrumAnnotator peptideSpectrumAnnotator = new PeptideSpectrumAnnotator();
+
+        // int charge = spectrum.getPrecursor().possibleCharges[0];
+        PeptideAssumption peptideAssumption = new PeptideAssumption(objPeptide, precursor_charge);
+        SpecificAnnotationParameters specificAnnotationPreferences = new SpecificAnnotationParameters();
+
+        HashSet<Integer> charges = new HashSet<>(4);
+        int precursorCharge = peptideAssumption.getIdentificationCharge();
+        if (precursorCharge <= 1) {
+            charges.add(precursorCharge);
+        } else {
+            int cur_max_fragment_ion_charge = Math.min(precursorCharge, max_fragment_ion_charge);
+            if(this.fragment_ion_charge_less_than_precursor_charge) {
+                if (precursor_charge >= 2 && precursorCharge == cur_max_fragment_ion_charge) {
+                    cur_max_fragment_ion_charge = cur_max_fragment_ion_charge - 1;
+                }
+            }
+            for (int c = 1; c <= cur_max_fragment_ion_charge; c++) {
+                charges.add(c);
+            }
+        }
+        specificAnnotationPreferences.setSelectedCharges(charges);
+
+        specificAnnotationPreferences.addIonType(Ion.IonType.PEPTIDE_FRAGMENT_ION, PeptideFragmentIon.B_ION);
+        specificAnnotationPreferences.addIonType(Ion.IonType.PEPTIDE_FRAGMENT_ION, PeptideFragmentIon.Y_ION);
+        specificAnnotationPreferences.setFragmentIonAccuracy(CParameter.itol);
+        specificAnnotationPreferences.setFragmentIonPpm(CParameter.itolu.startsWith("ppm"));
+        specificAnnotationPreferences.setNeutralLossesAuto(false);
+        specificAnnotationPreferences.clearNeutralLosses();
+        // this is important
+        specificAnnotationPreferences.setPrecursorCharge(precursorCharge);
+
+        if (lossWaterNH3) {
+            specificAnnotationPreferences.addNeutralLoss(NeutralLoss.H2O);
+            specificAnnotationPreferences.addNeutralLoss(NeutralLoss.NH3);
+        }
+
+        AnnotationParameters annotationSettings = new AnnotationParameters();
+        // annotationSettings.setTiesResolution(SpectrumAnnotator.TiesResolution.mostIntense);
+        annotationSettings.setTiesResolution(SpectrumAnnotator.TiesResolution.mostAccurateMz);
+        annotationSettings.setFragmentIonAccuracy(CParameter.itol);
+        annotationSettings.setFragmentIonPpm(CParameter.itolu.startsWith("p"));
+        annotationSettings.setIntensityLimit(CParameter.fragment_ion_intensity_cutoff);
+        annotationSettings.setNeutralLossesSequenceAuto(false);
+        annotationSettings.setIntensityThresholdType(AnnotationParameters.IntensityThresholdType.percentile);
+
+
+        if(this.mod_ai.equals("general") || this.mod_ai.equals("-")) {
+            // no any neutral loss
+        }else if(this.mod_ai.equals("phosphorylation")) {
+            if (ModificationUtils.getInstance().getModificationString(objPeptide).toLowerCase().contains("phosphorylation") ||
+                    ModificationUtils.getInstance().getModificationString(objPeptide).toLowerCase().contains("phospho")) {
+                //annotationSettings.addNeutralLoss(NeutralLoss.H3PO4);
+                specificAnnotationPreferences.setNeutralLossesMap(getNeutralLossesMap(objPeptide));
+                //annotationSettings.addNeutralLoss(NeutralLoss.HPO3);
+                //specificAnnotationPreferences.addNeutralLoss(NeutralLoss.H3PO4);
+                //specificAnnotationPreferences.addNeutralLoss(NeutralLoss.HPO3);
+            }
+        }else{
+            // TODO
+        }
+
+        annotationSettings.setIntensityThresholdType(AnnotationParameters.IntensityThresholdType.percentile);
+
+        ModificationParameters modificationParameters = new ModificationParameters();
+        SequenceMatchingParameters sequenceMatchingParameters = new SequenceMatchingParameters();
+        JSequenceProvider jSequenceProvider = new JSequenceProvider();
+
+        HashMap<Double,Double> fragment_mz2intensity = new HashMap<>();
+        double [] intensity_list = new double[xic_data.fragment_mzs.size()];
+        for(int i=0;i<xic_data.retention_time_results_seconds.size();i++){
+            if(xic_data.retention_time_results_seconds.get(i) >= start_rt_in_seconds && xic_data.retention_time_results_seconds.get(i) <= end_rt_in_seconds) {
+                for (int j = 0; j < xic_data.fragment_mzs.size(); j++) {
+                    intensity_list[j] = intensity_list[j] + xic_data.fragment_intensities.get(j).get(i);
+                }
+            }
+        }
+        // int apex_rt_index = Collections.binarySearch(xic_data.retention_time_results_seconds, apex_rt_in_seconds);
+        for(int i=0;i<xic_data.fragment_mzs.size();i++){
+            if(intensity_list[i]>0) {
+                fragment_mz2intensity.put(xic_data.fragment_mzs.get(i), intensity_list[i]);
+            }
+        }
+
+        // ArrayList<IonMatch> ion_matches = new ArrayList<>();
+
+        HashMap<Integer, ArrayList<Ion>> theoretical_ions = this.generate_theoretical_fragment_ions(objPeptide,precursor_charge);
+        HashSet<Integer> possible_fragment_ion_charges = this.getPossibleFragmentIonCharges(precursor_charge);
+        // This is used to avoid adding the same matched ion multiple times
+        HashSet<Double> matched_mzs = new HashSet<>();
+        for(int k: theoretical_ions.keySet()){
+            for(Ion ion: theoretical_ions.get(k)){
+                if(ion.getSubType() == PeptideFragmentIon.B_ION || ion.getSubType() == PeptideFragmentIon.Y_ION){
+                    PeptideFragmentIon fragmentIon = ((PeptideFragmentIon) ion);
+                    for(int frag_charge: possible_fragment_ion_charges){
+                        double frag_mz = fragmentIon.getTheoreticMz(frag_charge);
+                        if(fragment_mz2intensity.containsKey(frag_mz) && !matched_mzs.contains(frag_mz)) {
+                            IonMatch ionMatch = new IonMatch();
+                            ionMatch.ion = ion;
+                            ionMatch.charge = frag_charge;
+                            ionMatch.peakIntensity = fragment_mz2intensity.get(frag_mz);
+                            ionMatch.peakMz = frag_mz;
+                            ion_matches.add(ionMatch);
+                            matched_mzs.add(frag_mz);
+                        }
+                    }
+                }
+            }
+        }
+
+
+        if (ion_matches.isEmpty()) {
+            System.err.println("No ions matched!");
+            // return (new ArrayList<>());
+            return -1;
+        }else{
+            // return ion_matches;
+            return apex_rt_in_seconds/60.0;
         }
 
     }
@@ -9835,7 +10161,7 @@ public class AIGear {
      * @param modification Peptide modification
      * @return A Peptide object.
      */
-    Peptide get_peptide(String peptide_sequence, String modification){
+    public Peptide get_peptide(String peptide_sequence, String modification){
         String peptide_mod = peptide_sequence + modification;
         return peptide_mod2Peptide.get(peptide_mod);
     }
@@ -9846,7 +10172,7 @@ public class AIGear {
      * @param peptide_sequence Peptide sequence
      * @param modification Peptide modification
      */
-    void add_peptide(String peptide_sequence, String modification){
+    public void add_peptide(String peptide_sequence, String modification){
         String peptide_mod = peptide_sequence + modification;
         if(!this.peptide_mod2Peptide.containsKey(peptide_mod)){
             Peptide peptide = generatePeptide(peptide_sequence,modification);
@@ -10593,7 +10919,7 @@ public class AIGear {
      * @param precursor_charge Precursor charge state
      * @return A HashMap<Integer, ArrayList<Ion>> containing the theoretical fragment ions.
      */
-    private HashMap<Integer, ArrayList<Ion>> generate_theoretical_fragment_ions(Peptide peptide, int precursor_charge){
+    public HashMap<Integer, ArrayList<Ion>> generate_theoretical_fragment_ions(Peptide peptide, int precursor_charge){
         // generate theoretical fragment ions.
         PeptideFrag peptideFrag = new PeptideFrag();
         peptideFrag.init(precursor_charge, peptide, this.mod_ai);
@@ -10606,7 +10932,7 @@ public class AIGear {
      * @param precursorCharge Precursor charge state
      * @return A HashSet<Integer> containing possible fragment ion charges.
      */
-    private HashSet<Integer> getPossibleFragmentIonCharges(int precursorCharge) {
+    public HashSet<Integer> getPossibleFragmentIonCharges(int precursorCharge) {
         HashSet<Integer> charges = new HashSet<>(4);
         if (precursorCharge <= 1) {
             charges.add(precursorCharge);

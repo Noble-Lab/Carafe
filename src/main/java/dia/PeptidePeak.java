@@ -13,6 +13,10 @@ public class PeptidePeak {
     public double boundary_right_rt;
     public double [] cor_to_best_ion = new double[0];
     public List<Double> fragment_ions_mz;
+    /**
+     * The index of the best fragment ion.
+     */
+    public int best_ion_index = -1;
 
 
 
