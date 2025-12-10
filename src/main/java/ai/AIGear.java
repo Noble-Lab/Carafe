@@ -83,10 +83,7 @@ import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.IntStream;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
@@ -999,7 +996,8 @@ public class AIGear {
                 Cloger.getInstance().set_job_start_time();
                 Map<String, HashMap<String, String>> res_files = aiGear.generate_spectral_library(model_dir);
                 if (cmd.hasOption("tf") && cmd.getOptionValue("tf").equalsIgnoreCase("test")) {
-                    aiGear.generate_multiple_library(res_files);
+                    //aiGear.generate_multiple_library(res_files);
+                    aiGear.generate_multiple_library_parallel(res_files);
                 } else {
                     aiGear.generate_spectral_library(res_files);
                 }
@@ -1039,7 +1037,8 @@ public class AIGear {
                 Cloger.getInstance().set_job_start_time();
                 Map<String, HashMap<String, String>> res_files = aiGear.generate_spectral_library(model_dir);
                 if (cmd.hasOption("tf") && cmd.getOptionValue("tf").equalsIgnoreCase("test")) {
-                    aiGear.generate_multiple_library(res_files);
+                    // aiGear.generate_multiple_library(res_files);
+                    aiGear.generate_multiple_library_parallel(res_files);
                 } else {
                     aiGear.generate_spectral_library(res_files);
                 }
@@ -1237,6 +1236,199 @@ public class AIGear {
         }
 
 
+    }
+
+
+    /**
+     * Generate multiple spectral libraries for different models based on the provided resource files in parallel.
+     * This is an optimized version that uses multithreading to speed up the process. It is expected to generate
+     * the same results as the generate_multiple_library method.
+     * @param res_files A HashMap containing data files used for spectral library generation.
+     */
+    public void generate_multiple_library_parallel(Map<String, HashMap<String, String>> res_files) {
+
+        // 0. Add protein information to files
+        try {
+            this.add_protein_to_psm_table(res_files);
+            Map<String, HashMap<String, String>> p_res_files = new LinkedHashMap<>();
+            for (String i : res_files.keySet()) {
+                p_res_files.put(i, new HashMap<>());
+                String ms2_file = res_files.get(i).get("ms2");
+                File F = new File(ms2_file);
+                // get the folder of file ms2_file
+                String folder = F.getParent() + File.separator + "pretrained_models";
+                p_res_files.get(i).put("ms2", get_file_path(ms2_file, folder));
+            }
+            this.add_protein_to_psm_table(p_res_files);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        // 1. Create the thread pool manually
+        // Fixed pool of 5 because we have a known max number of library types
+        int n_threads = ccs_enabled?5:4;
+        n_threads = Math.min(n_threads, Runtime.getRuntime().availableProcessors());
+        ExecutorService executor = Executors.newFixedThreadPool(n_threads);
+
+        // 2. Define the tasks list
+        List<Callable<Void>> tasks = new ArrayList<>();
+
+        // --- Task 1: Standard Spectral Library ---
+        tasks.add(() -> {
+            try {
+                generate_spectral_library(res_files);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            return null;
+        });
+
+        // --- Task 2: Pretrained Model ---
+        tasks.add(() -> {
+            Map<String, HashMap<String, String>> p_res_files = new LinkedHashMap<>();
+            for (String i : res_files.keySet()) {
+                System.out.println("Pretrained: " + i);
+                p_res_files.put(i, new HashMap<>());
+                String ms2_file = res_files.get(i).get("ms2");
+                String ms2_intensity_file = res_files.get(i).get("ms2_intensity");
+                String rt_file = res_files.get(i).get("rt");
+                String ms2_mz_file = res_files.get(i).get("ms2_mz");
+
+                File F = new File(ms2_file);
+                // get the folder of file ms2_file
+                String folder = F.getParent() + File.separator + "pretrained_models";
+
+                p_res_files.get(i).put("ms2", get_file_path(ms2_file, folder));
+                p_res_files.get(i).put("ms2_intensity", get_file_path(ms2_intensity_file, folder));
+                p_res_files.get(i).put("rt", get_file_path(rt_file, folder));
+                p_res_files.get(i).put("ms2_mz", get_file_path(ms2_mz_file, folder));
+
+                if (ccs_enabled) {
+                    String ccs_file = res_files.get(i).get("ccs");
+                    p_res_files.get(i).put("ccs", get_file_path(ccs_file, folder));
+                }
+            }
+            run_spectral_library_generation(p_res_files, "SkylineAI_spectral_library_pretrained.tsv");
+            return null;
+        });
+
+        // --- Task 3: RT Only Model ---
+        tasks.add(() -> {
+            Map<String, HashMap<String, String>> p_res_files = new LinkedHashMap<>();
+            for (String i : res_files.keySet()) {
+                System.out.println("RT Only: " + i);
+                p_res_files.put(i, new HashMap<>());
+                String ms2_file = res_files.get(i).get("ms2");
+                String ms2_intensity_file = res_files.get(i).get("ms2_intensity");
+                String rt_file = res_files.get(i).get("rt");
+                String ms2_mz_file = res_files.get(i).get("ms2_mz");
+
+                File F = new File(ms2_file);
+                // get the folder of file ms2_file
+                String folder = F.getParent() + File.separator + "pretrained_models";
+                p_res_files.get(i).put("ms2", get_file_path(ms2_file, folder));
+                p_res_files.get(i).put("ms2_intensity", get_file_path(ms2_intensity_file, folder));
+                // Using fine-tuned RT model
+                p_res_files.get(i).put("rt", rt_file);
+                p_res_files.get(i).put("ms2_mz", get_file_path(ms2_mz_file, folder));
+
+                if (ccs_enabled) {
+                    String ccs_file = res_files.get(i).get("ccs");
+                    p_res_files.get(i).put("ccs", get_file_path(ccs_file, folder));
+                }
+            }
+            run_spectral_library_generation(p_res_files, "SkylineAI_spectral_library_rt_only.tsv");
+            return null;
+        });
+
+        // --- Task 4: MS2 Only Model ---
+        tasks.add(() -> {
+            Map<String, HashMap<String, String>> p_res_files = new LinkedHashMap<>();
+            for (String i : res_files.keySet()) {
+                System.out.println("MS2 Only: " + i);
+                p_res_files.put(i, new HashMap<>());
+                String ms2_file = res_files.get(i).get("ms2");
+                String ms2_intensity_file = res_files.get(i).get("ms2_intensity");
+                String rt_file = res_files.get(i).get("rt");
+                String ms2_mz_file = res_files.get(i).get("ms2_mz");
+
+                File F = new File(ms2_file);
+                // get the folder of file ms2_file
+                String folder = F.getParent() + File.separator + "pretrained_models";
+                // Using fine-tuned MS2 model
+                p_res_files.get(i).put("ms2", ms2_file);
+                p_res_files.get(i).put("ms2_intensity", ms2_intensity_file);
+                p_res_files.get(i).put("rt", get_file_path(rt_file, folder));
+                p_res_files.get(i).put("ms2_mz", ms2_mz_file);
+
+                if (ccs_enabled) {
+                    String ccs_file = res_files.get(i).get("ccs");
+                    p_res_files.get(i).put("ccs", get_file_path(ccs_file, folder));
+                }
+            }
+            run_spectral_library_generation(p_res_files, "SkylineAI_spectral_library_ms2_only.tsv");
+            return null;
+        });
+
+        // --- Task 5: CCS Only Model ---
+        if (ccs_enabled) {
+            tasks.add(() -> {
+                Map<String, HashMap<String, String>> p_res_files = new LinkedHashMap<>();
+                for (String i : res_files.keySet()) {
+                    System.out.println("CCS Only: " + i);
+                    p_res_files.put(i, new HashMap<>());
+                    String ms2_file = res_files.get(i).get("ms2");
+                    String ms2_intensity_file = res_files.get(i).get("ms2_intensity");
+                    String rt_file = res_files.get(i).get("rt");
+                    String ms2_mz_file = res_files.get(i).get("ms2_mz");
+                    String ccs_file = res_files.get(i).get("ccs");
+
+                    File F = new File(ms2_file);
+                    // get the folder of file ms2_file
+                    String folder = F.getParent() + File.separator + "pretrained_models";
+                    p_res_files.get(i).put("ms2", get_file_path(ms2_file, folder));
+                    p_res_files.get(i).put("ms2_intensity", get_file_path(ms2_intensity_file, folder));
+                    p_res_files.get(i).put("rt", get_file_path(rt_file, folder));
+                    p_res_files.get(i).put("ms2_mz", get_file_path(ms2_mz_file, folder));
+                    // Using fine-tuned CCS model
+                    p_res_files.get(i).put("ccs", ccs_file);
+                }
+                run_spectral_library_generation(p_res_files, "SkylineAI_spectral_library_ccs_only.tsv");
+                return null;
+            });
+        }
+
+        // --- 3. Execute with classic Try/Catch/Finally ---
+        try {
+            List<Future<Void>> futures = executor.invokeAll(tasks);
+
+            // Wait for all tasks to verify no exceptions occurred
+            for (Future<Void> future : futures) {
+                future.get();
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Error during parallel library generation", e);
+        } finally {
+            // Essential: This ensures the threads are killed even if the tasks fail
+            executor.shutdown();
+        }
+    }
+
+    /**
+     * Helper method for generate_multiple_library_parallel above.
+     */
+    private void run_spectral_library_generation(Map<String, HashMap<String, String>> files, String spectral_library_file_name) throws IOException, SQLException {
+        if (this.use_parquet) {
+            if (this.export_spectral_library_format.equalsIgnoreCase("Skyline")) {
+                generate_spectral_library_parquet_skyline(files, out_dir, spectral_library_file_name);
+            } else if (this.export_spectral_library_format.equalsIgnoreCase("mzSpecLib")) {
+                generate_spectral_library_parquet_mzSpecLib(files, out_dir, spectral_library_file_name);
+            } else {
+                generate_spectral_library_parquet(files, out_dir, spectral_library_file_name);
+            }
+        } else {
+            generate_spectral_library(files, out_dir, spectral_library_file_name);
+        }
     }
 
     /**
@@ -11366,6 +11558,30 @@ public class AIGear {
             ms2IntensityReader.close();
         }
         libWriter.close();
+    }
+
+    /**
+     * Add protein information to PSM tables if the protein column is missing.
+     * @param res_files A Map<String,HashMap<String,String>> containing prediction data used for spectral library generation
+     * @throws IOException If an I/O error occurs
+     */
+    public void add_protein_to_psm_table(Map<String,HashMap<String,String>> res_files) throws IOException {
+        DBGear dbGear = new DBGear();
+        for(String i : res_files.keySet()){
+            Cloger.getInstance().logger.info(i);
+            String ms2_file = res_files.get(i).get("ms2");
+            if(ms2_file.endsWith("parquet")){
+                // TODO
+                System.err.println("Parquet is not supported in this function!");
+                System.exit(1);
+            }else{
+                if(!get_column_name2index(ms2_file).containsKey("protein")){
+                    if(CParameter.db.toLowerCase().endsWith(".fa") || CParameter.db.toLowerCase().endsWith(".fasta")) {
+                        dbGear.add_protein_to_psm_table(ms2_file, CParameter.db);
+                    }
+                }
+            }
+        }
     }
 
     /**
