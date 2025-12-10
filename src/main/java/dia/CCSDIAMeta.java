@@ -376,8 +376,6 @@ public class CCSDIAMeta{
                 }
             }
             if(ce <= 0){
-                Cloger.getInstance().logger.info("Use default CE for m/z: "+mz + " -> "+ CParameter.NCE);
-                // if mz is less than the min mz in the map, use the CE of the lowest mz window
                 double min_mz_lower = Double.MAX_VALUE;
                 double max_mz_upper = 0;
                 double ce_min = CParameter.NCE;
@@ -394,10 +392,13 @@ public class CCSDIAMeta{
                     }
                 }
                 if(mz <= min_mz_lower){
+                    // if mz is less than the min mz in the map, use the CE of the lowest mz window
                     ce = ce_min;
                 }else if(mz >= max_mz_upper){
+                    // if mz is greater than the max mz in the map, use the CE of the highest mz window
                     ce = ce_max;
                 }else{
+                    Cloger.getInstance().logger.info("Use default CE for m/z: "+mz + " -> "+ CParameter.NCE);
                     ce = CParameter.NCE;
                 }
             }
