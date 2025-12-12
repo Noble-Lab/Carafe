@@ -6114,8 +6114,10 @@ public class AIGear {
             meta.generate_mz2ce_map();
             this.ccs_dia_meta = meta;
             this.use_fixed_ce = false;
-            CParameter.minPeptideMz = meta.precursor_ion_mz_min - 0.5;
-            CParameter.maxPeptideMz = meta.precursor_ion_mz_max + 0.5;
+            // CParameter.minPeptideMz = meta.precursor_ion_mz_min - 0.5;
+            CParameter.minPeptideMz = meta.precursor_ion_mz_min;
+            // CParameter.maxPeptideMz = meta.precursor_ion_mz_max + 0.5;
+            CParameter.maxPeptideMz = meta.precursor_ion_mz_max;
             CParameter.min_fragment_ion_mz = meta.fragment_ion_mz_min - 0.5;
             if(CParameter.max_fragment_ion_mz > meta.fragment_ion_mz_max){
                 CParameter.max_fragment_ion_mz = meta.fragment_ion_mz_max + 0.5;
