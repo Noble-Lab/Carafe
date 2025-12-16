@@ -126,8 +126,8 @@ _KLWWDC[UniMod:4]YWWDR_  KLWWDCYWWDR      571.9258823279321  3                11
 _KLWWDC[UniMod:4]YWWDR_  KLWWDCYWWDR      571.9258823279321  3                117.52           sp|P39961|TOG1_YEAST  0      428.26562   0.0727             b             3               1               noloss
 _KLWWDC[UniMod:4]YWWDR_  KLWWDCYWWDR      571.9258823279321  3                117.52           sp|P39961|TOG1_YEAST  0      1052.4658   0.0624             b             7               1               noloss
 _KLWWDC[UniMod:4]YWWDR_  KLWWDCYWWDR      571.9258823279321  3                117.52           sp|P39961|TOG1_YEAST  0      614.3449    0.0437             b             4               1               noloss
-</code>
 </pre>
+</code>
 
 
 The above example command line took about 8 minutes on a Linux server (CPU: 36 threads, 128G RAM) using GPU (one Nvidia Quadro RTX4000): set parameter **-device gpu**. It took less than 14 minutes using CPU only on the same server: set parameter **-device cpu**.
