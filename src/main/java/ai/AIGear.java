@@ -2,9 +2,10 @@ package main.java.ai;
 
 import ai.djl.Device;
 import ai.djl.util.cuda.CudaUtils;
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONReader;
-import com.alibaba.fastjson.TypeReference;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.TypeReference;
 import com.compomics.util.experiment.biology.ions.Ion;
 import com.compomics.util.experiment.biology.ions.NeutralLoss;
 import com.compomics.util.experiment.biology.ions.impl.ElementaryIon;
@@ -35,10 +36,7 @@ import main.java.input.ModificationUtils;
 import main.java.db.DBGear;
 import main.java.dia.*;
 import main.java.input.*;
-import main.java.util.CallTimsQuery;
-import main.java.util.StreamLog;
-import main.java.util.Cloger;
-import main.java.util.MgfUtils;
+import main.java.util.*;
 import main.java.xic.SGFilter;
 import main.java.xic.SGFilter3points;
 import main.java.xic.SGFilter5points;
@@ -190,6 +188,12 @@ public class AIGear {
      * Default is false, meaning that neutral loss of water and ammonia will not be considered.
      */
     private boolean lossWaterNH3 = false;
+
+    /**
+     * This is used to indicate whether precursor ion should be added when generating fragment ion intensity model training data.
+     * Default is false, meaning that precursor ion will not be considered.
+     */
+    private boolean add_precursor_ion = true;
 
     /**
      * Fragmentation method, it is HCD by default (i.e., b and y ions will be considered).
@@ -5990,7 +5994,7 @@ public class AIGear {
 
     /**
      * Generate training data for MS2 and retention time prediction based on DIA-NN search result for TIMS-TOF data.
-     * This function uses a Rust-based library (https://github.com/TalusBio/timsbuktoolkit) to parse TIMS-TOF data.
+     * This function uses a <a href="https://github.com/TalusBio/timsbuktoolkit">Rust-based library</a> to parse TIMS-TOF data.
      * This function is still in development and may not work as expected.
      * It writes the results to output files for model training.
      * @throws IOException If there is an error reading or writing files.
@@ -6284,7 +6288,12 @@ public class AIGear {
                 psm_query.rt_seconds = Double.parseDouble(d[hIndex.get("RT")])*60.0;
                 Peptide peptide_obj = this.get_peptide(peptide,modification);
                 double precursor_mz = dbGear.get_mz(peptide_obj.getMass(),precursor_charge);
-                psm_query.precursors.add(precursor_mz);
+                psm_query.precursor = precursor_mz;
+                psm_query.precursor_charge = precursor_charge;
+                // add 0,1,2 isotope peaks for precursor
+                psm_query.precursor_isotopes.add(0);
+                psm_query.precursor_isotopes.add(1);
+                psm_query.precursor_isotopes.add(2);
                 HashMap<Integer, ArrayList<Ion>> theoretical_ions = this.generate_theoretical_fragment_ions(peptide_obj,precursor_charge);
                 HashSet<Integer> possible_fragment_ion_charges = this.getPossibleFragmentIonCharges(precursor_charge);
                 // This is used to remove redundant ions
@@ -6303,20 +6312,39 @@ public class AIGear {
                                     ion_names.add(ion_id);
                                 }
                                 psm_query.fragments.add(frag_mz);
+                                if(frag_charge==1) {
+                                    psm_query.fragment_labels.add(fragmentIon.getNameWithNumber());
+                                }else{
+                                    psm_query.fragment_labels.add(fragmentIon.getNameWithNumber() + "^" + frag_charge);
+                                }
                             }
                         }
+                    }
+                }
+                if(this.add_precursor_ion){
+                    // add precursor ion m/z for XIC extraction from MS2 spectra
+                    psm_query.fragments.add(precursor_mz);
+                    if(precursor_charge==1) {
+                        psm_query.fragment_labels.add("p");
+                    }else{
+                        psm_query.fragment_labels.add("p^" + precursor_charge);
                     }
                 }
                 psm_query_list.add(psm_query);
             }
 
-            // Pretty-printed JSON string
-            String json = JSON.toJSONString(psm_query_list, true);
-
-            // Write to file
             String psm_query_file = this.out_dir + File.separator + "psm_query.json";
-            try (FileWriter writer = new FileWriter(psm_query_file)) {
-                writer.write(json);
+            try (FileOutputStream fos = new FileOutputStream(psm_query_file);
+                 BufferedOutputStream bos = new BufferedOutputStream(fos)) {
+                JSON.writeTo(
+                        bos,
+                        psm_query_list,
+                        JSONWriter.Feature.PrettyFormat,
+                        JSONWriter.Feature.LargeObject
+                );
+            } catch (IOException e) {
+                Cloger.getInstance().logger.error("Failed to write psm query file: " + psm_query_file);
+                e.printStackTrace();
             }
 
             // get the median MS1 and MS2 m/z error
@@ -6349,11 +6377,13 @@ public class AIGear {
 
             String spectra_result_file = spectra_result_dir + File.separator + "results.json";
             HashMap<Integer,PSMQueryResult> psm_query_results = new HashMap<>();
-            try (JSONReader reader = new JSONReader(new FileReader(spectra_result_file))) {
+            try (JSONReader reader = JSONReader.of(new FileReader(spectra_result_file))) {
                 reader.startArray();
-                while (reader.hasNext()) {
-                    PSMQueryResult pqr = reader.readObject(PSMQueryResult.class);
-                    psm_query_results.put(pqr.id, pqr);
+                while (!reader.isEnd()) {
+                    PSMQueryResult pqr = reader.read(PSMQueryResult.class);
+                    if (pqr != null) {
+                        psm_query_results.put(pqr.id, pqr);
+                    }
                 }
                 reader.endArray();
             } catch (Exception e) {
@@ -6361,13 +6391,34 @@ public class AIGear {
                 System.exit(1);
             }
 
+            if(this.add_precursor_ion){
+                // get matched precursor ion intensities from psm_query_results
+                int i_precursor_ion_matched = 0;
+                for(int psm_idx: psm_query_results.keySet()) {
+                    PSMQueryResult pqr = psm_query_results.get(psm_idx);
+                    for (int i = 0; i < pqr.fragment_mzs.size(); i++) {
+                        double frag_mz = pqr.fragment_mzs.get(i);
+                        if (frag_mz == pqr.precursor_mzs.get(0)) {
+                            if (pqr.fragment_intensities.get(i) > 0) {
+                                i_precursor_ion_matched++;
+                                break;
+                            }
+                        }
+                    }
+                }
+                System.out.println("Precursor ion matched index in fragment ions:"+i_precursor_ion_matched);
+                System.out.println("Total PSM queries:"+psm_query_results.size());
+            }
+
             String xic_result_file = xic_result_dir + File.separator + "results.json";
             HashMap<Integer,XICQueryResult> xic_query_results = new HashMap<>();
-            try (JSONReader reader = new JSONReader(new FileReader(xic_result_file))) {
+            try (JSONReader reader = JSONReader.of(new FileReader(xic_result_file))) {
                 reader.startArray();
-                while (reader.hasNext()) {
-                    XICQueryResult xqr = reader.readObject(XICQueryResult.class);
-                    xic_query_results.put(xqr.id,xqr);
+                while (!reader.isEnd()) {
+                    XICQueryResult xqr = reader.read(XICQueryResult.class);
+                    if (xqr != null) {
+                        xic_query_results.put(xqr.id,xqr);
+                    }
                 }
                 reader.endArray();
             } catch (Exception e) {
@@ -7181,7 +7232,7 @@ public class AIGear {
                 }
                 if(!tmp_psm_query_list.isEmpty()){
                     // Pretty-printed JSON string
-                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, true);
+                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, JSONWriter.Feature.PrettyFormat);
                     // Write to file
                     String tmp_psm_query_file = this.out_dir + File.separator + "invalid_max_fragment_ion_intensity_psm_query.json";
                     try (FileWriter writer = new FileWriter(tmp_psm_query_file)) {
@@ -7197,7 +7248,7 @@ public class AIGear {
                 }
                 if(!tmp_psm_query_list.isEmpty()){
                     // Pretty-printed JSON string
-                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, true);
+                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, JSONWriter.Feature.PrettyFormat);
                     // Write to file
                     String tmp_psm_query_file = this.out_dir + File.separator + "invalid_min_n_high_quality_fragment_ions_psm_query.json";
                     try (FileWriter writer = new FileWriter(tmp_psm_query_file)) {
