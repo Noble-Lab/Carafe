@@ -3,7 +3,6 @@ package main.java.ai;
 import ai.djl.Device;
 import ai.djl.util.cuda.CudaUtils;
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.JSONWriter;
 import com.alibaba.fastjson2.TypeReference;
 import com.compomics.util.experiment.biology.ions.Ion;
@@ -29,6 +28,9 @@ import com.compomics.util.gui.waiting.waitinghandlers.WaitingHandlerCLIImpl;
 import com.compomics.util.parameters.identification.advanced.SequenceMatchingParameters;
 import com.compomics.util.parameters.identification.search.ModificationParameters;
 import com.compomics.util.waiting.WaitingHandler;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Splitter;
 import com.google.common.math.Quantiles;
 import com.jerolba.carpet.CarpetReader;
@@ -6377,18 +6379,32 @@ public class AIGear {
 
             String spectra_result_file = spectra_result_dir + File.separator + "results.json";
             HashMap<Integer,PSMQueryResult> psm_query_results = new HashMap<>();
-            try (JSONReader reader = JSONReader.of(new FileReader(spectra_result_file))) {
-                reader.startArray();
-                while (!reader.isEnd()) {
-                    PSMQueryResult pqr = reader.read(PSMQueryResult.class);
-                    if (pqr != null) {
-                        psm_query_results.put(pqr.id, pqr);
+            // try (JSONReader reader = JSONReader.of(new FileReader(spectra_result_file))) {
+            //     reader.startArray();
+            //     while (!reader.isEnd()) {
+            //         PSMQueryResult pqr = reader.read(PSMQueryResult.class);
+            //         if (pqr != null) {
+            //             psm_query_results.put(pqr.id, pqr);
+            //         }
+            //     }
+            //     reader.endArray();
+            // } catch (Exception e) {
+            //     e.printStackTrace();
+            //     System.exit(1);
+            // }
+
+            ObjectMapper mapper = new ObjectMapper();
+            // Jackson's factory handles the streaming automatically
+            try (JsonParser parser = mapper.getFactory().createParser(new File(spectra_result_file))) {
+                if (parser.nextToken() == JsonToken.START_ARRAY) {
+                    // Loop until we hit the end of the array ']'
+                    while (parser.nextToken() != JsonToken.END_ARRAY) {
+                        PSMQueryResult obj = parser.readValueAs(PSMQueryResult.class);
+                        psm_query_results.put(obj.id,obj);
                     }
                 }
-                reader.endArray();
             } catch (Exception e) {
-                e.printStackTrace();
-                System.exit(1);
+                throw new RuntimeException(e);
             }
 
             if(this.add_precursor_ion){
@@ -6396,10 +6412,10 @@ public class AIGear {
                 int i_precursor_ion_matched = 0;
                 for(int psm_idx: psm_query_results.keySet()) {
                     PSMQueryResult pqr = psm_query_results.get(psm_idx);
-                    for (int i = 0; i < pqr.fragment_mzs.size(); i++) {
-                        double frag_mz = pqr.fragment_mzs.get(i);
-                        if (frag_mz == pqr.precursor_mzs.get(0)) {
-                            if (pqr.fragment_intensities.get(i) > 0) {
+                    for (int i = 0; i < pqr.fragment_mzs.length; i++) {
+                        double frag_mz = pqr.fragment_mzs[i];
+                        if (frag_mz == pqr.precursor_mz) {
+                            if (pqr.fragment_intensities[i] > 0) {
                                 i_precursor_ion_matched++;
                                 break;
                             }
@@ -6412,18 +6428,19 @@ public class AIGear {
 
             String xic_result_file = xic_result_dir + File.separator + "results.json";
             HashMap<Integer,XICQueryResult> xic_query_results = new HashMap<>();
-            try (JSONReader reader = JSONReader.of(new FileReader(xic_result_file))) {
-                reader.startArray();
-                while (!reader.isEnd()) {
-                    XICQueryResult xqr = reader.read(XICQueryResult.class);
-                    if (xqr != null) {
-                        xic_query_results.put(xqr.id,xqr);
+            mapper = new ObjectMapper();
+            // Jackson's factory handles the streaming automatically
+            try (JsonParser parser = mapper.getFactory().createParser(new File(xic_result_file))) {
+                // Use the static parseArray method which is highly stable for streams
+                if (parser.nextToken() == JsonToken.START_ARRAY) {
+                    // Loop until we hit the end of the array ']'
+                    while (parser.nextToken() != JsonToken.END_ARRAY) {
+                        XICQueryResult obj = parser.readValueAs(XICQueryResult.class);
+                        xic_query_results.put(obj.id,obj);
                     }
                 }
-                reader.endArray();
             } catch (Exception e) {
-                e.printStackTrace();
-                System.exit(1);
+                throw new RuntimeException(e);
             }
 
             System.out.println("Loading spectra query results done!");
@@ -7308,15 +7325,15 @@ public class AIGear {
      * @param apex_rt Apex retention time
      * @return Index of the closest retention time
      */
-    public int get_rt_index(List<Double> rts, boolean unit_second, double apex_rt){
+    public int get_rt_index(double [] rts, boolean unit_second, double apex_rt){
         double min_diff = Double.POSITIVE_INFINITY;
         int index = -1;
         double rt;
-        for(int i=0;i<rts.size();i++){
+        for(int i=0;i<rts.length;i++){
             if(unit_second){
-                rt = rts.get(i)/60.0;
+                rt = rts[i]/60.0;
             }else{
-                rt = rts.get(i);
+                rt = rts[i];
             }
             if(Math.abs(rt-apex_rt) < min_diff){
                 min_diff = Math.abs(rt-apex_rt);
@@ -9018,11 +9035,11 @@ public class AIGear {
         // only contain fragment ions with intensity > 0 from spectra query
         ArrayList<LPeak> peaks = new ArrayList<>();
         HashSet<Double> valid_mzs = new HashSet<>();
-        for(int i=0;i<PSMQueryResult.fragment_mzs.size();i++){
-            if(PSMQueryResult.fragment_intensities.get(i)>0){
-                LPeak p = new LPeak(PSMQueryResult.fragment_mzs.get(i),0.0);
+        for(int i=0;i<PSMQueryResult.fragment_mzs.length;i++){
+            if(PSMQueryResult.fragment_intensities[i]>0){
+                LPeak p = new LPeak(PSMQueryResult.fragment_mzs[i],0.0);
                 peaks.add(p);
-                valid_mzs.add(PSMQueryResult.fragment_mzs.get(i));
+                valid_mzs.add(PSMQueryResult.fragment_mzs[i]);
             }
         }
         peaks.sort(new LPeakComparatorMax2Min());
@@ -9037,17 +9054,17 @@ public class AIGear {
             rt_end = peptideMatch.rt_end + this.rt_win_offset;
         }
         Map<Double, ArrayList<JFragmentIonIM>> res = new HashMap<>();
-        for(int i=0;i<xicQueryResult.fragment_mzs.size();i++){
-            double mz = xicQueryResult.fragment_mzs.get(i);
+        for(int i=0;i<xicQueryResult.fragment_mzs.length;i++){
+            double mz = xicQueryResult.fragment_mzs[i];
             if(valid_mzs.contains(mz)) {
                 res.put(mz, new ArrayList<>());
-                for (int j = 0; j < xicQueryResult.retention_time_results_seconds.size(); j++) {
+                for (int j = 0; j < xicQueryResult.retention_time_results_seconds.length; j++) {
                     // scan number is from 0 to xicQueryResult.retention_time_results_seconds.size() - 1
                     JFragmentIonIM ion = new JFragmentIonIM((float) mz,
-                            xicQueryResult.fragment_intensities.get(i).get(j).floatValue(),
+                            (float) xicQueryResult.fragment_intensities[i][j],
                             (float) xicQueryResult.mobility_ook0,
                             j);
-                    ion.rt = xicQueryResult.retention_time_results_seconds.get(j).floatValue() / 60.0F;
+                    ion.rt = (float) (xicQueryResult.retention_time_results_seconds[i] / 60.0F);
                     res.get(mz).add(ion);
                 }
             }
@@ -9094,7 +9111,7 @@ public class AIGear {
                 for (int k = 0; k < scan_num; k++) {
                     scan2index.put(k, k);
                     index2scan.put(k, k);
-                    rt = xicQueryResult.retention_time_results_seconds.get(k)/60.0F;
+                    rt = xicQueryResult.retention_time_results_seconds[k]/60.0F;
                     index2rt_tmp[k] = rt;
 
                     if(Math.abs(rt-peptideMatch.rt_apex)<apex_rt_diff){
@@ -9185,9 +9202,9 @@ public class AIGear {
                                     peak.boundary_left_index = boundary_left_index;
                                     peak.boundary_right_index = boundary_right_index;
                                     peak.apex_index = original_peak_index;
-                                    peak.boundary_left_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0;
-                                    peak.boundary_right_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0;
-                                    peak.apex_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0;
+                                    peak.boundary_left_rt = xicQueryResult.retention_time_results_seconds[(int) peak.boundary_left_index]/60.0;
+                                    peak.boundary_right_rt = xicQueryResult.retention_time_results_seconds[(int) peak.boundary_right_index]/60.0;
+                                    peak.apex_rt = xicQueryResult.retention_time_results_seconds[(int) peak.apex_index]/60.0;
                                     peptideMatch.rt_start = peak.boundary_left_rt;
                                     peptideMatch.rt_end = peak.boundary_right_rt;
                                     peptideMatch.rt_apex = peak.apex_rt;
@@ -9221,7 +9238,7 @@ public class AIGear {
                         for (int i = 0; i < scan_num; i++) {
                             int cur_index = index_min + i;
                             int cur_scan = cur_index;
-                            rt = xicQueryResult.retention_time_results_seconds.get(cur_scan)/60.0;
+                            rt = xicQueryResult.retention_time_results_seconds[cur_scan]/60.0;
                             System.out.println(rt);
 
                         }
@@ -9242,7 +9259,7 @@ public class AIGear {
                     for (int i = 0; i < scan_num; i++) {
                         int cur_index = index_min + i;
                         int cur_scan = cur_index;
-                        rt = xicQueryResult.retention_time_results_seconds.get(cur_scan)/60.0;
+                        rt = xicQueryResult.retention_time_results_seconds[cur_scan]/60.0;
                         System.out.println(rt);
 
                     }
@@ -9275,17 +9292,17 @@ public class AIGear {
             rt_end = peptideMatch.rt_end + this.rt_win_offset;
         }
         Map<Double, ArrayList<JFragmentIonIM>> res = new HashMap<>();
-        for(int i=0;i<xicQueryResult.fragment_mzs.size();i++){
-            double mz = xicQueryResult.fragment_mzs.get(i);
+        for(int i=0;i<xicQueryResult.fragment_mzs.length;i++){
+            double mz = xicQueryResult.fragment_mzs[i];
             if(valid_mzs.contains(mz)) {
                 res.put(mz, new ArrayList<>());
-                for (int j = 0; j < xicQueryResult.retention_time_results_seconds.size(); j++) {
+                for (int j = 0; j < xicQueryResult.retention_time_results_seconds.length; j++) {
                     // scan number is from 0 to xicQueryResult.retention_time_results_seconds.size() - 1
                     JFragmentIonIM ion = new JFragmentIonIM((float) mz,
-                            xicQueryResult.fragment_intensities.get(i).get(j).floatValue(),
+                            (float) xicQueryResult.fragment_intensities[i][j],
                             (float) xicQueryResult.mobility_ook0,
                             j);
-                    ion.rt = xicQueryResult.retention_time_results_seconds.get(j).floatValue() / 60.0F;
+                    ion.rt = (float) (xicQueryResult.retention_time_results_seconds[j] / 60.0F);
                     res.get(mz).add(ion);
                 }
             }
@@ -9332,7 +9349,7 @@ public class AIGear {
                 for (int k = 0; k < scan_num; k++) {
                     scan2index.put(k, k);
                     index2scan.put(k, k);
-                    rt = xicQueryResult.retention_time_results_seconds.get(k)/60.0F;
+                    rt = xicQueryResult.retention_time_results_seconds[k]/60.0F;
                     index2rt_tmp[k] = rt;
 
                     if(Math.abs(rt-peptideMatch.rt_apex)<apex_rt_diff){
@@ -9427,9 +9444,9 @@ public class AIGear {
                                     peak.boundary_left_index = boundary_left_index;
                                     peak.boundary_right_index = boundary_right_index;
                                     peak.apex_index = original_peak_index;
-                                    peak.boundary_left_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0;
-                                    peak.boundary_right_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0;
-                                    peak.apex_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0;
+                                    peak.boundary_left_rt = xicQueryResult.retention_time_results_seconds[(int) peak.boundary_left_index]/60.0;
+                                    peak.boundary_right_rt = xicQueryResult.retention_time_results_seconds[(int) peak.boundary_right_index]/60.0;
+                                    peak.apex_rt = xicQueryResult.retention_time_results_seconds[(int) peak.apex_index]/60.0;
                                     peptideMatch.rt_start = peak.boundary_left_rt;
                                     peptideMatch.rt_end = peak.boundary_right_rt;
                                     peptideMatch.rt_apex = peak.apex_rt;
@@ -9459,7 +9476,7 @@ public class AIGear {
                         peptideMatch.smoothed_fragment_intensities = pepXIC_smoothed;
                         peptideMatch.raw_fragment_intensities = frag_int;
                         peptideMatch.xic_rt_values = index2rt;
-                        peptideMatch.rt_apex = xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0;
+                        peptideMatch.rt_apex = xicQueryResult.retention_time_results_seconds[(int) peak.apex_index]/60.0;
                     } catch (NumberIsTooSmallException e) {
                         System.out.println("index_start: " + peak.boundary_left_index);
                         System.out.println("index_end: " + peak.boundary_right_index);
@@ -9474,7 +9491,7 @@ public class AIGear {
                         for (int i = 0; i < scan_num; i++) {
                             int cur_index = index_min + i;
                             int cur_scan = cur_index;
-                            rt = xicQueryResult.retention_time_results_seconds.get(cur_scan)/60.0;
+                            rt = xicQueryResult.retention_time_results_seconds[cur_scan]/60.0;
                             System.out.println(rt);
 
                         }
@@ -9495,7 +9512,7 @@ public class AIGear {
                     for (int i = 0; i < scan_num; i++) {
                         int cur_index = index_min + i;
                         int cur_scan = cur_index;
-                        rt = xicQueryResult.retention_time_results_seconds.get(cur_scan)/60.0;
+                        rt = xicQueryResult.retention_time_results_seconds[cur_scan]/60.0;
                         System.out.println(rt);
 
                     }
@@ -9802,9 +9819,9 @@ public class AIGear {
                 peak.boundary_right_index = tmp_peak.boundary_right_index;
                 peak.best_ion_index = top_ion_indices[xiCtool.get_max_index(tmp_cor2best_ion)];
 
-                peak.boundary_left_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_left_index)/60.0;
-                peak.boundary_right_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.boundary_right_index)/60.0;
-                peak.apex_rt = xicQueryResult.retention_time_results_seconds.get((int) peak.apex_index)/60.0;
+                peak.boundary_left_rt = xicQueryResult.retention_time_results_seconds[(int) peak.boundary_left_index]/60.0;
+                peak.boundary_right_rt = xicQueryResult.retention_time_results_seconds[(int) peak.boundary_right_index]/60.0;
+                peak.apex_rt = xicQueryResult.retention_time_results_seconds[(int) peak.apex_index]/60.0;
                 is_refined = true;
             }else{
                 System.out.println("Peak too narrow!");
@@ -10192,9 +10209,9 @@ public class AIGear {
         JSequenceProvider jSequenceProvider = new JSequenceProvider();
 
         HashMap<Double,Double> fragment_mz2intensity = new HashMap<>();
-        for(int i=0;i<spectrum.fragment_mzs.size();i++){
-            if(spectrum.fragment_intensities.get(i)>0) {
-                fragment_mz2intensity.put(spectrum.fragment_mzs.get(i), spectrum.fragment_intensities.get(i));
+        for(int i=0;i<spectrum.fragment_mzs.length;i++){
+            if(spectrum.fragment_intensities[i]>0) {
+                fragment_mz2intensity.put(spectrum.fragment_mzs[i], spectrum.fragment_intensities[i]);
             }
         }
 
@@ -10316,17 +10333,17 @@ public class AIGear {
         // binary search to find the apex RT index with the smallest difference
         int apex_rt_index = 0;
         double min_diff = Double.MAX_VALUE;
-        for(int i=0;i<xic_data.retention_time_results_seconds.size();i++){
-            double diff = Math.abs(xic_data.retention_time_results_seconds.get(i)-apex_rt_in_seconds);
+        for(int i=0;i<xic_data.retention_time_results_seconds.length;i++){
+            double diff = Math.abs(xic_data.retention_time_results_seconds[i]-apex_rt_in_seconds);
             if(diff<min_diff){
                 min_diff = diff;
                 apex_rt_index = i;
             }
         }
         // int apex_rt_index = Collections.binarySearch(xic_data.retention_time_results_seconds, apex_rt_in_seconds);
-        for(int i=0;i<xic_data.fragment_mzs.size();i++){
-            if(xic_data.fragment_intensities.get(i).get(apex_rt_index)>0) {
-                fragment_mz2intensity.put(xic_data.fragment_mzs.get(i), xic_data.fragment_intensities.get(i).get(apex_rt_index));
+        for(int i=0;i<xic_data.fragment_mzs.length;i++){
+            if(xic_data.fragment_intensities[i][apex_rt_index]>0) {
+                fragment_mz2intensity.put(xic_data.fragment_mzs[i], xic_data.fragment_intensities[i][apex_rt_index]);
             }
         }
 
@@ -10337,29 +10354,29 @@ public class AIGear {
             // get the sum of fragment ion intensities at each RT and pick the RT with the highest sum
             double left_sum = 0.0;
             double right_sum = 0.0;
-            for(int i=0;i<xic_data.fragment_mzs.size();i++){
-                if(xic_data.fragment_intensities.get(i).get(left_index)>0) {
-                    left_sum = left_sum + xic_data.fragment_intensities.get(i).get(left_index);
+            for(int i=0;i<xic_data.fragment_mzs.length;i++){
+                if(xic_data.fragment_intensities[i][left_index]>0) {
+                    left_sum = left_sum + xic_data.fragment_intensities[i][left_index];
                 }
             }
-            for(int i=0;i<xic_data.fragment_mzs.size();i++){
-                if(xic_data.fragment_intensities.get(i).get(right_index)>0) {
-                    right_sum = right_sum + xic_data.fragment_intensities.get(i).get(right_index);
+            for(int i=0;i<xic_data.fragment_mzs.length;i++){
+                if(xic_data.fragment_intensities[i][right_index]>0) {
+                    right_sum = right_sum + xic_data.fragment_intensities[i][right_index];
                 }
             }
 
             if(left_sum>=right_sum && left_sum>0){
                 apex_rt_index = left_index;
-                for(int i=0;i<xic_data.fragment_mzs.size();i++){
-                    if(xic_data.fragment_intensities.get(i).get(apex_rt_index)>0) {
-                        fragment_mz2intensity.put(xic_data.fragment_mzs.get(i), xic_data.fragment_intensities.get(i).get(apex_rt_index));
+                for(int i=0;i<xic_data.fragment_mzs.length;i++){
+                    if(xic_data.fragment_intensities[i][apex_rt_index]>0) {
+                        fragment_mz2intensity.put(xic_data.fragment_mzs[i], xic_data.fragment_intensities[i][apex_rt_index]);
                     }
                 }
             }else if(right_sum>left_sum && right_sum>0) {
                 apex_rt_index = right_index;
-                for (int i = 0; i < xic_data.fragment_mzs.size(); i++) {
-                    if (xic_data.fragment_intensities.get(i).get(apex_rt_index) > 0) {
-                        fragment_mz2intensity.put(xic_data.fragment_mzs.get(i), xic_data.fragment_intensities.get(i).get(apex_rt_index));
+                for (int i = 0; i < xic_data.fragment_mzs.length; i++) {
+                    if (xic_data.fragment_intensities[i][apex_rt_index] > 0) {
+                        fragment_mz2intensity.put(xic_data.fragment_mzs[i], xic_data.fragment_intensities[i][apex_rt_index]);
                     }
                 }
             }
@@ -10398,7 +10415,7 @@ public class AIGear {
             return -1;
         }else{
             // return ion_matches;
-            return xic_data.retention_time_results_seconds.get(apex_rt_index)/60.0;
+            return xic_data.retention_time_results_seconds[apex_rt_index]/60.0;
         }
 
     }
@@ -10488,18 +10505,18 @@ public class AIGear {
         JSequenceProvider jSequenceProvider = new JSequenceProvider();
 
         HashMap<Double,Double> fragment_mz2intensity = new HashMap<>();
-        double [] intensity_list = new double[xic_data.fragment_mzs.size()];
-        for(int i=0;i<xic_data.retention_time_results_seconds.size();i++){
-            if(xic_data.retention_time_results_seconds.get(i) >= start_rt_in_seconds && xic_data.retention_time_results_seconds.get(i) <= end_rt_in_seconds) {
-                for (int j = 0; j < xic_data.fragment_mzs.size(); j++) {
-                    intensity_list[j] = intensity_list[j] + xic_data.fragment_intensities.get(j).get(i);
+        double [] intensity_list = new double[xic_data.fragment_mzs.length];
+        for(int i=0;i<xic_data.retention_time_results_seconds.length;i++){
+            if(xic_data.retention_time_results_seconds[i] >= start_rt_in_seconds && xic_data.retention_time_results_seconds[i] <= end_rt_in_seconds) {
+                for (int j = 0; j < xic_data.fragment_mzs.length; j++) {
+                    intensity_list[j] = intensity_list[j] + xic_data.fragment_intensities[j][i];
                 }
             }
         }
         // int apex_rt_index = Collections.binarySearch(xic_data.retention_time_results_seconds, apex_rt_in_seconds);
-        for(int i=0;i<xic_data.fragment_mzs.size();i++){
+        for(int i=0;i<xic_data.fragment_mzs.length;i++){
             if(intensity_list[i]>0) {
-                fragment_mz2intensity.put(xic_data.fragment_mzs.get(i), intensity_list[i]);
+                fragment_mz2intensity.put(xic_data.fragment_mzs[i], intensity_list[i]);
             }
         }
 

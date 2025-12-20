@@ -23,20 +23,21 @@ public class XICQueryResult {
     /**
      * A list of precursor ions: different isotopes
      */
-    public List<Double> precursor_mzs = new ArrayList<>();
+    public double [] precursor_mzs;
 
     /**
      * A 2D matrix of precursor intensities: each row corresponds to a precursor ion, each column corresponds to a retention time point
      */
-    public List<List<Double>> precursor_intensities = new ArrayList<>();
+    public double [][] precursor_intensities;
 
     /**
      * A list of fragment ions
      */
-    public List<Double> fragment_mzs = new ArrayList<>();
+    public double [] fragment_mzs;
+    public String [] fragment_labels;
     /**
      * A 2D matrix of fragment intensities: each row corresponds to a fragment ion, each column corresponds to a retention time point
      */
-    public List<List<Double>> fragment_intensities = new ArrayList<>();
-    public List<Double> retention_time_results_seconds = new ArrayList<>();
+    public double [][] fragment_intensities;
+    public double [] retention_time_results_seconds;
 }

@@ -3,6 +3,8 @@ package main.java.dia;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.alibaba.fastjson2.annotation.JSONField;
+
 /**
  * This class is used for storing data extracted from TIMS-TOF data using the rust library.
  */
@@ -20,15 +22,18 @@ public class PSMQueryResult {
 
     public double rt_seconds;
 
-    /**
-     * A list of precursor ions: different isotopes
-     */
-    public List<Double> precursor_mzs = new ArrayList<>();
-    public List<Double> precursor_intensities = new ArrayList<>();
+    public double precursor_mz;
+
+    public int precursor_charge;
+
+    public double [] precursor_intensities;
+
+    public int [] precursor_labels;
 
     /**
      * A list of fragment ions
      */
-    public List<Double> fragment_mzs = new ArrayList<>();
-    public List<Double> fragment_intensities = new ArrayList<>();
+    public double [] fragment_mzs;
+
+    public double [] fragment_intensities;
 }
