@@ -6392,20 +6392,13 @@ public class AIGear {
             //     e.printStackTrace();
             //     System.exit(1);
             // }
-
-            ObjectMapper mapper = new ObjectMapper();
-            // Jackson's factory handles the streaming automatically
-            try (JsonParser parser = mapper.getFactory().createParser(new File(spectra_result_file))) {
-                if (parser.nextToken() == JsonToken.START_ARRAY) {
-                    // Loop until we hit the end of the array ']'
-                    while (parser.nextToken() != JsonToken.END_ARRAY) {
-                        PSMQueryResult obj = parser.readValueAs(PSMQueryResult.class);
-                        psm_query_results.put(obj.id,obj);
-                    }
-                }
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+            BufferedReader psm_br = new BufferedReader(new FileReader(spectra_result_file));
+            String psm_line;
+            while((psm_line=psm_br.readLine())!=null){
+                PSMQueryResult obj = JSON.parseObject(psm_line, PSMQueryResult.class);
+                psm_query_results.put(obj.id,obj);
             }
+            psm_br.close();
 
             if(this.add_precursor_ion){
                 // get matched precursor ion intensities from psm_query_results
@@ -6428,20 +6421,13 @@ public class AIGear {
 
             String xic_result_file = xic_result_dir + File.separator + "results.json";
             HashMap<Integer,XICQueryResult> xic_query_results = new HashMap<>();
-            mapper = new ObjectMapper();
-            // Jackson's factory handles the streaming automatically
-            try (JsonParser parser = mapper.getFactory().createParser(new File(xic_result_file))) {
-                // Use the static parseArray method which is highly stable for streams
-                if (parser.nextToken() == JsonToken.START_ARRAY) {
-                    // Loop until we hit the end of the array ']'
-                    while (parser.nextToken() != JsonToken.END_ARRAY) {
-                        XICQueryResult obj = parser.readValueAs(XICQueryResult.class);
-                        xic_query_results.put(obj.id,obj);
-                    }
-                }
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+            BufferedReader xic_br = new BufferedReader(new FileReader(xic_result_file));
+            String xic_line;
+            while((xic_line=xic_br.readLine())!=null){
+                XICQueryResult obj = JSON.parseObject(xic_line, XICQueryResult.class);
+                xic_query_results.put(obj.id,obj);
             }
+            xic_br.close();
 
             System.out.println("Loading spectra query results done!");
 

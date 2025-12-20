@@ -72,6 +72,7 @@ public class CallTimsQuery {
                 "-r", ms_file,
                 "-t", out_parameter_file,
                 "-e", psm_query_file,
+                "-f", "ndjson",
                 "-o", out_file
         };
         ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
@@ -117,6 +118,7 @@ public class CallTimsQuery {
                 "-r", ms_file,
                 "-t", out_parameter_file,
                 "-e", psm_query_file,
+                "-f", "ndjson",
                 "-o", out_file
         };
         ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
