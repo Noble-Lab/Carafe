@@ -28,9 +28,6 @@ import com.compomics.util.gui.waiting.waitinghandlers.WaitingHandlerCLIImpl;
 import com.compomics.util.parameters.identification.advanced.SequenceMatchingParameters;
 import com.compomics.util.parameters.identification.search.ModificationParameters;
 import com.compomics.util.waiting.WaitingHandler;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Splitter;
 import com.google.common.math.Quantiles;
 import com.jerolba.carpet.CarpetReader;
@@ -809,8 +806,14 @@ public class AIGear {
 
         if(aiGear.device.toLowerCase().contains("gpu")){
             if(!CudaUtils.hasCuda()) {
-                System.out.println("GPU is not available! Use CPU instead.");
-                aiGear.device = "cpu";
+                GPUTools tools = new GPUTools();
+                GPUTools.TorchGpuStatus st = tools.checkTorchGpu();
+                if(st.gpuAvailable) {
+                    System.out.println("GPU is enabled!");
+                }else{
+                    aiGear.device = "cpu";
+                    System.out.println("GPU is not available! Use CPU instead.");
+                }
             }else{
                 System.out.println("GPU is enabled!");
             }
@@ -1660,8 +1663,16 @@ public class AIGear {
                 Cloger.getInstance().logger.info("GPU number: " + CudaUtils.getGpuCount());
                 Cloger.getInstance().logger.info(mem.toString());
             }else{
-                Cloger.getInstance().logger.warn("GPU not available; falling back to CPU.");
-                this.device = "cpu";
+                GPUTools tools = new GPUTools();
+                GPUTools.TorchGpuStatus st = tools.checkTorchGpu();
+                if(st.gpuAvailable){
+                    Cloger.getInstance().logger.info("GPU memory: " + st.gpu_memory);
+                    Cloger.getInstance().logger.info("CUDA version: " + st.cudaVersion);
+                    Cloger.getInstance().logger.info("GPU: " + st.deviceName);
+                }else {
+                    Cloger.getInstance().logger.warn("GPU not available; falling back to CPU.");
+                    this.device = "cpu";
+                }
             }
         }
 
@@ -1771,8 +1782,14 @@ public class AIGear {
      * @return The total GPU memory in GB.
      */
     public double get_gpu_mem(){
-        MemoryUsage mem = CudaUtils.getGpuMemory(Device.gpu());
-        return 1.0*mem.getMax()/1024/1024/1024;
+        if(CudaUtils.hasCuda()) {
+            MemoryUsage mem = CudaUtils.getGpuMemory(Device.gpu());
+            return 1.0 * mem.getMax() / 1024 / 1024 / 1024;
+        }else{
+            GPUTools tools = new GPUTools();
+            GPUTools.TorchGpuStatus st = tools.checkTorchGpu();
+            return 1.0 * st.gpu_memory / 1024 / 1024 / 1024;
+        }
     }
 
     /**

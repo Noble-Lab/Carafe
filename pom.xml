@@ -121,7 +121,7 @@
     <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
-        <version>3.4.0</version>
+        <version>3.4.1</version>
         <exclusions>
             <exclusion>
                 <groupId>org.slf4j</groupId>
@@ -134,7 +134,7 @@
     <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-core</artifactId>
-        <version>3.4.0</version>
+        <version>3.4.1</version>
         <exclusions>
             <exclusion>
                 <groupId>org.slf4j</groupId>
@@ -180,17 +180,18 @@
     </dependency>
 
 
+    <!-- https://mvnrepository.com/artifact/tech.tablesaw/tablesaw-core -->
     <dependency>
         <groupId>tech.tablesaw</groupId>
         <artifactId>tablesaw-core</artifactId>
-        <version>0.43.1</version>
+        <version>0.44.4</version>
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/net.tlabs-data/tablesaw_0.43.1-parquet -->
     <dependency>
         <groupId>net.tlabs-data</groupId>
-        <artifactId>tablesaw_0.43.1-parquet</artifactId>
-        <version>0.11.0</version>
+        <artifactId>tablesaw_0.44.4-parquet</artifactId>
+        <version>0.14.0</version>
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
@@ -220,7 +221,12 @@
         <version>12.0.0.M3</version>
     </dependency>
 
-
+    <!-- FlatLaf - Modern Look and Feel for Swing -->
+    <dependency>
+        <groupId>com.formdev</groupId>
+        <artifactId>flatlaf</artifactId>
+        <version>3.4</version>
+    </dependency>
 
 </dependencies>
 
@@ -304,7 +310,7 @@
                     <manifest>
                         <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-                        <mainClass>main.java.ai.AIGear</mainClass>
+                        <mainClass>main.java.gui.CarafeLauncher</mainClass>
                         <addClasspath>true</addClasspath>
                         <classpathPrefix>lib</classpathPrefix>
                     </manifest>
