@@ -9,6 +9,7 @@ import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Rectangle;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -17,8 +18,10 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.prefs.Preferences;
 
@@ -46,13 +49,14 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
-import main.java.input.CParameter;
 import org.apache.commons.lang3.StringUtils;
 
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.FlatLaf;
 
 import ai.djl.util.cuda.CudaUtils;
+import main.java.input.CParameter;
 import main.java.util.GPUTools;
 import main.java.util.GenericUtils;
 import main.java.util.PyInstaller;
@@ -63,30 +67,22 @@ public class CarafeGUI extends JFrame {
     public static int globalWorkflowIndex = 0;
     private static String carafe_library_directory = "";
 
-    // Color scheme - Modern blue theme
+    // Brand colors only
     private static final Color PRIMARY_COLOR = new Color(41, 128, 185);
     private static final Color PRIMARY_DARK = new Color(31, 97, 141);
-    private static final Color PRIMARY_LIGHT = new Color(52, 152, 219);
     private static final Color ACCENT_COLOR = new Color(46, 204, 113);
-    private static final Color BACKGROUND_COLOR = new Color(248, 249, 250);
-    private static final Color CARD_COLOR = Color.WHITE;
-    private static final Color TEXT_COLOR = new Color(44, 62, 80);
-    private static final Color TEXT_SECONDARY = new Color(127, 140, 141);
-    private static final Color BORDER_COLOR = new Color(223, 228, 234);
 
     // Layout spacing constants
-    private static final int ROW_SPACING = 4;  // Vertical spacing between rows
-    private static final int COL_SPACING = 8;  // Horizontal spacing between columns
+    private static final int ROW_SPACING = 4;
+    private static final int COL_SPACING = 8;
     private static final Insets DEFAULT_INSETS = new Insets(ROW_SPACING, COL_SPACING, ROW_SPACING, COL_SPACING);
 
     // Window size constants
-    private static final int DEFAULT_WIDTH = 700;   // Default window width
-    private static final int DEFAULT_HEIGHT = 750;   // Default window height
-    private static final int MIN_WIDTH = 700;       // Minimum window width
-    private static final int MIN_HEIGHT = 750;       // Minimum window height
-    private static final int COMPONENT_HEIGHT = 32;  // Standard height for input components
-    private boolean enforcingMinSize = false;
-
+    private static final int DEFAULT_WIDTH = 700;
+    private static final int DEFAULT_HEIGHT = 750;
+    private static final int MIN_WIDTH = 700;
+    private static final int MIN_HEIGHT = 750;
+    private static final int COMPONENT_HEIGHT = 32;
 
     // Input fields
     private JComboBox<String> workflowCombo;
@@ -99,7 +95,7 @@ public class CarafeGUI extends JFrame {
     private JComboBox<String> pythonPathCombo;
     private JComboBox<String> diannPathCombo;
     private JTextField additionalOptionsField;
-    
+
     // Input panel rows components for dynamic visibility
     private java.util.List<JComponent> diannReportRowComponents;
     private java.util.List<JComponent> trainMsRowComponents;
@@ -158,7 +154,7 @@ public class CarafeGUI extends JFrame {
     private Process currentProcess;
     private volatile boolean isRunning = false;
 
-    // Preferences for remembering last used directory
+    // Preferences
     private static final Preferences prefs = Preferences.userNodeForPackage(CarafeGUI.class);
     private static final String PREF_LAST_DIR = "lastDirectory";
     private static final String PREF_PYTHON_PATH = "pythonPath";
@@ -171,7 +167,7 @@ public class CarafeGUI extends JFrame {
         setPreferredSize(new Dimension(DEFAULT_WIDTH, DEFAULT_HEIGHT));
         setResizable(true);
 
-        // Set look and feel - already set in main(), but fallback here
+        // fallback
         try {
             if (UIManager.getLookAndFeel().getName().contains("Metal")) {
                 FlatLightLaf.setup();
@@ -182,51 +178,64 @@ public class CarafeGUI extends JFrame {
         }
 
         initComponents();
-        // refresh status after components are created
         refreshStatusLabel();
+
         pack();
-        // Ensure the window is not smaller than the minimum size after packing
         Dimension packedSize = getSize();
         Dimension minSize = getMinimumSize();
-        int newWidth = Math.max(packedSize.width, minSize.width);
-        int newHeight = Math.max(packedSize.height, minSize.height);
-        setSize(newWidth, newHeight);
+        setSize(Math.max(packedSize.width, minSize.width), Math.max(packedSize.height, minSize.height));
         setLocationRelativeTo(null);
+
+        applyConsoleTheme();
     }
 
+    /**
+     * Common UI defaults (quality boost)
+     */
     private void customizeUIDefaults() {
-        UIManager.put("Panel.background", BACKGROUND_COLOR);
-        UIManager.put("Button.arc", 8);
-        UIManager.put("Component.arc", 8);
-        UIManager.put("TextField.arc", 6);
+        UIManager.put("defaultFont", new Font("Segoe UI", Font.PLAIN, 13));
+
+        UIManager.put("Button.arc", 10);
+        UIManager.put("Component.arc", 10);
+        UIManager.put("TextComponent.arc", 8);
+        UIManager.put("TextField.arc", 8);
+        UIManager.put("ProgressBar.arc", 10);
+
+        UIManager.put("TabbedPane.showTabSeparators", true);
+        UIManager.put("TabbedPane.tabInsets", new Insets(8, 14, 8, 14));
+
+        UIManager.put("ScrollBar.width", 12);
+        UIManager.put("ScrollBar.thumbArc", 999);
+        UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
+
+        UIManager.put("Component.focusWidth", 1);
+        UIManager.put("Component.innerFocusWidth", 0);
+    }
+
+    private static Color lafColor(String key, Color fallback) {
+        Color c = UIManager.getColor(key);
+        return c != null ? c : fallback;
     }
 
     private void initComponents() {
         setLayout(new BorderLayout());
-        getContentPane().setBackground(BACKGROUND_COLOR);
 
-        // Header
         add(createHeader(), BorderLayout.NORTH);
 
-        // Main content with tabs
         tabbedPane = new JTabbedPane();
         tabbedPane.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        tabbedPane.setBackground(BACKGROUND_COLOR);
 
         tabbedPane.addTab("1. Workflow", wrapInScrollPane(createInputPanel()));
         tabbedPane.addTab("2. Training Data Generation", wrapInScrollPane(createTrainingDataPanel()));
         tabbedPane.addTab("3. Model Training", wrapInScrollPane(createModelTrainingPanel()));
         tabbedPane.addTab("4. Library Generation", wrapInScrollPane(createLibraryGenerationPanel()));
-        tabbedPane.addTab("5. Console", createConsolePanel()); // Console already handles scrolling
+        tabbedPane.addTab("5. Console", createConsolePanel());
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
-        mainPanel.setBackground(BACKGROUND_COLOR);
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
         mainPanel.add(tabbedPane, BorderLayout.CENTER);
 
         add(mainPanel, BorderLayout.CENTER);
-
-        // Footer with run button
         add(createFooter(), BorderLayout.SOUTH);
     }
 
@@ -237,7 +246,6 @@ public class CarafeGUI extends JFrame {
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         scrollPane.getHorizontalScrollBar().setUnitIncrement(16);
-        scrollPane.getViewport().setBackground(BACKGROUND_COLOR);
         return scrollPane;
     }
 
@@ -246,7 +254,6 @@ public class CarafeGUI extends JFrame {
         header.setBackground(PRIMARY_COLOR);
         header.setBorder(BorderFactory.createEmptyBorder(20, 25, 20, 25));
 
-        // Logo and title
         JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
         titlePanel.setBackground(PRIMARY_COLOR);
 
@@ -275,11 +282,9 @@ public class CarafeGUI extends JFrame {
 
         header.add(titlePanel, BorderLayout.WEST);
 
-        // Right panel with version and dark mode toggle
         JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
         rightPanel.setBackground(PRIMARY_COLOR);
 
-        // Dark mode toggle
         JToggleButton darkModeToggle = new JToggleButton("Dark Mode");
         darkModeToggle.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         darkModeToggle.setForeground(Color.WHITE);
@@ -293,25 +298,23 @@ public class CarafeGUI extends JFrame {
         darkModeToggle.addActionListener(e -> toggleDarkMode(darkModeToggle.isSelected()));
         rightPanel.add(darkModeToggle);
 
-        // Version info
         JLabel versionLabel = new JLabel(CParameter.getVersion());
         versionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         versionLabel.setForeground(new Color(255, 255, 255, 180));
         rightPanel.add(versionLabel);
 
         header.add(rightPanel, BorderLayout.EAST);
-
         return header;
     }
 
     private void toggleDarkMode(boolean isDark) {
         try {
-            if (isDark) {
-                FlatDarkLaf.setup();
-            } else {
-                FlatLightLaf.setup();
-            }
+            UIManager.setLookAndFeel(isDark ? new FlatDarkLaf() : new FlatLightLaf());
+            customizeUIDefaults();
             SwingUtilities.updateComponentTreeUI(this);
+            applyConsoleTheme();
+            refreshStatusLabel();
+            repaint();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -319,12 +322,9 @@ public class CarafeGUI extends JFrame {
 
     private JPanel createInputPanel() {
         JPanel panel = new ScrollablePanel(new BorderLayout());
-        panel.setBackground(BACKGROUND_COLOR);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Top section: Workflow selection
         JPanel workflowPanel = new JPanel(new GridBagLayout());
-        workflowPanel.setBackground(BACKGROUND_COLOR);
         GridBagConstraints wgbc = new GridBagConstraints();
         wgbc.fill = GridBagConstraints.HORIZONTAL;
         wgbc.insets = new Insets(0, COL_SPACING, 15, COL_SPACING);
@@ -334,9 +334,9 @@ public class CarafeGUI extends JFrame {
         workflowPanel.add(createLabel("Workflow:"), wgbc);
 
         String[] workflows = {
-            "1. Spectral library generation: start with DIA-NN search",
-            "2. Spectral library generation: start with DIA-NN report",
-            "3. End-to-end DIA search"
+                "1. Spectral library generation: start with DIA-NN search",
+                "2. Spectral library generation: start with DIA-NN report",
+                "3. End-to-end DIA search"
         };
         workflowCombo = new JComboBox<>(workflows);
         styleComboBox(workflowCombo);
@@ -347,62 +347,56 @@ public class CarafeGUI extends JFrame {
 
         panel.add(workflowPanel, BorderLayout.NORTH);
 
-        // Center section: Dynamic input fields
         inputFieldsPanel = new JPanel(new GridBagLayout());
-        inputFieldsPanel.setBackground(BACKGROUND_COLOR);
-
         int gridy = 0;
 
-        // Create all input rows
         trainMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train MS File:",
-            trainMsFileField = createTextField("Path to mzML file or folder for training"),
-            createMsButtonsPanel(trainMsFileField));
+                trainMsFileField = createTextField("Path to mzML file or folder for training"),
+                createMsButtonsPanel(trainMsFileField));
 
         diannReportRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DIA-NN Report:",
-            diannReportFileField = createTextField("Path to DIA-NN report.tsv or report.parquet"),
-            createBrowseButton(diannReportFileField, "DIA-NN Report", new String[]{"tsv", "parquet"}));
+                diannReportFileField = createTextField("Path to DIA-NN report.tsv or report.parquet"),
+                createBrowseButton(diannReportFileField, "DIA-NN Report", new String[]{"tsv", "parquet"}));
 
         trainDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train Protein Database:",
-            trainDbFileField = createTextField("Path to protein FASTA for training"),
-            createBrowseButton(trainDbFileField, "FASTA Files", new String[]{"fasta", "fa"}));
+                trainDbFileField = createTextField("Path to protein FASTA for training"),
+                createBrowseButton(trainDbFileField, "FASTA Files", new String[]{"fasta", "fa"}));
 
         projectMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Project MS File:",
-            projectMsFileField = createTextField("Path to mzML file or folder for project"),
-            createMsButtonsPanel(projectMsFileField));
+                projectMsFileField = createTextField("Path to mzML file or folder for project"),
+                createMsButtonsPanel(projectMsFileField));
 
         libraryDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Library Protein Database:",
-            libraryDbFileField = createTextField("Path to protein FASTA for library generation"),
-            createBrowseButton(libraryDbFileField, "FASTA Files", new String[]{"fasta", "fa"}));
+                libraryDbFileField = createTextField("Path to protein FASTA for library generation"),
+                createBrowseButton(libraryDbFileField, "FASTA Files", new String[]{"fasta", "fa"}));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Output Directory:",
-            outputDirField = createTextField("Path to output directory"),
-            createFolderButton(outputDirField));
+                outputDirField = createTextField("Path to output directory"),
+                createFolderButton(outputDirField));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Python Executable:",
-            pythonPathCombo = createPythonComboBox(),
-            createPythonBrowseButton());
+                pythonPathCombo = createPythonComboBox(),
+                createPythonBrowseButton());
 
         diannExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DIA-NN Executable:",
-            diannPathCombo = createDiannComboBox(),
-            createDiannBrowseButton());
+                diannPathCombo = createDiannComboBox(),
+                createDiannBrowseButton());
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Additional Options:",
-            additionalOptionsField = createTextField("Additional command line options"),
-            null);
+                additionalOptionsField = createTextField("Additional command line options"),
+                null);
 
-        // Info panel
         JPanel infoWrapper = new JPanel(new BorderLayout());
-        infoWrapper.setBackground(BACKGROUND_COLOR);
         infoWrapper.add(createInfoCard(
                 "Workflow Guide",
                 "Workflow 1: Generate spectral library by running DIA-NN search first\n" +
-                "  - Requires: Train MS files, Train database, Library database\n\n" +
-                "Workflow 2: Generate spectral library from existing DIA-NN results\n" +
-                "  - Requires: DIA-NN report file, Train MS files, Library database\n\n" +
-                "Workflow 3: Complete DIA analysis pipeline\n" +
-                "  - Requires: Train MS, Project MS, both databases"
+                        "  - Requires: Train MS files, Train database, Library database\n\n" +
+                        "Workflow 2: Generate spectral library from existing DIA-NN results\n" +
+                        "  - Requires: DIA-NN report file, Train MS files, Library database\n\n" +
+                        "Workflow 3: Complete DIA analysis pipeline\n" +
+                        "  - Requires: Train MS, Project MS, both databases"
         ), BorderLayout.CENTER);
-        
+
         GridBagConstraints gbcInfo = new GridBagConstraints();
         gbcInfo.gridx = 0;
         gbcInfo.gridy = gridy++;
@@ -411,7 +405,6 @@ public class CarafeGUI extends JFrame {
         gbcInfo.insets = new Insets(15, COL_SPACING, 0, COL_SPACING);
         inputFieldsPanel.add(infoWrapper, gbcInfo);
 
-        // Add vertical glue for spacing
         GridBagConstraints gbcGlue = new GridBagConstraints();
         gbcGlue.gridy = gridy;
         gbcGlue.weighty = 1.0;
@@ -419,9 +412,7 @@ public class CarafeGUI extends JFrame {
 
         panel.add(inputFieldsPanel, BorderLayout.CENTER);
 
-        // Initialize visibility based on default workflow
         updateInputFieldsVisibility();
-
         return panel;
     }
 
@@ -433,13 +424,11 @@ public class CarafeGUI extends JFrame {
         gbc.insets = new Insets(ROW_SPACING, COL_SPACING, ROW_SPACING, COL_SPACING);
         gbc.anchor = GridBagConstraints.WEST;
 
-        // Label
         gbc.gridx = 0; gbc.weightx = 0;
         JLabel label = createLabel(labelText);
         container.add(label, gbc);
         rowComponents.add(label);
 
-        // Input field
         gbc.gridx = 1; gbc.weightx = 1;
         if (buttonComponent == null) {
             gbc.gridwidth = 2;
@@ -448,7 +437,6 @@ public class CarafeGUI extends JFrame {
         rowComponents.add(inputField);
         gbc.gridwidth = 1;
 
-        // Button (if provided)
         if (buttonComponent != null) {
             gbc.gridx = 2; gbc.weightx = 0;
             container.add(buttonComponent, gbc);
@@ -460,7 +448,6 @@ public class CarafeGUI extends JFrame {
 
     private JPanel createMsButtonsPanel(JTextField targetField) {
         JPanel msButtonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        msButtonsPanel.setBackground(BACKGROUND_COLOR);
         msButtonsPanel.add(createBrowseButton(targetField, "mzML Files", new String[]{"mzML"}));
         msButtonsPanel.add(createFolderButton(targetField));
         return msButtonsPanel;
@@ -476,46 +463,40 @@ public class CarafeGUI extends JFrame {
 
     private void updateInputFieldsVisibility() {
         globalWorkflowIndex = workflowCombo.getSelectedIndex();
-        
-        // Workflow 1: Train MS, Train DB, Library DB, Output, Python, DIA-NN
-        // Workflow 2: DIA-NN Report, Train MS, Library DB, Output, Python
-        // Workflow 3: Train MS, Train DB, Project MS, Library DB, Output, Python, DIA-NN
 
         switch (globalWorkflowIndex) {
-            case 0: // Workflow 1
+            case 0 -> {
                 setVisible(diannReportRowComponents, false);
                 setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, true);
                 setVisible(projectMsRowComponents, false);
                 setVisible(libraryDbRowComponents, true);
                 setVisible(diannExeRowComponents, true);
-                break;
-            case 1: // Workflow 2
+            }
+            case 1 -> {
                 setVisible(diannReportRowComponents, true);
                 setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, false);
                 setVisible(projectMsRowComponents, false);
                 setVisible(libraryDbRowComponents, true);
                 setVisible(diannExeRowComponents, false);
-                break;
-            case 2: // Workflow 3
+            }
+            case 2 -> {
                 setVisible(diannReportRowComponents, false);
                 setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, true);
                 setVisible(projectMsRowComponents, true);
                 setVisible(libraryDbRowComponents, true);
                 setVisible(diannExeRowComponents, true);
-                break;
+            }
         }
 
-        // Revalidate and repaint to update layout
         inputFieldsPanel.revalidate();
         inputFieldsPanel.repaint();
     }
 
     private JPanel createTrainingDataPanel() {
         JPanel panel = new ScrollablePanel(new GridBagLayout());
-        panel.setBackground(BACKGROUND_COLOR);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -523,7 +504,6 @@ public class CarafeGUI extends JFrame {
         gbc.insets = DEFAULT_INSETS;
         gbc.anchor = GridBagConstraints.WEST;
 
-        // False Discovery Rate
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
         panel.add(createLabel("False Discovery Rate:"), gbc);
 
@@ -531,7 +511,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(fdrSpinner, gbc);
 
-        // PTM Site Probability
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
         panel.add(createLabel("PTM Site Probability:"), gbc);
 
@@ -539,7 +518,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(ptmSiteProbSpinner, gbc);
 
-        // PTM Site Q-value
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0;
         panel.add(createLabel("PTM Site Q-value:"), gbc);
 
@@ -547,7 +525,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(ptmSiteQvalueSpinner, gbc);
 
-        // Fragment Ion Mass Tolerance
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0;
         panel.add(createLabel("Fragment Ion Mass Tolerance:"), gbc);
 
@@ -555,7 +532,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(fragTolSpinner, gbc);
 
-        // Fragment Ion Mass Tolerance Units
         gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0;
         panel.add(createLabel("Fragment Ion Mass Tolerance Units:"), gbc);
 
@@ -565,7 +541,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(fragTolUnitCombo, gbc);
 
-        // Refine Peak Boundaries
         gbc.gridx = 0; gbc.gridy = 5; gbc.weightx = 0;
         panel.add(createLabel("Refine Peak Boundaries:"), gbc);
 
@@ -573,7 +548,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(refineBoundaryCheckbox, gbc);
 
-        // RT Peak Window
         gbc.gridx = 0; gbc.gridy = 6; gbc.weightx = 0;
         panel.add(createLabel("RT Peak Window:"), gbc);
 
@@ -581,7 +555,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(rtPeakWindowSpinner, gbc);
 
-        // XIC Correlation
         gbc.gridx = 0; gbc.gridy = 7; gbc.weightx = 0;
         panel.add(createLabel("XIC Correlation:"), gbc);
 
@@ -589,7 +562,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(xicCorSpinner, gbc);
 
-        // Minimum Fragment Mass-to-Charge
         gbc.gridx = 0; gbc.gridy = 8; gbc.weightx = 0;
         panel.add(createLabel("Minimum Fragment m/z:"), gbc);
 
@@ -597,7 +569,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(minFragMzSpinner, gbc);
 
-        // Spacer
         gbc.gridx = 0; gbc.gridy = 9; gbc.gridwidth = 2; gbc.weighty = 1;
         panel.add(Box.createVerticalGlue(), gbc);
 
@@ -606,7 +577,6 @@ public class CarafeGUI extends JFrame {
 
     private JPanel createModelTrainingPanel() {
         JPanel panel = new ScrollablePanel(new GridBagLayout());
-        panel.setBackground(BACKGROUND_COLOR);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -614,7 +584,6 @@ public class CarafeGUI extends JFrame {
         gbc.insets = DEFAULT_INSETS;
         gbc.anchor = GridBagConstraints.WEST;
 
-        // Model Type
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
         panel.add(createLabel("Model Type:"), gbc);
 
@@ -624,7 +593,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(modeCombo, gbc);
 
-        // Normalized Collision Energy
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
         panel.add(createLabel("Normalized Collision Energy:"), gbc);
         nceField = createTextField("e.g., 27 or auto");
@@ -632,11 +600,9 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(nceField, gbc);
 
-        // MS Instrument Type
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0;
         panel.add(createLabel("MS Instrument Type:"), gbc);
 
-        // MS Instrument input: it must be one of {auto, QE, Lumos, timsTOF, SciexTOF, ThermoTOF}
         String[] msInstruments = {"auto", "QE", "Lumos", "timsTOF", "SciexTOF", "ThermoTOF"};
         msInstrumentField = new JComboBox<>(msInstruments);
         msInstrumentField.setEditable(false);
@@ -646,11 +612,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(msInstrumentField, gbc);
 
-        // Computational Device
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0;
         panel.add(createLabel("Computational Device:"), gbc);
 
-        String[] devices = {"auto","gpu", "cpu"};
+        String[] devices = {"auto", "gpu", "cpu"};
         deviceCombo = new JComboBox<>(devices);
         deviceCombo.setEditable(false);
         styleComboBox(deviceCombo);
@@ -658,18 +623,16 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(deviceCombo, gbc);
 
-        // Info panel
         gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.weightx = 1;
         gbc.insets = new Insets(20, 8, 8, 8);
         panel.add(createInfoCard(
                 "Model Training Tips",
                 "- GPU mode is recommended for faster training (requires CUDA-compatible GPU)\n" +
-                "- If GPU is not available, the software will automatically fall back to CPU\n" +
-                "- NCE and MS Instrument are optional for fine-tuning (learned from data)\n" +
-                "- Use 'phosphorylation' mode for phosphopeptide analysis"
+                        "- If GPU is not available, the software will automatically fall back to CPU\n" +
+                        "- NCE and MS Instrument are optional for fine-tuning (learned from data)\n" +
+                        "- Use 'phosphorylation' mode for phosphopeptide analysis"
         ), gbc);
 
-        // Spacer
         gbc.gridy = 5; gbc.weighty = 1;
         panel.add(Box.createVerticalGlue(), gbc);
 
@@ -678,7 +641,6 @@ public class CarafeGUI extends JFrame {
 
     private JPanel createLibraryGenerationPanel() {
         JPanel panel = new ScrollablePanel(new GridBagLayout());
-        panel.setBackground(BACKGROUND_COLOR);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -686,7 +648,6 @@ public class CarafeGUI extends JFrame {
         gbc.insets = DEFAULT_INSETS;
         gbc.anchor = GridBagConstraints.WEST;
 
-        // Enzyme
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
         panel.add(createLabel("Enzyme:"), gbc);
 
@@ -701,14 +662,11 @@ public class CarafeGUI extends JFrame {
                 "0:Non enzyme"
         };
         enzymeCombo = new JComboBox<>(enzymes);
-        enzymeCombo.setSelectedIndex(1);
         styleComboBox(enzymeCombo);
-        gbc.gridx = 1; gbc.weightx = 1;
-        // make "2:Trypsin (no P rule)" in the list as default
         enzymeCombo.setSelectedIndex(1);
+        gbc.gridx = 1; gbc.weightx = 1;
         panel.add(enzymeCombo, gbc);
 
-        // Missed Cleavages
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
         panel.add(createLabel("Missed Cleavages:"), gbc);
 
@@ -716,7 +674,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(missCleavageSpinner, gbc);
 
-        // Fixed Modification Available
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0;
         panel.add(createLabel("Fixed Modification Available:"), gbc);
 
@@ -729,7 +686,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(fixModAvailableCombo, gbc);
 
-        // Fixed Modifications Selected
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0;
         panel.add(createLabel("Fixed Modifications Selected:"), gbc);
 
@@ -738,7 +694,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(fixModSelectedField, gbc);
 
-        // Variable Modifications Available
         gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0;
         panel.add(createLabel("Variable Modifications Available:"), gbc);
 
@@ -753,7 +708,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(varModAvailableCombo, gbc);
 
-        // Variable Modifications Selected
         gbc.gridx = 0; gbc.gridy = 5; gbc.weightx = 0;
         panel.add(createLabel("Variable Modifications Selected:"), gbc);
 
@@ -762,7 +716,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(varModSelectedField, gbc);
 
-        // Maximum Variable Modifications
         gbc.gridx = 0; gbc.gridy = 6; gbc.weightx = 0;
         panel.add(createLabel("Maximum Variable Modifications:"), gbc);
 
@@ -770,7 +723,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(maxVarSpinner, gbc);
 
-        // Clip N-Terminal Methionine
         gbc.gridx = 0; gbc.gridy = 7; gbc.weightx = 0;
         panel.add(createLabel("Clip N-Terminal Methionine:"), gbc);
 
@@ -778,7 +730,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(clipNmCheckbox, gbc);
 
-        // Minimum Peptide Length
         gbc.gridx = 0; gbc.gridy = 8; gbc.weightx = 0;
         panel.add(createLabel("Minimum Peptide Length:"), gbc);
 
@@ -786,7 +737,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(minLengthSpinner, gbc);
 
-        // Maximum Peptide Length
         gbc.gridx = 0; gbc.gridy = 9; gbc.weightx = 0;
         panel.add(createLabel("Maximum Peptide Length:"), gbc);
 
@@ -794,7 +744,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(maxLengthSpinner, gbc);
 
-        // Minimum Peptide Mass-to-Charge
         gbc.gridx = 0; gbc.gridy = 10; gbc.weightx = 0;
         panel.add(createLabel("Minimum Peptide m/z:"), gbc);
 
@@ -802,7 +751,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(minPepMzSpinner, gbc);
 
-        // Maximum Peptide Mass-to-Charge
         gbc.gridx = 0; gbc.gridy = 11; gbc.weightx = 0;
         panel.add(createLabel("Maximum Peptide m/z:"), gbc);
 
@@ -810,7 +758,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(maxPepMzSpinner, gbc);
 
-        // Minimum Peptide Charge
         gbc.gridx = 0; gbc.gridy = 12; gbc.weightx = 0;
         panel.add(createLabel("Minimum Peptide Charge:"), gbc);
 
@@ -818,7 +765,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(minPepChargeSpinner, gbc);
 
-        // Maximum Peptide Charge
         gbc.gridx = 0; gbc.gridy = 13; gbc.weightx = 0;
         panel.add(createLabel("Maximum Peptide Charge:"), gbc);
 
@@ -826,15 +772,14 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(maxPepChargeSpinner, gbc);
 
-        // Minimum Fragment Mass-to-Charge (already in Training Data panel, reuse minFragMzSpinner)
         gbc.gridx = 0; gbc.gridy = 14; gbc.weightx = 0;
         panel.add(createLabel("Minimum Fragment m/z:"), gbc);
 
+        // (UI second copy; currently command uses minFragMzSpinner from training tab)
         JSpinner minFragMzSpinner2 = createSpinner(200, 50, 500, 10);
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(minFragMzSpinner2, gbc);
 
-        // Maximum Fragment Mass-to-Charge
         gbc.gridx = 0; gbc.gridy = 15; gbc.weightx = 0;
         panel.add(createLabel("Maximum Fragment m/z:"), gbc);
 
@@ -842,7 +787,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(maxFragMzSpinner, gbc);
 
-        // Maximum Number of Fragment Ions
         gbc.gridx = 0; gbc.gridy = 16; gbc.weightx = 0;
         panel.add(createLabel("Maximum Number of Fragment Ions:"), gbc);
 
@@ -850,7 +794,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(maxFragIonsSpinner, gbc);
 
-        // Spectral Library Format
         gbc.gridx = 0; gbc.gridy = 17; gbc.weightx = 0;
         panel.add(createLabel("Spectral Library Format:"), gbc);
 
@@ -860,7 +803,6 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 1; gbc.weightx = 1;
         panel.add(libraryFormatCombo, gbc);
 
-        // Spacer
         gbc.gridx = 0; gbc.gridy = 18; gbc.gridwidth = 2; gbc.weighty = 1;
         panel.add(Box.createVerticalGlue(), gbc);
 
@@ -869,42 +811,52 @@ public class CarafeGUI extends JFrame {
 
     private JPanel createConsolePanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(CARD_COLOR);
+        Color border = lafColor("Component.borderColor", lafColor("Separator.foreground", new Color(128, 128, 128)));
         panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDER_COLOR),
+                BorderFactory.createLineBorder(border),
                 BorderFactory.createEmptyBorder(10, 10, 10, 10)
         ));
 
         JLabel consoleLabel = new JLabel("[>] Console Output");
         consoleLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        consoleLabel.setForeground(TEXT_COLOR);
         consoleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
         panel.add(consoleLabel, BorderLayout.NORTH);
 
         consoleArea = new JTextArea();
         consoleArea.setEditable(false);
         consoleArea.setFont(new Font("Consolas", Font.PLAIN, 12));
-        consoleArea.setBackground(new Color(30, 30, 30));
-        consoleArea.setForeground(new Color(200, 200, 200));
-        consoleArea.setCaretColor(Color.WHITE);
         consoleArea.setLineWrap(true);
         consoleArea.setWrapStyleWord(true);
 
+        applyConsoleTheme();
+
         JScrollPane scrollPane = new JScrollPane(consoleArea);
-        scrollPane.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
+        scrollPane.setBorder(BorderFactory.createLineBorder(border));
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         panel.add(scrollPane, BorderLayout.CENTER);
-
-        // Progress bar is shown in the footer
 
         return panel;
     }
 
+    private void applyConsoleTheme() {
+        if (consoleArea == null) return;
+        boolean dark = FlatLaf.isLafDark();
+        if (dark) {
+            consoleArea.setBackground(new Color(30, 30, 30));
+            consoleArea.setForeground(new Color(200, 200, 200));
+            consoleArea.setCaretColor(Color.WHITE);
+        } else {
+            consoleArea.setBackground(Color.WHITE);
+            consoleArea.setForeground(Color.BLACK);
+            consoleArea.setCaretColor(Color.BLACK);
+        }
+    }
+
     private JPanel createFooter() {
         JPanel footer = new JPanel(new BorderLayout());
-        footer.setBackground(BACKGROUND_COLOR);
-        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR));
-        // Progress bar (above buttons)
+        Color border = lafColor("Component.borderColor", lafColor("Separator.foreground", new Color(128, 128, 128)));
+        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, border));
+
         progressBar = new JProgressBar();
         progressBar.setIndeterminate(false);
         progressBar.setStringPainted(true);
@@ -913,9 +865,7 @@ public class CarafeGUI extends JFrame {
         progressBar.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
         footer.add(progressBar, BorderLayout.NORTH);
 
-        // Main buttons panel
         JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 15));
-        buttonsPanel.setBackground(BACKGROUND_COLOR);
 
         runButton = createPrimaryButton("Run Carafe", ACCENT_COLOR);
         runButton.addActionListener(e -> runCarafe());
@@ -931,7 +881,9 @@ public class CarafeGUI extends JFrame {
         buttonsPanel.add(previewButton);
 
         JButton clearButton = createSecondaryButton("Clear Console");
-        clearButton.addActionListener(e -> consoleArea.setText(""));
+        clearButton.addActionListener(e -> {
+            if (consoleArea != null) consoleArea.setText("");
+        });
         buttonsPanel.add(clearButton);
 
         JButton helpButton = createSecondaryButton("Help");
@@ -940,34 +892,36 @@ public class CarafeGUI extends JFrame {
 
         footer.add(buttonsPanel, BorderLayout.CENTER);
 
-        // Status bar
         JPanel statusBar = new JPanel(new BorderLayout());
-        statusBar.setBackground(new Color(245, 245, 245));
         statusBar.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
-        
-        // create and assign the status label to the field so it can be updated later
-        this.statusLabel = new JLabel("Ready | GPU: " + (isGPUAvailable() ? "Available" : "Not Available"));
+
+        statusLabel = new JLabel("Ready | GPU: " + (isGPUAvailable() ? "Available" : "Not Available"));
         statusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        statusLabel.setForeground(TEXT_SECONDARY);
         statusBar.add(statusLabel, BorderLayout.WEST);
 
         JLabel memoryLabel = new JLabel("Java: " + System.getProperty("java.version"));
         memoryLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        memoryLabel.setForeground(TEXT_SECONDARY);
         statusBar.add(memoryLabel, BorderLayout.EAST);
 
         footer.add(statusBar, BorderLayout.SOUTH);
-
         return footer;
+    }
+
+    private void appendConsoleSafe(String text) {
+        if (consoleArea == null) return;
+        SwingUtilities.invokeLater(() -> {
+            consoleArea.append(text);
+            consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+        });
     }
 
     private boolean isGPUAvailable() {
         try {
-            if(CudaUtils.hasCuda()){
+            if (CudaUtils.hasCuda()) {
                 return true;
-            }else{
+            } else {
                 GPUTools gpuTools = new GPUTools();
-                if(pythonPathCombo.getSelectedItem() != null) {
+                if (pythonPathCombo != null && pythonPathCombo.getSelectedItem() != null) {
                     gpuTools.py_path = pythonPathCombo.getSelectedItem().toString();
                 }
                 GPUTools.TorchGpuStatus st = gpuTools.checkTorchGpu();
@@ -1000,42 +954,38 @@ public class CarafeGUI extends JFrame {
         }
     }
 
-    /**
-     * Refresh the status label to show GPU availability and selected Python path.
-     */
     private void refreshStatusLabel() {
         if (statusLabel == null) return;
-        String gpuText = "Not Available";
+
+        String gpuText;
         try {
             gpuText = isGPUAvailable() ? "Available" : "Not Available";
         } catch (Exception e) {
             gpuText = "Unknown";
         }
+
         String py = "Not Set";
         try {
             if (pythonPathCombo != null && pythonPathCombo.getSelectedItem() != null) {
                 py = pythonPathCombo.getSelectedItem().toString();
             }
         } catch (Exception ignored) {}
+
         statusLabel.setText("Ready | GPU: " + gpuText + " | Python: " + py);
     }
 
     // Helper methods for creating styled components
-
     private JLabel createLabel(String text) {
         JLabel label = new JLabel(text);
         label.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        label.setForeground(TEXT_COLOR);
         return label;
     }
 
     private JTextField createTextField(String placeholder) {
-        // Create a text field that doesn't cache its preferred width
         JTextField field = new JTextField(10) {
             @Override
             public Dimension getPreferredSize() {
                 Dimension d = super.getPreferredSize();
-                // Return a small preferred width so GridBagLayout controls actual width
                 return new Dimension(100, d.height);
             }
         };
@@ -1049,7 +999,6 @@ public class CarafeGUI extends JFrame {
         styleButton(button);
         button.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
-            // Set initial directory to last used directory
             String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
             chooser.setCurrentDirectory(new File(lastDir));
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
@@ -1060,7 +1009,6 @@ public class CarafeGUI extends JFrame {
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 File selectedFile = chooser.getSelectedFile();
                 targetField.setText(selectedFile.getAbsolutePath());
-                // Remember the parent directory for next time
                 prefs.put(PREF_LAST_DIR, selectedFile.getParent());
             }
         });
@@ -1072,14 +1020,12 @@ public class CarafeGUI extends JFrame {
         styleButton(button);
         button.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
-            // Set initial directory to last used directory
             String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
             chooser.setCurrentDirectory(new File(lastDir));
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 File selectedDir = chooser.getSelectedFile();
                 targetField.setText(selectedDir.getAbsolutePath());
-                // Remember the directory for next time
                 prefs.put(PREF_LAST_DIR, selectedDir.getAbsolutePath());
             }
         });
@@ -1088,28 +1034,23 @@ public class CarafeGUI extends JFrame {
 
     private JPanel createPythonBrowseButton() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        panel.setBackground(BACKGROUND_COLOR);
 
         JButton browse = new JButton("Browse");
         styleButton(browse);
         browse.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
-            // Set initial directory based on OS
-            String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows")
-                    ? "C:\\" : "/usr/bin";
+            String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\" : "/usr/bin";
             String lastDir = prefs.get(PREF_LAST_DIR, defaultDir);
             chooser.setCurrentDirectory(new File(lastDir));
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             chooser.setDialogTitle("Select Python Executable");
-            // Filter for executable files
             if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
-                        "Executable Files", "exe"));
+                chooser.setFileFilter(new FileNameExtensionFilter("Executable Files", "exe"));
             }
             if (chooser.showOpenDialog(CarafeGUI.this) == JFileChooser.APPROVE_OPTION) {
                 File selectedFile = chooser.getSelectedFile();
                 String path = selectedFile.getAbsolutePath();
-                // Add to combo box if not already present
+
                 boolean found = false;
                 for (int i = 0; i < pythonPathCombo.getItemCount(); i++) {
                     if (pythonPathCombo.getItemAt(i).equals(path)) {
@@ -1117,20 +1058,18 @@ public class CarafeGUI extends JFrame {
                         break;
                     }
                 }
-                if (!found) {
-                    pythonPathCombo.addItem(path);
-                }
+                if (!found) pythonPathCombo.addItem(path);
                 pythonPathCombo.setSelectedItem(path);
-                // Save Python path to preferences
+
                 prefs.put(PREF_PYTHON_PATH, path);
                 prefs.put(PREF_LAST_DIR, selectedFile.getParent());
+                refreshStatusLabel();
             }
         });
 
         JButton install = new JButton("Install");
         styleButton(install);
         install.addActionListener(e -> {
-            // Run installation in background thread
             install.setEnabled(false);
             browse.setEnabled(false);
             CarafeGUI.this.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
@@ -1139,25 +1078,23 @@ public class CarafeGUI extends JFrame {
                 String home = System.getProperty("user.home");
                 java.nio.file.Path installRoot = Paths.get(home, ".carafe");
                 try {
-                    // Switch to console and show progress
                     SwingUtilities.invokeLater(() -> {
                         if (tabbedPane != null) tabbedPane.setSelectedIndex(Math.max(0, tabbedPane.getTabCount() - 1));
                         progressBar.setIndeterminate(true);
                         progressBar.setString("Python installation...");
-                        consoleArea.append("\n[INSTALL] Python installation started...\n");
-                        consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+                        appendConsoleSafe("\n[INSTALL] Python installation started...\n");
                     });
 
-                    // Start a tailer thread to stream install.log to console in real time
                     java.nio.file.Path logFile = installRoot.resolve("logs").resolve("install.log");
                     AtomicBoolean installDone = new AtomicBoolean(false);
+
                     Thread tailer = new Thread(() -> {
                         try {
-                            // wait for log file to appear
                             while (!installDone.get() && !java.nio.file.Files.exists(logFile)) {
                                 Thread.sleep(200);
                             }
                             if (!java.nio.file.Files.exists(logFile)) return;
+
                             try (RandomAccessFile raf = new RandomAccessFile(logFile.toFile(), "r")) {
                                 long pointer = 0;
                                 while (!installDone.get()) {
@@ -1167,32 +1104,22 @@ public class CarafeGUI extends JFrame {
                                         String line;
                                         while ((line = raf.readLine()) != null) {
                                             final String decoded = new String(line.getBytes("ISO-8859-1"), StandardCharsets.UTF_8);
-                                            SwingUtilities.invokeLater(() -> {
-                                                consoleArea.append(decoded + "\n");
-                                                consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
-                                            });
+                                            appendConsoleSafe(decoded + "\n");
                                         }
                                         pointer = raf.getFilePointer();
                                     }
                                     Thread.sleep(200);
                                 }
-                                // read any remaining lines
                                 long len = raf.length();
                                 if (len > pointer) {
                                     raf.seek(pointer);
                                     String line;
                                     while ((line = raf.readLine()) != null) {
                                         final String decoded = new String(line.getBytes("ISO-8859-1"), StandardCharsets.UTF_8);
-                                        SwingUtilities.invokeLater(() -> {
-                                            consoleArea.append(decoded + "\n");
-                                            consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
-                                        });
+                                        appendConsoleSafe(decoded + "\n");
                                     }
                                 }
-                            } catch (java.io.FileNotFoundException fnf) {
-                                // ignore
-                            } catch (IOException ex) {
-                                throw new RuntimeException(ex);
+                            } catch (IOException ignored) {
                             }
                         } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
@@ -1207,8 +1134,7 @@ public class CarafeGUI extends JFrame {
 
                     final String installedPath = py_path;
                     SwingUtilities.invokeLater(() -> {
-                        consoleArea.append("[INSTALL] Completed. Python installed at: " + installedPath + "\n");
-                        consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+                        appendConsoleSafe("[INSTALL] Completed. Python installed at: " + installedPath + "\n");
 
                         boolean found = false;
                         for (int i = 0; i < pythonPathCombo.getItemCount(); i++) {
@@ -1220,7 +1146,7 @@ public class CarafeGUI extends JFrame {
                         if (!found) pythonPathCombo.addItem(installedPath);
                         pythonPathCombo.setSelectedItem(installedPath);
                         prefs.put(PREF_PYTHON_PATH, installedPath);
-                        // refresh status now that python path is available
+
                         refreshStatusLabel();
 
                         JOptionPane.showMessageDialog(CarafeGUI.this,
@@ -1231,8 +1157,7 @@ public class CarafeGUI extends JFrame {
                 } catch (Exception ex) {
                     final String msg = ex.getMessage() == null ? ex.toString() : ex.getMessage();
                     SwingUtilities.invokeLater(() -> {
-                        consoleArea.append("[INSTALL] Failed: " + msg + "\n");
-                        consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+                        appendConsoleSafe("[INSTALL] Failed: " + msg + "\n");
                         JOptionPane.showMessageDialog(CarafeGUI.this,
                                 "Python installation failed:\n" + msg,
                                 "Install Error",
@@ -1259,25 +1184,17 @@ public class CarafeGUI extends JFrame {
         JComboBox<String> combo = new JComboBox<>();
         combo.setEditable(true);
         combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        combo.setBackground(CARD_COLOR);
         combo.setToolTipText("Select a detected Python or enter a custom path");
-        // Keep width reasonable even when long absolute paths populate the combo box
+
         final boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
-        String pythonPrototype = isWindows
-                ? "C:\\Python39\\python.exe"
-                : "/usr/bin/python3";
+        String pythonPrototype = isWindows ? "C:\\Python39\\python.exe" : "/usr/bin/python3";
         combo.setPrototypeDisplayValue(pythonPrototype);
-        
-        // Detect available Python installations
+
         java.util.List<String> pythonPaths = detectPythonInstallations();
-        for (String path : pythonPaths) {
-            combo.addItem(path);
-        }
-        
-        // Load saved Python path from preferences
+        for (String path : pythonPaths) combo.addItem(path);
+
         String savedPath = prefs.get(PREF_PYTHON_PATH, "");
         if (!savedPath.isEmpty()) {
-            // Check if saved path is already in the list
             boolean found = false;
             for (int i = 0; i < combo.getItemCount(); i++) {
                 if (combo.getItemAt(i).equals(savedPath)) {
@@ -1293,64 +1210,53 @@ public class CarafeGUI extends JFrame {
         } else if (combo.getItemCount() > 0) {
             combo.setSelectedIndex(0);
         }
-        
-        // Don't set preferred size - let GridBagLayout control width based on weightx
-        
-        // Save selection to preferences when changed
+
         combo.addActionListener(e -> {
             Object selected = combo.getSelectedItem();
             if (selected != null) {
                 prefs.put(PREF_PYTHON_PATH, selected.toString());
-                // update status label when python path changes
                 refreshStatusLabel();
             }
         });
-        
+
         return combo;
     }
-    
+
     private java.util.List<String> detectPythonInstallations() {
         java.util.List<String> pythonPaths = new java.util.ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
-        
+
         if (isWindows) {
-            // Common Windows Python locations
             String[] windowsPaths = {
-                System.getenv("LOCALAPPDATA") + "\\Programs\\Python",
-                System.getenv("PROGRAMFILES") + "\\Python",
-                System.getenv("PROGRAMFILES(X86)") + "\\Python",
-                System.getenv("USERPROFILE") + "\\AppData\\Local\\Programs\\Python",
-                System.getenv("USERPROFILE") + "\\anaconda3",
-                System.getenv("USERPROFILE") + "\\miniconda3",
-                System.getenv("USERPROFILE") + "\\.conda\\envs",
-                "C:\\Python",
-                "C:\\Anaconda3",
-                "C:\\Miniconda3"
+                    System.getenv("LOCALAPPDATA") + "\\Programs\\Python",
+                    System.getenv("PROGRAMFILES") + "\\Python",
+                    System.getenv("PROGRAMFILES(X86)") + "\\Python",
+                    System.getenv("USERPROFILE") + "\\AppData\\Local\\Programs\\Python",
+                    System.getenv("USERPROFILE") + "\\anaconda3",
+                    System.getenv("USERPROFILE") + "\\miniconda3",
+                    System.getenv("USERPROFILE") + "\\.conda\\envs",
+                    "C:\\Python",
+                    "C:\\Anaconda3",
+                    "C:\\Miniconda3"
             };
-            
+
             for (String basePath : windowsPaths) {
                 if (basePath == null) continue;
                 File baseDir = new File(basePath);
                 if (baseDir.exists() && baseDir.isDirectory()) {
-                    // Check for python.exe directly
                     File pythonExe = new File(baseDir, "python.exe");
-                    if (pythonExe.exists()) {
-                        pythonPaths.add(pythonExe.getAbsolutePath());
-                    }
-                    // Check subdirectories (for versioned installs like Python39, Python310)
+                    if (pythonExe.exists()) pythonPaths.add(pythonExe.getAbsolutePath());
+
                     File[] subDirs = baseDir.listFiles(File::isDirectory);
                     if (subDirs != null) {
                         for (File subDir : subDirs) {
                             pythonExe = new File(subDir, "python.exe");
-                            if (pythonExe.exists()) {
-                                pythonPaths.add(pythonExe.getAbsolutePath());
-                            }
+                            if (pythonExe.exists()) pythonPaths.add(pythonExe.getAbsolutePath());
                         }
                     }
                 }
             }
-            
-            // Try to find python in PATH using 'where' command
+
             try {
                 ProcessBuilder pb = new ProcessBuilder("where", "python");
                 pb.redirectErrorStream(true);
@@ -1365,44 +1271,38 @@ public class CarafeGUI extends JFrame {
                     }
                 }
             } catch (Exception ignored) {}
-            
-            // Search Windows Registry for Python installations
+
             detectPythonFromRegistry(pythonPaths);
-            
+
         } else {
-            // Unix/Linux/Mac paths
             String[] unixPaths = {
-                "/usr/bin/python3",
-                "/usr/bin/python",
-                "/usr/local/bin/python3",
-                "/usr/local/bin/python",
-                System.getenv("HOME") + "/anaconda3/bin/python",
-                System.getenv("HOME") + "/miniconda3/bin/python",
-                System.getenv("HOME") + "/.conda/envs",
-                "/opt/anaconda3/bin/python",
-                "/opt/miniconda3/bin/python"
+                    "/usr/bin/python3",
+                    "/usr/bin/python",
+                    "/usr/local/bin/python3",
+                    "/usr/local/bin/python",
+                    System.getenv("HOME") + "/anaconda3/bin/python",
+                    System.getenv("HOME") + "/miniconda3/bin/python",
+                    System.getenv("HOME") + "/.conda/envs",
+                    "/opt/anaconda3/bin/python",
+                    "/opt/miniconda3/bin/python"
             };
-            
+
             for (String path : unixPaths) {
                 if (path == null) continue;
                 File file = new File(path);
                 if (file.exists() && file.canExecute()) {
                     pythonPaths.add(path);
                 } else if (file.isDirectory()) {
-                    // Check conda envs directory
                     File[] envDirs = file.listFiles(File::isDirectory);
                     if (envDirs != null) {
                         for (File envDir : envDirs) {
                             File pythonExe = new File(envDir, "bin/python");
-                            if (pythonExe.exists() && pythonExe.canExecute()) {
-                                pythonPaths.add(pythonExe.getAbsolutePath());
-                            }
+                            if (pythonExe.exists() && pythonExe.canExecute()) pythonPaths.add(pythonExe.getAbsolutePath());
                         }
                     }
                 }
             }
-            
-            // Try to find python in PATH using 'which' command
+
             try {
                 ProcessBuilder pb = new ProcessBuilder("which", "-a", "python3");
                 pb.redirectErrorStream(true);
@@ -1417,7 +1317,7 @@ public class CarafeGUI extends JFrame {
                     }
                 }
             } catch (Exception ignored) {}
-            
+
             try {
                 ProcessBuilder pb = new ProcessBuilder("which", "-a", "python");
                 pb.redirectErrorStream(true);
@@ -1433,64 +1333,47 @@ public class CarafeGUI extends JFrame {
                 }
             } catch (Exception ignored) {}
         }
-        
-        // If no Python found, add a default placeholder
-        // if (pythonPaths.isEmpty()) {
-        //    pythonPaths.add(isWindows ? "" : "python3");
-        //}
-        
+
         return pythonPaths;
     }
-    
-    /**
-     * Detects Python installations from Windows Registry.
-     * Python installers register themselves at:
-     * - HKEY_CURRENT_USER\Software\Python\PythonCore\<version>\InstallPath
-     * - HKEY_LOCAL_MACHINE\Software\Python\PythonCore\<version>\InstallPath
-     * - HKEY_LOCAL_MACHINE\Software\Wow6432Node\Python\PythonCore\<version>\InstallPath (32-bit on 64-bit)
-     */
+
     private void detectPythonFromRegistry(java.util.List<String> pythonPaths) {
         String[] registryKeys = {
-            "HKEY_CURRENT_USER\\Software\\Python\\PythonCore",
-            "HKEY_LOCAL_MACHINE\\Software\\Python\\PythonCore",
-            "HKEY_LOCAL_MACHINE\\Software\\Wow6432Node\\Python\\PythonCore",
-            // Also check for Anaconda/Miniconda registrations
-            "HKEY_CURRENT_USER\\Software\\Python\\ContinuumAnalytics",
-            "HKEY_LOCAL_MACHINE\\Software\\Python\\ContinuumAnalytics"
+                "HKEY_CURRENT_USER\\Software\\Python\\PythonCore",
+                "HKEY_LOCAL_MACHINE\\Software\\Python\\PythonCore",
+                "HKEY_LOCAL_MACHINE\\Software\\Wow6432Node\\Python\\PythonCore",
+                "HKEY_CURRENT_USER\\Software\\Python\\ContinuumAnalytics",
+                "HKEY_LOCAL_MACHINE\\Software\\Python\\ContinuumAnalytics"
         };
-        
+
         for (String baseKey : registryKeys) {
             try {
-                // First, enumerate all version subkeys
                 ProcessBuilder pb = new ProcessBuilder("reg", "query", baseKey);
                 pb.redirectErrorStream(true);
                 Process p = pb.start();
                 java.util.List<String> versionKeys = new java.util.ArrayList<>();
-                
+
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         line = line.trim();
-                        // Lines containing version subkeys like "HKEY_...\Python39"
                         if (line.startsWith("HKEY_") && !line.equals(baseKey)) {
                             versionKeys.add(line);
                         }
                     }
                 }
                 p.waitFor();
-                
-                // For each version, query the InstallPath
+
                 for (String versionKey : versionKeys) {
                     String installPathKey = versionKey + "\\InstallPath";
                     try {
                         ProcessBuilder pb2 = new ProcessBuilder("reg", "query", installPathKey, "/ve");
                         pb2.redirectErrorStream(true);
                         Process p2 = pb2.start();
-                        
+
                         try (BufferedReader reader = new BufferedReader(new InputStreamReader(p2.getInputStream()))) {
                             String line;
                             while ((line = reader.readLine()) != null) {
-                                // Parse the default value line: "(Default)    REG_SZ    C:\Python39\"
                                 if (line.contains("REG_SZ")) {
                                     int regSzIndex = line.indexOf("REG_SZ");
                                     if (regSzIndex != -1) {
@@ -1515,22 +1398,18 @@ public class CarafeGUI extends JFrame {
         styleButton(button);
         button.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
-            // Set initial directory based on OS
-            String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows")
-                    ? "C:\\" : "/usr/bin";
+            String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\" : "/usr/bin";
             String lastDir = prefs.get(PREF_LAST_DIR, defaultDir);
             chooser.setCurrentDirectory(new File(lastDir));
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             chooser.setDialogTitle("Select DIA-NN Executable");
-            // Filter for executable files
             if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
-                        "Executable Files", "exe"));
+                chooser.setFileFilter(new FileNameExtensionFilter("Executable Files", "exe"));
             }
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 File selectedFile = chooser.getSelectedFile();
                 String path = selectedFile.getAbsolutePath();
-                // Add to combo box if not already present
+
                 boolean found = false;
                 for (int i = 0; i < diannPathCombo.getItemCount(); i++) {
                     if (diannPathCombo.getItemAt(i).equals(path)) {
@@ -1538,11 +1417,8 @@ public class CarafeGUI extends JFrame {
                         break;
                     }
                 }
-                if (!found) {
-                    diannPathCombo.addItem(path);
-                }
+                if (!found) diannPathCombo.addItem(path);
                 diannPathCombo.setSelectedItem(path);
-                // Save DIA-NN path to preferences
                 prefs.put(PREF_DIANN_PATH, path);
                 prefs.put(PREF_LAST_DIR, selectedFile.getParent());
             }
@@ -1554,23 +1430,18 @@ public class CarafeGUI extends JFrame {
         JComboBox<String> combo = new JComboBox<>();
         combo.setEditable(true);
         combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        combo.setBackground(CARD_COLOR);
         combo.setToolTipText("Select a detected DIA-NN or enter a custom path");
+
         String diannPrototype = System.getProperty("os.name").toLowerCase().contains("windows")
                 ? "C:\\DIA-NN\\diann.exe"
                 : "/usr/local/bin/diann";
         combo.setPrototypeDisplayValue(diannPrototype);
-        
-        // Detect available DIA-NN installations
+
         java.util.List<String> diannPaths = detectDiannInstallations();
-        for (String path : diannPaths) {
-            combo.addItem(path);
-        }
-        
-        // Load saved DIA-NN path from preferences
+        for (String path : diannPaths) combo.addItem(path);
+
         String savedPath = prefs.get(PREF_DIANN_PATH, "");
         if (!savedPath.isEmpty()) {
-            // Check if saved path is already in the list
             boolean found = false;
             for (int i = 0; i < combo.getItemCount(); i++) {
                 if (combo.getItemAt(i).equals(savedPath)) {
@@ -1586,57 +1457,49 @@ public class CarafeGUI extends JFrame {
         } else if (combo.getItemCount() > 0) {
             combo.setSelectedIndex(0);
         }
-        
-        // Save selection to preferences when changed
+
         combo.addActionListener(e -> {
             Object selected = combo.getSelectedItem();
             if (selected != null) {
                 prefs.put(PREF_DIANN_PATH, selected.toString());
             }
         });
-        
+
         return combo;
     }
-    
+
     private java.util.List<String> detectDiannInstallations() {
         java.util.List<String> diannPaths = new java.util.ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
-        
+
         if (isWindows) {
-            // Common Windows DIA-NN locations
             String[] windowsPaths = {
-                System.getenv("PROGRAMFILES") + "\\DIA-NN",
-                System.getenv("PROGRAMFILES(X86)") + "\\DIA-NN",
-                System.getenv("LOCALAPPDATA") + "\\DIA-NN",
-                System.getenv("USERPROFILE") + "\\DIA-NN",
-                "C:\\DIA-NN",
-                "C:\\Program Files\\DIA-NN",
-                "C:\\Program Files (x86)\\DIA-NN"
+                    System.getenv("PROGRAMFILES") + "\\DIA-NN",
+                    System.getenv("PROGRAMFILES(X86)") + "\\DIA-NN",
+                    System.getenv("LOCALAPPDATA") + "\\DIA-NN",
+                    System.getenv("USERPROFILE") + "\\DIA-NN",
+                    "C:\\DIA-NN",
+                    "C:\\Program Files\\DIA-NN",
+                    "C:\\Program Files (x86)\\DIA-NN"
             };
-            
+
             for (String basePath : windowsPaths) {
                 if (basePath == null) continue;
                 File baseDir = new File(basePath);
                 if (baseDir.exists() && baseDir.isDirectory()) {
-                    // Check for diann.exe directly
                     File diannExe = new File(baseDir, "diann.exe");
-                    if (diannExe.exists()) {
-                        diannPaths.add(diannExe.getAbsolutePath());
-                    }
-                    // Check subdirectories (for versioned installs)
+                    if (diannExe.exists()) diannPaths.add(diannExe.getAbsolutePath());
+
                     File[] subDirs = baseDir.listFiles(File::isDirectory);
                     if (subDirs != null) {
                         for (File subDir : subDirs) {
                             diannExe = new File(subDir, "diann.exe");
-                            if (diannExe.exists()) {
-                                diannPaths.add(diannExe.getAbsolutePath());
-                            }
+                            if (diannExe.exists()) diannPaths.add(diannExe.getAbsolutePath());
                         }
                     }
                 }
             }
-            
-            // Try to find diann in PATH using 'where' command
+
             try {
                 ProcessBuilder pb = new ProcessBuilder("where", "diann");
                 pb.redirectErrorStream(true);
@@ -1651,25 +1514,21 @@ public class CarafeGUI extends JFrame {
                     }
                 }
             } catch (Exception ignored) {}
-            
+
         } else {
-            // Unix/Linux/Mac paths
             String[] unixPaths = {
-                "/usr/local/bin/diann",
-                "/usr/bin/diann",
-                System.getenv("HOME") + "/DIA-NN/diann",
-                "/opt/DIA-NN/diann"
+                    "/usr/local/bin/diann",
+                    "/usr/bin/diann",
+                    System.getenv("HOME") + "/DIA-NN/diann",
+                    "/opt/DIA-NN/diann"
             };
-            
+
             for (String path : unixPaths) {
                 if (path == null) continue;
                 File file = new File(path);
-                if (file.exists() && file.canExecute()) {
-                    diannPaths.add(path);
-                }
+                if (file.exists() && file.canExecute()) diannPaths.add(path);
             }
-            
-            // Try to find diann in PATH using 'which' command
+
             try {
                 ProcessBuilder pb = new ProcessBuilder("which", "diann");
                 pb.redirectErrorStream(true);
@@ -1685,21 +1544,18 @@ public class CarafeGUI extends JFrame {
                 }
             } catch (Exception ignored) {}
         }
-        
-        // If no DIA-NN found, add a default placeholder
+
         if (diannPaths.isEmpty()) {
             diannPaths.add(isWindows ? "diann.exe" : "diann");
         }
-        
         return diannPaths;
     }
 
     private void styleButton(JButton button) {
         button.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        button.setBackground(CARD_COLOR);
-        button.setForeground(TEXT_COLOR);
+        Color border = lafColor("Component.borderColor", lafColor("Separator.foreground", new Color(128, 128, 128)));
         button.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDER_COLOR),
+                BorderFactory.createLineBorder(border),
                 BorderFactory.createEmptyBorder(6, 12, 6, 12)
         ));
         button.setFocusPainted(false);
@@ -1721,10 +1577,9 @@ public class CarafeGUI extends JFrame {
     private JButton createSecondaryButton(String text) {
         JButton button = new JButton(text);
         button.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        button.setBackground(CARD_COLOR);
-        button.setForeground(TEXT_COLOR);
+        Color border = lafColor("Component.borderColor", lafColor("Separator.foreground", new Color(128, 128, 128)));
         button.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDER_COLOR),
+                BorderFactory.createLineBorder(border),
                 BorderFactory.createEmptyBorder(10, 20, 10, 20)
         ));
         button.setFocusPainted(false);
@@ -1734,15 +1589,12 @@ public class CarafeGUI extends JFrame {
 
     private void styleComboBox(JComboBox<?> combo) {
         combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        combo.setBackground(CARD_COLOR);
-        // Don't set preferred size - let GridBagLayout control width
     }
 
     private JSpinner createSpinner(int value, int min, int max, int step) {
         JSpinner spinner = new JSpinner(new SpinnerNumberModel(value, min, max, step));
         spinner.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         ((JSpinner.DefaultEditor) spinner.getEditor()).getTextField().setColumns(5);
-        // Set preferred height to match text fields and combo boxes
         Dimension prefSize = spinner.getPreferredSize();
         spinner.setPreferredSize(new Dimension(prefSize.width, COMPONENT_HEIGHT));
         spinner.setMinimumSize(new Dimension(60, COMPONENT_HEIGHT));
@@ -1754,7 +1606,6 @@ public class CarafeGUI extends JFrame {
         spinner.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         JSpinner.NumberEditor editor = new JSpinner.NumberEditor(spinner, "0.000");
         spinner.setEditor(editor);
-        // Set preferred height to match text fields and combo boxes
         Dimension prefSize = spinner.getPreferredSize();
         spinner.setPreferredSize(new Dimension(prefSize.width, COMPONENT_HEIGHT));
         spinner.setMinimumSize(new Dimension(60, COMPONENT_HEIGHT));
@@ -1764,36 +1615,37 @@ public class CarafeGUI extends JFrame {
     private JCheckBox createCheckBox(String text, boolean selected) {
         JCheckBox checkbox = new JCheckBox(text, selected);
         checkbox.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        checkbox.setBackground(BACKGROUND_COLOR);
-        checkbox.setForeground(TEXT_COLOR);
         return checkbox;
     }
 
     private JPanel createInfoCard(String title, String content) {
         JPanel card = new JPanel(new BorderLayout());
-        card.setBackground(new Color(232, 245, 253));
+
+        boolean dark = FlatLaf.isLafDark();
+        Color bg = dark ? new Color(45, 55, 65) : new Color(232, 245, 253);
+        Color bd = dark ? new Color(90, 100, 110) : new Color(41, 128, 185, 100);
+
+        card.setBackground(bg);
         card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(41, 128, 185, 100)),
+                BorderFactory.createLineBorder(bd),
                 BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
 
         JLabel titleLabel = new JLabel(title);
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        titleLabel.setForeground(PRIMARY_COLOR);
+        if (!dark) titleLabel.setForeground(PRIMARY_COLOR);
         titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
         card.add(titleLabel, BorderLayout.NORTH);
 
         JTextArea contentArea = new JTextArea(content) {
             @Override
             public Dimension getPreferredSize() {
-                // Return small preferred width to not affect column sizing
                 Dimension d = super.getPreferredSize();
                 return new Dimension(100, d.height);
             }
         };
         contentArea.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        contentArea.setForeground(TEXT_COLOR);
-        contentArea.setBackground(new Color(232, 245, 253));
+        contentArea.setBackground(bg);
         contentArea.setEditable(false);
         contentArea.setLineWrap(true);
         contentArea.setWrapStyleWord(true);
@@ -1805,66 +1657,42 @@ public class CarafeGUI extends JFrame {
     // Action methods
 
     private String buildCommand() {
-        return "-";
+        int wf = workflowCombo.getSelectedIndex();
+        if (wf == 1) return buildCarafeCommand();
+        return "This workflow runs chained commands. Click Run Carafe to execute.";
     }
 
-    /**
-     * Builds the command line string to run Carafe based on user inputs.
-     * @return Carafe command line string
-     */
     private String buildCarafeCommand() {
         StringBuilder cmd = new StringBuilder();
-        // Use the same java executable that started this GUI (avoid system java mismatch)
         String javaExec = getJavaExecutable();
-        // Quote the path in case it contains spaces (Windows)
-        if (javaExec.contains(" ")) {
-            javaExec = '"' + javaExec + '"';
-        }
+        if (javaExec.contains(" ")) javaExec = '"' + javaExec + '"';
         cmd.append(javaExec).append(" -Xmx8G ");
-        
-        // Add -Djava.security.manager=allow for Java 18-23 compatibility with Hadoop/Parquet
-        // Java 24+ removed Security Manager entirely, so we skip this flag
+
         int javaVersion = GenericUtils.getJavaMajorVersion();
         if (javaVersion >= 18 && javaVersion <= 23) {
             cmd.append("-Djava.security.manager=allow ");
         }
-        
+
         cmd.append("-jar ");
-        
-        // Get the jar path
+
         String jarPath = getJarPath();
         cmd.append(jarPath).append(" ");
 
-        // Get selected workflow
-        int workflow = workflowCombo.getSelectedIndex();
-
         String libraryDb = libraryDbFileField.getText().trim();
-        
-        // Library database (for all workflows)
-        if (!libraryDb.isEmpty()) {
-            cmd.append("-db \"").append(libraryDb).append("\" ");
-        }
+        if (!libraryDb.isEmpty()) cmd.append("-db \"").append(libraryDb).append("\" ");
 
-        // Add input files based on workflow
         String diannReport = diannReportFileField.getText().trim();
-        System.out.println("diannReport:"+diannReport);
-        if (!diannReport.isEmpty()) {
-            cmd.append("-i \"").append(diannReport).append("\" ");
-        }
+        if (!diannReport.isEmpty()) cmd.append("-i \"").append(diannReport).append("\" ");
 
         String trainMsFile = trainMsFileField.getText().trim();
-        if (!trainMsFile.isEmpty()) {
-            cmd.append("-ms \"").append(trainMsFile).append("\" ");
-        }
+        if (!trainMsFile.isEmpty()) cmd.append("-ms \"").append(trainMsFile).append("\" ");
 
-        // Output directory
         String outDir = outputDirField.getText().trim();
         if (!outDir.isEmpty()) {
             carafe_library_directory = outDir + File.separator + "carafe_library";
             cmd.append("-o \"").append(carafe_library_directory).append("\" ");
         }
 
-        // Training Data Generation settings
         cmd.append("-fdr ").append(fdrSpinner.getValue()).append(" ");
         cmd.append("-ptm_site_prob ").append(ptmSiteProbSpinner.getValue()).append(" ");
         cmd.append("-ptm_site_qvalue ").append(ptmSiteQvalueSpinner.getValue()).append(" ");
@@ -1875,50 +1703,34 @@ public class CarafeGUI extends JFrame {
         cmd.append("-cor ").append(xicCorSpinner.getValue()).append(" ");
         cmd.append("-lf_frag_mz_min ").append(minFragMzSpinner.getValue()).append(" ");
 
-        // Model Training settings
         cmd.append("-mode ").append(modeCombo.getSelectedItem()).append(" ");
         String nce = nceField.getText().trim();
-        if (!nce.isEmpty()) {
-            if(!nce.equalsIgnoreCase("auto")){
-                cmd.append("-nce ").append(nce).append(" ");
-            }
-        }
+        if (!nce.isEmpty() && !nce.equalsIgnoreCase("auto")) cmd.append("-nce ").append(nce).append(" ");
+
         Object msSel = msInstrumentField.getSelectedItem();
         String msInstrument = msSel == null ? "" : msSel.toString().trim();
-        if (!msInstrument.isEmpty()) {
-            if (!msInstrument.equalsIgnoreCase("auto")) {
-                cmd.append("-ms_instrument ").append(msInstrument).append(" ");
-            }
+        if (!msInstrument.isEmpty() && !msInstrument.equalsIgnoreCase("auto")) {
+            cmd.append("-ms_instrument ").append(msInstrument).append(" ");
         }
 
-        // Computation device selection
         Object deviceSel = deviceCombo.getSelectedItem();
         String device = deviceSel == null ? "auto" : deviceSel.toString().trim();
-        if(device.equalsIgnoreCase("auto")){
-            // use gpu if available
-            cmd.append("-device ").append("gpu").append(" ");
-        }else{
-            // use selected device
-            cmd.append("-device ").append(deviceCombo.getSelectedItem()).append(" ");
+        if (device.equalsIgnoreCase("auto")) {
+            cmd.append("-device ").append(isGPUAvailable() ? "gpu" : "cpu").append(" ");
+        } else {
+            cmd.append("-device ").append(device).append(" ");
         }
 
-        // Library Generation settings
         String enzyme = ((String) enzymeCombo.getSelectedItem()).split(":")[0];
         cmd.append("-enzyme ").append(enzyme).append(" ");
         cmd.append("-miss_c ").append(missCleavageSpinner.getValue()).append(" ");
-        
-        // Fixed modifications
+
         String fixModSelected = fixModSelectedField.getText().trim();
-        if (!fixModSelected.isEmpty()) {
-            cmd.append("-fixMod ").append(fixModSelected).append(" ");
-        }
-        
-        // Variable modifications
+        if (!fixModSelected.isEmpty()) cmd.append("-fixMod ").append(fixModSelected).append(" ");
+
         String varModSelected = varModSelectedField.getText().trim();
-        if (!varModSelected.isEmpty()) {
-            cmd.append("-varMod ").append(varModSelected).append(" ");
-        }
-        
+        if (!varModSelected.isEmpty()) cmd.append("-varMod ").append(varModSelected).append(" ");
+
         cmd.append("-maxVar ").append(maxVarSpinner.getValue()).append(" ");
         if (clipNmCheckbox.isSelected()) cmd.append("-clip_n_m ");
         cmd.append("-minLength ").append(minLengthSpinner.getValue()).append(" ");
@@ -1932,275 +1744,226 @@ public class CarafeGUI extends JFrame {
         cmd.append("-lf_type ").append(libraryFormatCombo.getSelectedItem()).append(" ");
         cmd.append("-se DIA-NN ");
 
-        // Fine-tuning based on workflow
-        if (!trainMsFile.isEmpty()) {
-            cmd.append("-tf all ");
-        }
+        if (!trainMsFile.isEmpty()) cmd.append("-tf all ");
 
-        // Additional CLI options
         String additionalOptions = additionalOptionsField.getText().trim();
-        if (!additionalOptions.isEmpty()) {
-            cmd.append(additionalOptions).append(" ");
-        }
+        if (!additionalOptions.isEmpty()) cmd.append(additionalOptions).append(" ");
 
         return cmd.toString();
     }
 
-    /**
-     * Returns the path to the java executable that started this JVM.
-     * Falls back to System.getProperty("java.home") + /bin/java when unavailable.
-     */
     private String getJavaExecutable() {
         try {
-            java.util.Optional<String> cmd = java.lang.ProcessHandle.current().info().command();
-            if (cmd.isPresent()) {
-                return cmd.get();
-            }
-        } catch (Throwable ignored) {
-        }
+            Optional<String> cmd = ProcessHandle.current().info().command();
+            if (cmd.isPresent()) return cmd.get();
+        } catch (Throwable ignored) {}
         String javaHome = System.getProperty("java.home");
         String sep = System.getProperty("file.separator");
-        String exec = javaHome + sep + "bin" + sep + (System.getProperty("os.name").toLowerCase().contains("win") ? "java.exe" : "java");
-        return exec;
+        return javaHome + sep + "bin" + sep + (System.getProperty("os.name").toLowerCase().contains("win") ? "java.exe" : "java");
     }
 
-    /**
-     * Run the Carafe process based on the selected workflow and user inputs.
-     */
     private void runCarafe() {
         if (isRunning) {
             JOptionPane.showMessageDialog(this, "A process is already running!", "Warning", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        // Validate inputs based on workflow
         int workflow = workflowCombo.getSelectedIndex();
         switch (workflow) {
             case 0 -> {
-                    // Library generation from DIA-NN search
-                    String trainMsFile = trainMsFileField.getText().trim();
-                    if (trainMsFile.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Please specify a training MS/MS file!", "Warning", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    String trainDb = trainDbFileField.getText().trim();
-                    if (trainDb.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Please provide a training protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    String libraryDb = libraryDbFileField.getText().trim();
-                    if (libraryDb.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Please provide a library protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    String outDir = outputDirField.getText().trim();
-                    if(outDir.isEmpty()){
-                        JOptionPane.showMessageDialog(this, "Please specify an output directory!", "Warning", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    String diann_train_dir = outDir + File.separator + "diann_train";
-                    // create the folder if it doesn't exist
-                    File diannTrainDirFile = new File(diann_train_dir);
-                    if(!diannTrainDirFile.exists()){
-                        diannTrainDirFile.mkdirs();
-                    }
-                    String diann_cmd = buildDIANNCommand(trainMsFile, "", trainDb, diann_train_dir);
-                    String diann_report_file = diann_train_dir + File.separator + "report.parquet";
+                String trainMsFile = trainMsFileField.getText().trim();
+                if (trainMsFile.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please specify a training MS/MS file!", "Warning", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                String trainDb = trainDbFileField.getText().trim();
+                if (trainDb.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please provide a training protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                String libraryDb = libraryDbFileField.getText().trim();
+                if (libraryDb.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please provide a library protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                String outDir = outputDirField.getText().trim();
+                if (outDir.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please specify an output directory!", "Warning", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
 
-                    // Switch to console tab so user sees logs
-                    if (tabbedPane != null) {
-                        SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
-                    }
+                String diann_train_dir = outDir + File.separator + "diann_train";
+                File diannTrainDirFile = new File(diann_train_dir);
+                if (!diannTrainDirFile.exists()) diannTrainDirFile.mkdirs();
 
-                    // Execute DIA-NN first, then Carafe after it completes
-                    executeChainedCommands(new CmdTask[]{new CmdTask(diann_cmd,"DIA-NN","Run DIA-NN search on the training MS data...")}, () -> {
-                        // This runs after DIA-NN completes successfully
-                        // Create a container to hold the command string so we can retrieve it from the inner class
-                        final CmdTask[] commandContainer = new CmdTask[1];
-                        try {
-                            // Use invokeAndWait to ensure the GUI updates BEFORE we generate the command
-                            SwingUtilities.invokeAndWait(() -> {
-                                // 1. Update the text field
-                                diannReportFileField.setText(diann_report_file);
-                                // 2. Build the command inside the EDT (Event Dispatch Thread).
-                                // This is safer because buildCarafeCommand() reads values from Swing components.
-                                commandContainer[0] = new CmdTask(buildCarafeCommand(),"Carafe","Run Carafe to generate fine-tuned library ...");
-                            });
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            // Handle error appropriately, maybe return empty array or log it
+                String diann_cmd = buildDIANNCommand(trainMsFile, "", trainDb, diann_train_dir);
+                String diann_report_file = diann_train_dir + File.separator + "report.parquet";
+
+                if (tabbedPane != null) SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
+
+                executeChainedCommands(
+                        new CmdTask[]{ new CmdTask(diann_cmd, "DIA-NN", "Run DIA-NN search on the training MS data...") },
+                        () -> {
+                            final CmdTask[] commandContainer = new CmdTask[1];
+                            try {
+                                SwingUtilities.invokeAndWait(() -> {
+                                    diannReportFileField.setText(diann_report_file);
+                                    commandContainer[0] = new CmdTask(buildCarafeCommand(), "Carafe", "Run Carafe to generate fine-tuned library ...");
+                                });
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                            return new CmdTask[]{ commandContainer[0] };
                         }
-                        // Return the command constructed inside the secure block
-                        return new CmdTask[]{commandContainer[0]};
-                    });
-                }
-            case 1 -> {
-                    // generate a spectral library only with a DIA-NN report
-                    String libraryDb = libraryDbFileField.getText().trim();
-                    if (libraryDb.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Please provide a library protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    String carafe_cmd = buildCarafeCommand();
-                    executeCommand(new CmdTask(carafe_cmd,"Carafe","Run Carafe to generate spectral library..."));
-                }
-            case 2 -> {
-                    // End to end workflow: DIA-NN search for training data + Carafe library generation + DIA-NN search for project MS files
-                    String trainMsFile = trainMsFileField.getText().trim();
-                    if (trainMsFile.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Please specify a training MS/MS file!", "Warning", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    String projectMsFile = projectMsFileField.getText().trim();
-                    if (projectMsFile.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Please specify a project MS/MS file!", "Warning", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    String trainDb = trainDbFileField.getText().trim();
-                    if (trainDb.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Please provide a training protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    String libraryDb = libraryDbFileField.getText().trim();
-                    if (libraryDb.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "Please provide a library protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    String outDir = outputDirField.getText().trim();
-                    if(outDir.isEmpty()){
-                        JOptionPane.showMessageDialog(this, "Please specify an output directory!", "Warning", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    String diann_train_dir = outDir + File.separator + "diann_train";
-                    // create the folder if it doesn't exist
-                    File diannTrainDirFile = new File(diann_train_dir);
-                    if(!diannTrainDirFile.exists()){
-                        diannTrainDirFile.mkdirs();
-                    }
-
-                    // for generating training data
-                    String diann_cmd = buildDIANNCommand(trainMsFile, "", trainDb, diann_train_dir);
-                    String diann_report_file = diann_train_dir + File.separator + "report.parquet";
-                    
-                    // for project MS file DIA-NN search after Carafe library generation
-                    String diann_project_dir = outDir + File.separator + "diann_project";
-                    // create the folder if it doesn't exist
-                    File diannProjectDirFile = new File(diann_project_dir);
-                    if(!diannProjectDirFile.exists()){
-                        diannProjectDirFile.mkdirs();
-                    }
-                    final String carafeLibraryPath = outDir + File.separator + "carafe_library" + File.separator + "SkylineAI_spectral_library.tsv";
-
-                    // Switch to console tab so user sees logs
-                    if (tabbedPane != null) {
-                        SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
-                    }
-
-                    // Run DIA-NN(train), then Carafe, then DIA-NN(project)
-                    executeChainedCommands(new CmdTask[]{new CmdTask(diann_cmd,"DIA-NN","Run DIA-NN search on the training MS data...")}, () -> {
-                        final CmdTask[] commands = new CmdTask[2]; // [0]=carafe, [1]=diann_project
-                        try {
-                            SwingUtilities.invokeAndWait(() -> {
-                                // Make sure Carafe reads the correct report path
-                                diannReportFileField.setText(diann_report_file);
-
-                                // Step 2 command: Carafe
-                                commands[0] = new CmdTask(buildCarafeCommand(),"Carafe","Run Carafe to generate fine-tuned library ...");
-
-                                // Step 3 command: DIA-NN project search using the newly generated Carafe library
-                                commands[1] = new CmdTask(buildDIANNCommand(projectMsFile, carafeLibraryPath, libraryDb, diann_project_dir), "DIA-NN", "DIA-NN search for project data using fine-tuned library ...");
-                            });
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            // Returning null/empty tells your executor to stop (choose what your executor expects)
-                            return new CmdTask[0];
-                        }
-                        return commands;
-                    });
-                }
-            default -> {
-                JOptionPane.showMessageDialog(this, "Unsupported workflow selected!", "Error", JOptionPane.ERROR_MESSAGE);
+                );
             }
+            case 1 -> {
+                String libraryDb = libraryDbFileField.getText().trim();
+                if (libraryDb.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please provide a library protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                String carafe_cmd = buildCarafeCommand();
+                executeCommand(new CmdTask(carafe_cmd, "Carafe", "Run Carafe to generate spectral library..."));
+            }
+            case 2 -> {
+                String trainMsFile = trainMsFileField.getText().trim();
+                if (trainMsFile.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please specify a training MS/MS file!", "Warning", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                String projectMsFile = projectMsFileField.getText().trim();
+                if (projectMsFile.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please specify a project MS/MS file!", "Warning", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                String trainDb = trainDbFileField.getText().trim();
+                if (trainDb.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please provide a training protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                String libraryDb = libraryDbFileField.getText().trim();
+                if (libraryDb.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please provide a library protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                String outDir = outputDirField.getText().trim();
+                if (outDir.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Please specify an output directory!", "Warning", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                String diann_train_dir = outDir + File.separator + "diann_train";
+                File diannTrainDirFile = new File(diann_train_dir);
+                if (!diannTrainDirFile.exists()) diannTrainDirFile.mkdirs();
+
+                String diann_cmd = buildDIANNCommand(trainMsFile, "", trainDb, diann_train_dir);
+                String diann_report_file = diann_train_dir + File.separator + "report.parquet";
+
+                String diann_project_dir = outDir + File.separator + "diann_project";
+                File diannProjectDirFile = new File(diann_project_dir);
+                if (!diannProjectDirFile.exists()) diannProjectDirFile.mkdirs();
+
+                final String carafeLibraryPath = outDir + File.separator + "carafe_library" + File.separator + "SkylineAI_spectral_library.tsv";
+
+                if (tabbedPane != null) SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
+
+                executeChainedCommands(
+                        new CmdTask[]{ new CmdTask(diann_cmd, "DIA-NN", "Run DIA-NN search on the training MS data...") },
+                        () -> {
+                            final CmdTask[] commands = new CmdTask[2];
+                            try {
+                                SwingUtilities.invokeAndWait(() -> {
+                                    diannReportFileField.setText(diann_report_file);
+                                    commands[0] = new CmdTask(buildCarafeCommand(), "Carafe", "Run Carafe to generate fine-tuned library ...");
+                                    commands[1] = new CmdTask(
+                                            buildDIANNCommand(projectMsFile, carafeLibraryPath, libraryDb, diann_project_dir),
+                                            "DIA-NN",
+                                            "DIA-NN search for project data using fine-tuned library ..."
+                                    );
+                                });
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                return new CmdTask[0];
+                            }
+                            return commands;
+                        }
+                );
+            }
+            default -> JOptionPane.showMessageDialog(this, "Unsupported workflow selected!", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    /**
-     * Functional interface for generating the next set of commands after initial commands complete.
-     */
     @FunctionalInterface
     private interface NextCommandsSupplier {
         CmdTask[] getNextCommands();
     }
 
-    /**
-     * Execute commands in sequence, with optional follow-up commands after the initial batch completes.
-     * This ensures proper chaining where the stop button works at any point.
-     */
+    private static class CmdTask {
+        final String cmd;
+        final String tool_name;
+        final String task_description;
+
+        CmdTask(String cmd, String tool_name, String task_description) {
+            this.cmd = cmd;
+            this.tool_name = tool_name;
+            this.task_description = task_description;
+        }
+    }
+
     private void executeChainedCommands(CmdTask[] initialCommands, NextCommandsSupplier nextCommandsSupplier) {
         isRunning = true;
         runButton.setEnabled(false);
         stopButton.setEnabled(true);
         progressBar.setIndeterminate(true);
-        progressBar.setString("Running DIA-NN...");
+        progressBar.setString("Running...");
 
-        // Save Python path to preferences
         Object selectedPython = pythonPathCombo.getSelectedItem();
         String pythonPath = selectedPython != null ? selectedPython.toString().trim() : "";
-        if (!pythonPath.isEmpty()) {
-            prefs.put(PREF_PYTHON_PATH, pythonPath);
-        }
+        if (!pythonPath.isEmpty()) prefs.put(PREF_PYTHON_PATH, pythonPath);
 
         executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
             try {
-                // Execute initial commands
                 for (CmdTask command : initialCommands) {
-                    if (!isRunning) {
-                        // User clicked stop
-                        return;
-                    }
-                    
+                    if (!isRunning) return;
+
                     updateProgressBarForCommand(command.task_description);
-                    
-                    consoleArea.append("\n========================================\n");
-                    consoleArea.append("Running: " + command.task_description + "\n");
-                    consoleArea.append("Command: " + command.cmd + "\n");
-                    consoleArea.append("========================================\n\n");
-                    
+
+                    appendConsoleSafe("\n========================================\n");
+                    appendConsoleSafe("Running: " + command.task_description + "\n");
+                    appendConsoleSafe("Command: " + command.cmd + "\n");
+                    appendConsoleSafe("========================================\n\n");
+
                     int exitCode = runSingleCommand(command.cmd, pythonPath);
-                    
                     if (exitCode != 0) {
                         SwingUtilities.invokeLater(() -> {
-                            consoleArea.append("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
+                            appendConsoleSafe("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
                             progressBar.setString("Failed");
                             finishExecution();
                         });
                         return;
                     }
                 }
-                
-                // If we have follow-up commands, execute them
+
                 if (nextCommandsSupplier != null && isRunning) {
                     CmdTask[] nextCommands = nextCommandsSupplier.getNextCommands();
                     for (CmdTask command : nextCommands) {
-                        if (!isRunning) {
-                            return;
-                        }
-                        
+                        if (!isRunning) return;
+
                         updateProgressBarForCommand(command.task_description);
-                        
-                        consoleArea.append("\n========================================\n");
-                        consoleArea.append("Running: " + command.task_description + "\n");
-                        consoleArea.append("Command: " + command.cmd + "\n");
-                        consoleArea.append("========================================\n\n");
-                        
+
+                        appendConsoleSafe("\n========================================\n");
+                        appendConsoleSafe("Running: " + command.task_description + "\n");
+                        appendConsoleSafe("Command: " + command.cmd + "\n");
+                        appendConsoleSafe("========================================\n\n");
+
                         int exitCode = runSingleCommand(command.cmd, pythonPath);
-                        
                         if (exitCode != 0) {
                             SwingUtilities.invokeLater(() -> {
-                                consoleArea.append("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
+                                appendConsoleSafe("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
                                 progressBar.setString("Failed");
                                 finishExecution();
                             });
@@ -2208,32 +1971,35 @@ public class CarafeGUI extends JFrame {
                         }
                     }
                 }
-                
+
                 SwingUtilities.invokeLater(() -> {
-                    consoleArea.append("\n[SUCCESS] Workflow completed successfully!\n");
+                    appendConsoleSafe("\n[SUCCESS] Workflow completed successfully!\n");
                     progressBar.setString("Completed");
                     finishExecution();
                 });
-                
+
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
-                    consoleArea.append("\n[ERROR] Error: " + e.getMessage() + "\n");
+                    appendConsoleSafe("\n[ERROR] Error: " + e.getMessage() + "\n");
                     progressBar.setString("Error");
                     finishExecution();
                 });
             }
         });
     }
-    
+
     private void updateProgressBarForCommand(String description) {
         if (progressBar == null) return;
         SwingUtilities.invokeLater(() -> progressBar.setString(description));
     }
 
-    /**
-     * Run a single command and wait for it to complete.
-     * Returns the exit code of the process.
-     */
+    private static String findEnvKeyIgnoreCase(java.util.Map<String, String> env, String desiredKey) {
+        for (String key : env.keySet()) {
+            if (key.equalsIgnoreCase(desiredKey)) return key;
+        }
+        return desiredKey;
+    }
+
     private int runSingleCommand(String command, String pythonPath) throws Exception {
         ProcessBuilder pb = new ProcessBuilder();
         if (System.getProperty("os.name").toLowerCase().contains("windows")) {
@@ -2243,7 +2009,7 @@ public class CarafeGUI extends JFrame {
         }
         pb.redirectErrorStream(true);
 
-        // Modify PATH to include user-specified Python directory
+        // Inject python folder into PATH when needed
         if (!pythonPath.isEmpty()) {
             java.util.Map<String, String> env = pb.environment();
             File pythonFile = new File(pythonPath);
@@ -2252,129 +2018,90 @@ public class CarafeGUI extends JFrame {
                 String pathSeparator = System.getProperty("os.name").toLowerCase().contains("windows") ? ";" : ":";
                 String currentPath = env.getOrDefault("PATH", env.getOrDefault("Path", ""));
                 String newPath = pythonDir + pathSeparator + currentPath;
-                env.put("PATH", newPath);
+                env.put(findEnvKeyIgnoreCase(env, "PATH"), newPath);
                 if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                    env.put("Path", newPath);
+                    env.put(findEnvKeyIgnoreCase(env, "Path"), newPath);
                 }
             }
         }
 
-        // Only set OpenMP / MKL env vars for DIANN to avoid interfering with other tools
+        // DIA-NN env tuning
         String lowerCmd = command.toLowerCase();
-        if (lowerCmd.contains("diann") && lowerCmd.contains("--f ")) {
+        if (lowerCmd.contains("diann") && lowerCmd.contains("--f")) {
             java.util.Map<String, String> env = pb.environment();
-            String target_omp_num_threads = "OMP_NUM_THREADS";
-            String target_mkl_num_threads = "MKL_NUM_THREADS";
-            String target_kmp_affinity = "KMP_AFFINITY";
+
+            String kOmp = findEnvKeyIgnoreCase(env, "OMP_NUM_THREADS");
+            String kMkl = findEnvKeyIgnoreCase(env, "MKL_NUM_THREADS");
+            String kAff = findEnvKeyIgnoreCase(env, "KMP_AFFINITY");
+            String kWarn = findEnvKeyIgnoreCase(env, "KMP_WARNINGS");
+
             try {
-                // 1. Search for existing key with ANY casing (e.g., omp_num_threads)
-                for (String key : env.keySet()) {
-                    if (key.equalsIgnoreCase(target_omp_num_threads)) {
-                        target_omp_num_threads = key; // Found it! Use the existing key casing (e.g., "omp_num_threads")
-                        break;
-                    }
-                }
-
-                // 1. Search for existing key with ANY casing (e.g., mkl_num_threads)
-                for (String key : env.keySet()) {
-                    if (key.equalsIgnoreCase(target_mkl_num_threads)) {
-                        target_mkl_num_threads = key; // Found it! Use the existing key casing (e.g., "mkl_num_threads")
-                        break;
-                    }
-                }
-
-                // 1. Search for existing key with ANY casing (e.g., kmp_affinity)
-                for (String key : env.keySet()) {
-                    if (key.equalsIgnoreCase(target_kmp_affinity)) {
-                        target_kmp_affinity = key; // Found it! Use the existing key casing (e.g., "kmp_affinity")
-                        break;
-                    }
-                }
-
-                String omp = env.get(target_omp_num_threads);
+                String omp = env.get(kOmp);
                 if (omp == null || omp.trim().isEmpty() || omp.trim().equals("0")) {
                     String threads = String.valueOf(Runtime.getRuntime().availableProcessors());
-                    env.put(target_omp_num_threads, threads);
-                    env.put(target_mkl_num_threads, threads);
+                    env.put(kOmp, threads);
+                    env.put(kMkl, threads);
                 }
-                // Remove KMP_AFFINITY if it may conflict with OMP_PROC_BIND
-                env.remove(target_kmp_affinity);
-                // Silence Intel OpenMP warnings
-                env.put("KMP_WARNINGS", "off");
-            } catch (Throwable ignored) {
-            }
 
-            // Debug: show the env values we will use for DIANN
-            String dbgOmp = pb.environment().getOrDefault(target_omp_num_threads, "(unset)");
-            String dbgMkl = pb.environment().getOrDefault(target_mkl_num_threads, "(unset)");
-            String dbgKmp = pb.environment().getOrDefault(target_kmp_affinity, "(unset)");
-            final String dbgMsg = String.format("[DEBUG] DIANN env: OMP_NUM_THREADS=%s, MKL_NUM_THREADS=%s, KMP_AFFINITY=%s", dbgOmp, dbgMkl, dbgKmp);
-            SwingUtilities.invokeLater(() -> {
-                consoleArea.append(dbgMsg + "\n");
-                consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
-            });
+                // avoid oversubscription warnings
+                env.remove(kAff);
+
+                // suppress Intel/OpenMP warnings
+                env.put(kWarn, "off"); // also can use "0" if you prefer
+            } catch (Throwable ignored) {}
+
+            String dbgOmp = env.getOrDefault(kOmp, "(unset)");
+            String dbgMkl = env.getOrDefault(kMkl, "(unset)");
+            String dbgAff = env.getOrDefault(kAff, "(unset)");
+            String dbgWarn = env.getOrDefault(kWarn, "(unset)");
+            appendConsoleSafe(String.format("[DEBUG] DIANN env: OMP_NUM_THREADS=%s, MKL_NUM_THREADS=%s, KMP_AFFINITY=%s, KMP_WARNINGS=%s%n",
+                    dbgOmp, dbgMkl, dbgAff, dbgWarn));
         }
 
         currentProcess = pb.start();
 
-        BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()));
-        String line;
-        while ((line = reader.readLine()) != null) {
-            final String output = line;
-            SwingUtilities.invokeLater(() -> {
-                consoleArea.append(output + "\n");
-                consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
-            });
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                final String output = line;
+                appendConsoleSafe(output + "\n");
+            }
         }
 
         return currentProcess.waitFor();
     }
 
-    /**
-     * Generate command to run DIA-NN.
-     * @param ms_file MS file path, a single mzML file, or a folder containing mzML files
-     * @param spectral_library_file Spectral library file path for DIA-NN. It can be empty for library-free search.
-     * @param database Protein database file path (FASTA)
-     * @return DIA-NN command line string
-     */
     private String buildDIANNCommand(String ms_file, String spectral_library_file, String database, String out_dir) {
-        // StringBuilder cmd = new StringBuilder();
         Object diannPath = diannPathCombo.getSelectedItem();
         ArrayList<String> diannArgs = new ArrayList<>();
         if (diannPath != null && !diannPath.toString().trim().isEmpty()) {
             String diann_path = "\"" + diannPath.toString().trim() + "\"";
-            // diann.exe --f "test.mzML" --lib "" --threads 8 --verbose 1 --out "report.parquet" --qvalue 0.01 --matrices  --out-lib "report-lib.parquet" --gen-spec-lib --predictor --fasta "UP000005640_9606_comb_rever.fasta" --fasta-search --met-excision --min-pep-len 7 --max-pep-len 35 --min-pr-mz 300 --max-pr-mz 1800 --min-pr-charge 2 --max-pr-charge 4 --min-fr-mz 200 --max-fr-mz 1800 --cut K*,R* --missed-cleavages 1 --unimod4 --reanalyse --rt-profiling  
             diannArgs.add(diann_path);
 
-            // check if ms_file is a folder or path
             File F = new File(ms_file);
             int n_ms_files = 0;
-            if(F.isFile()){
+
+            if (F.isFile()) {
                 diannArgs.add("--f");
                 diannArgs.add("\"" + ms_file + "\"");
                 n_ms_files = 1;
-            }else if(F.isDirectory()){
-                // check if this is a timsTOF DIA raw data folder: check if the folder contains analysis.tdf
+            } else if (F.isDirectory()) {
                 File analysisTdf = new File(ms_file + File.separator + "analysis.tdf");
-                if(analysisTdf.exists()){
+                if (analysisTdf.exists()) {
                     diannArgs.add("--f");
                     diannArgs.add("\"" + ms_file + "\"");
                     n_ms_files = 1;
-                }else{
-                    // list all mzML files in the folder
+                } else {
                     File[] mzMLFiles = F.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
-                    n_ms_files = 0;
-                    if(mzMLFiles != null) {
+                    if (mzMLFiles != null && mzMLFiles.length > 0) {
                         for (File mzMLFile : mzMLFiles) {
                             diannArgs.add("--f");
                             diannArgs.add("\"" + mzMLFile.getPath() + "\"");
                             n_ms_files++;
                         }
-                    }else{
-                        // check timsTOF DIA raw data folder: check if the folder contains subfolders which contain analysis.tdf files
+                    } else {
                         File[] subDirs = F.listFiles(File::isDirectory);
-                        n_ms_files = 0;
-                        if(subDirs != null) {
+                        if (subDirs != null) {
                             for (File subDir : subDirs) {
                                 File subAnalysisTdf = new File(subDir.getPath() + File.separator + "analysis.tdf");
                                 if (subAnalysisTdf.exists()) {
@@ -2383,22 +2110,22 @@ public class CarafeGUI extends JFrame {
                                     n_ms_files++;
                                 }
                             }
-                        }else{
-                            // show a dialog to ask the users to select a valid mzML file, a folder containing mzML files, a valid timsTOF DIA folder, or a folder which contains timsTOF DIA files.
-                            JOptionPane.showMessageDialog(this, "Please select a valid mzML/timsTOF DIA file or a folder containing mzML files or timsTOF DIA raw files.", "Input Required", JOptionPane.WARNING_MESSAGE);
+                        } else {
+                            JOptionPane.showMessageDialog(this,
+                                    "Please select a valid mzML/timsTOF DIA file or a folder containing mzML files or timsTOF DIA raw files.",
+                                    "Input Required", JOptionPane.WARNING_MESSAGE);
                             return "";
                         }
                     }
                 }
-            }else{
-                // show a dialog to ask the users to select a valid mzML file, a folder containing mzML files, a valid timsTOF DIA folder, or a folder which contains timsTOF DIA files.
-                JOptionPane.showMessageDialog(this, "Please select a valid mzML/timsTOF DIA file or a folder containing mzML files or timsTOF DIA raw files.", "Input Required", JOptionPane.WARNING_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Please select a valid mzML/timsTOF DIA file or a folder containing mzML files or timsTOF DIA raw files.",
+                        "Input Required", JOptionPane.WARNING_MESSAGE);
                 return "";
             }
 
-            // check library and protein database
-            if(spectral_library_file.isEmpty() && !database.isEmpty()){
-                // --lib "" --gen-spec-lib --predictor --fasta "protein.fasta" --fasta-search
+            if (spectral_library_file.isEmpty() && !database.isEmpty()) {
                 diannArgs.add("--lib");
                 diannArgs.add("\"\"");
                 diannArgs.add("--gen-spec-lib");
@@ -2406,90 +2133,76 @@ public class CarafeGUI extends JFrame {
                 diannArgs.add("--fasta");
                 diannArgs.add("\"" + database + "\"");
                 diannArgs.add("--fasta-search");
-            }else if(!spectral_library_file.isEmpty() && !database.isEmpty()){
-                // --lib spectral_library_file --gen-spec-lib --reannotate --fasta "protein.fasta"
+            } else if (!spectral_library_file.isEmpty() && !database.isEmpty()) {
                 diannArgs.add("--lib");
                 diannArgs.add("\"" + spectral_library_file + "\"");
                 diannArgs.add("--gen-spec-lib");
                 diannArgs.add("--reannotate");
                 diannArgs.add("--fasta");
                 diannArgs.add("\"" + database + "\"");
-            }else{
-                JOptionPane.showMessageDialog(this, "Please provide a spectral library file or a protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Please provide a spectral library file or a protein database file.",
+                        "Input Required", JOptionPane.WARNING_MESSAGE);
                 return "";
             }
 
-            // other parameters
-            // --threads 8 --verbose 1
-            // use all available CPU cores
             int cores = Runtime.getRuntime().availableProcessors();
-            diannArgs.add("--threads");;
+            diannArgs.add("--threads");
             diannArgs.add(String.valueOf(cores));
-            diannArgs.add("--verbose");;
+            diannArgs.add("--verbose");
             diannArgs.add("1");
 
-            // output
-            // --out "report.parquet" --out-lib "report-lib.parquet"
             diannArgs.add("--out");
             diannArgs.add("\"" + out_dir + File.separator + "report.parquet\"");
             diannArgs.add("--out-lib");
             diannArgs.add("\"" + out_dir + File.separator + "report-lib.parquet\"");
 
-            // modification related settings
-            // --unimod4
-            // Fixed modifications
             String fixModSelected = fixModSelectedField.getText().trim();
-            if(fixModSelected.equalsIgnoreCase("1")){
+            if (fixModSelected.equalsIgnoreCase("1")) {
                 diannArgs.add("--unimod4");
-            }else{
-                // open a warning dialog which shows unsupported modification settings
-                JOptionPane.showMessageDialog(this, "Unsupported modification settings. Please select '1' for Fixed modifications.", "Warning", JOptionPane.WARNING_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Unsupported modification settings. Please select '1' for Fixed modifications.",
+                        "Warning", JOptionPane.WARNING_MESSAGE);
                 return "";
             }
 
-            // Variable modification
-            // --var-mods 1 --var-mod UniMod:35,15.994915,M
             String varModSelected = varModSelectedField.getText().trim();
-            if(varModSelected.equalsIgnoreCase("2")){
+            if (varModSelected.equalsIgnoreCase("2")) {
                 diannArgs.add("--var-mods");
                 diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
                 diannArgs.add("--var-mod");
                 diannArgs.add("UniMod:35,15.994915,M");
-            }else if(varModSelected.equalsIgnoreCase("0")){
-                // no modification
-            }else{
-                // open a warning dialog which shows unsupported modification settings
-                JOptionPane.showMessageDialog(this, "Unsupported modification settings. Please select '2' for Variable modifications.", "Warning", JOptionPane.WARNING_MESSAGE);
+            } else if (varModSelected.equalsIgnoreCase("0")) {
+                // no variable mods
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Unsupported modification settings. Please select '2' or '0' for Variable modifications.",
+                        "Warning", JOptionPane.WARNING_MESSAGE);
                 return "";
             }
 
-            // enzyme parameters
-            // --cut K*,R* --missed-cleavages 1
             String enzyme = ((String) enzymeCombo.getSelectedItem()).split(":")[0];
-            // cmd.append("-enzyme ").append(enzyme).append(" ");
-            // cmd.append("-miss_c ").append(missCleavageSpinner.getValue()).append(" ");
-            if(enzyme.equalsIgnoreCase("1")){
+            if (enzyme.equalsIgnoreCase("1")) {
                 diannArgs.add("--cut");
                 diannArgs.add("\"K*,R*,!*P\"");
                 diannArgs.add("--missed-cleavages");
                 diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
-            }else if(enzyme.equalsIgnoreCase("2")){
+            } else if (enzyme.equalsIgnoreCase("2")) {
                 diannArgs.add("--cut");
                 diannArgs.add("\"K*,R*\"");
                 diannArgs.add("--missed-cleavages");
                 diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
-            }else{
-                // open a warning dialog
-                JOptionPane.showMessageDialog(this, "Unsupported enzyme settings. Please select '1' for trypsin or '2' for chymotrypsin.", "Warning", JOptionPane.WARNING_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Unsupported enzyme settings. Please select '1' (Trypsin default) or '2' (Trypsin no P rule).",
+                        "Warning", JOptionPane.WARNING_MESSAGE);
                 return "";
             }
 
-            if(clipNmCheckbox.isSelected()){
-                diannArgs.add("--met-excision");
-            }
+            if (clipNmCheckbox.isSelected()) diannArgs.add("--met-excision");
 
-            // Peptide length, charge state, m/z range
-            // --min-pep-len 7 --max-pep-len 35 --min-pr-mz 300 --max-pr-mz 1800 --min-pr-charge 2 --max-pr-charge 4 --min-fr-mz 200 --max-fr-mz 1800
             diannArgs.add("--min-pep-len");
             diannArgs.add(String.valueOf(minLengthSpinner.getValue()));
             diannArgs.add("--max-pep-len");
@@ -2507,50 +2220,40 @@ public class CarafeGUI extends JFrame {
             diannArgs.add("--max-fr-mz");
             diannArgs.add(String.valueOf(maxFragMzSpinner.getValue()));
 
-            // --qvalue 0.01 --matrices  --reanalyse --rt-profiling
             diannArgs.add("--qvalue");
             diannArgs.add("0.01");
             diannArgs.add("--matrices");
-            if(n_ms_files>=2) {
-                diannArgs.add("--reanalyse");
-            }
+            if (n_ms_files >= 2) diannArgs.add("--reanalyse");
             diannArgs.add("--rt-profiling");
             diannArgs.add("--export-quant");
 
             return StringUtils.join(diannArgs, " ");
-        } else {
-            // open a warning dialog
-            JOptionPane.showMessageDialog(this, "Please provide a valid DIA-NN executable path.", "Input Required", JOptionPane.WARNING_MESSAGE);
-            return "";
         }
+
+        JOptionPane.showMessageDialog(this,
+                "Please provide a valid DIA-NN executable path.",
+                "Input Required", JOptionPane.WARNING_MESSAGE);
+        return "";
     }
 
     private String getJarPath() {
         try {
             String path = CarafeGUI.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
-            // On Windows, URI path starts with /C:/... which needs to be fixed
             if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                if (path.startsWith("/") && path.length() > 2 && path.charAt(2) == ':') {
-                    path = path.substring(1); // Remove leading slash for Windows paths like /C:/...
-                }
+                if (path.startsWith("/") && path.length() > 2 && path.charAt(2) == ':') path = path.substring(1);
             }
-            if (path.endsWith(".jar")) {
-                return path;
-            }
-            // If running from IDE, look for jar in target directory
+            if (path.endsWith(".jar")) return path;
+
             File targetDir = new File("target");
             if (targetDir.exists()) {
                 File[] jars = targetDir.listFiles((dir, name) -> name.startsWith("carafe") && name.endsWith(".jar"));
-                if (jars != null && jars.length > 0) {
-                    return jars[0].getAbsolutePath();
-                }
+                if (jars != null && jars.length > 0) return jars[0].getAbsolutePath();
             }
             return "carafe.jar";
         } catch (Exception e) {
             return "carafe.jar";
         }
     }
-
 
     private void executeCommand(CmdTask command) {
         isRunning = true;
@@ -2559,25 +2262,17 @@ public class CarafeGUI extends JFrame {
         progressBar.setIndeterminate(true);
         progressBar.setString(command.task_description);
 
-        // Switch to console tab so the user sees logs when running a single command
-        if (tabbedPane != null) {
-            SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
-        }
+        if (tabbedPane != null) SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
 
-        // Save Python path to preferences
         Object selectedPython = pythonPathCombo.getSelectedItem();
         String pythonPath = selectedPython != null ? selectedPython.toString().trim() : "";
-        if (!pythonPath.isEmpty()) {
-            prefs.put(PREF_PYTHON_PATH, pythonPath);
-        }
+        if (!pythonPath.isEmpty()) prefs.put(PREF_PYTHON_PATH, pythonPath);
 
-        consoleArea.append("\n========================================\n");
-        consoleArea.append("Starting Carafe...\n");
-        if (!pythonPath.isEmpty()) {
-            consoleArea.append("Python: " + pythonPath + "\n");
-        }
-        consoleArea.append("Command: " + command.cmd + "\n");
-        consoleArea.append("========================================\n\n");
+        appendConsoleSafe("\n========================================\n");
+        appendConsoleSafe("Starting Carafe...\n");
+        if (!pythonPath.isEmpty()) appendConsoleSafe("Python: " + pythonPath + "\n");
+        appendConsoleSafe("Command: " + command.cmd + "\n");
+        appendConsoleSafe("========================================\n\n");
 
         executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
@@ -2590,7 +2285,6 @@ public class CarafeGUI extends JFrame {
                 }
                 pb.redirectErrorStream(true);
 
-                // Modify PATH to include user-specified Python directory
                 if (!pythonPath.isEmpty()) {
                     java.util.Map<String, String> env = pb.environment();
                     File pythonFile = new File(pythonPath);
@@ -2598,35 +2292,30 @@ public class CarafeGUI extends JFrame {
                     if (pythonDir != null) {
                         String pathSeparator = System.getProperty("os.name").toLowerCase().contains("windows") ? ";" : ":";
                         String currentPath = env.getOrDefault("PATH", env.getOrDefault("Path", ""));
-                        // Prepend Python directory to PATH so it takes precedence
                         String newPath = pythonDir + pathSeparator + currentPath;
-                        env.put("PATH", newPath);
-                        // On Windows, also set "Path" for compatibility
+                        env.put(findEnvKeyIgnoreCase(env, "PATH"), newPath);
                         if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                            env.put("Path", newPath);
+                            env.put(findEnvKeyIgnoreCase(env, "Path"), newPath);
                         }
                     }
                 }
 
                 currentProcess = pb.start();
 
-                BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    final String output = line;
-                    SwingUtilities.invokeLater(() -> {
-                        consoleArea.append(output + "\n");
-                        consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
-                    });
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        appendConsoleSafe(line + "\n");
+                    }
                 }
 
                 int exitCode = currentProcess.waitFor();
                 SwingUtilities.invokeLater(() -> {
                     if (exitCode == 0) {
-                        consoleArea.append("\n[SUCCESS] Carafe completed successfully!\n");
+                        appendConsoleSafe("\n[SUCCESS] Carafe completed successfully!\n");
                         progressBar.setString("Completed");
                     } else {
-                        consoleArea.append("\n[ERROR] Carafe exited with code: " + exitCode + "\n");
+                        appendConsoleSafe("\n[ERROR] Carafe exited with code: " + exitCode + "\n");
                         progressBar.setString("Failed");
                     }
                     finishExecution();
@@ -2634,7 +2323,7 @@ public class CarafeGUI extends JFrame {
 
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
-                    consoleArea.append("\n[ERROR] Error: " + e.getMessage() + "\n");
+                    appendConsoleSafe("\n[ERROR] Error: " + e.getMessage() + "\n");
                     progressBar.setString("Error");
                     finishExecution();
                 });
@@ -2644,19 +2333,14 @@ public class CarafeGUI extends JFrame {
 
     private void stopCarafe() {
         if (currentProcess != null && currentProcess.isAlive()) {
-            // Destroy all descendant processes first (child processes spawned by the main process)
             currentProcess.descendants().forEach(ProcessHandle::destroyForcibly);
-            // Then destroy the main process
             currentProcess.destroyForcibly();
-            
-            // Wait briefly for process to terminate
             try {
-                currentProcess.waitFor(2, java.util.concurrent.TimeUnit.SECONDS);
+                currentProcess.waitFor(2, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            
-            consoleArea.append("\n[STOPPED] Process stopped by user.\n");
+            appendConsoleSafe("\n[STOPPED] Process stopped by user.\n");
         }
         finishExecution();
     }
@@ -2666,44 +2350,42 @@ public class CarafeGUI extends JFrame {
         runButton.setEnabled(true);
         stopButton.setEnabled(false);
         progressBar.setIndeterminate(false);
-        if (executor != null) {
-            executor.shutdown();
-        }
+        progressBar.setString("Ready");
+        if (executor != null) executor.shutdown();
     }
 
     private void showHelp() {
         String helpText = """
             Carafe - AI-Powered Spectral Library Generator
-            
-            Carafe generates experiment-specific in silico spectral libraries 
+
+            Carafe generates experiment-specific in silico spectral libraries
             using deep learning for DIA data analysis.
-            
+
             Quick Start:
             1. For fine-tuned library generation:
                - Provide PSM file (DIA-NN report.tsv or .parquet)
                - Provide MS file(s) in mzML format
                - Provide protein database (FASTA)
                - Configure settings and click Run
-            
+
             2. For pretrained model library generation:
                - Only provide protein database (FASTA)
                - Set NCE and MS instrument in Advanced settings
                - Click Run
-            
+
             For more information, visit:
             https://github.com/Noble-Lab/Carafe
-            
+
             Citation:
-            Wen, B., Hsu, C., Shteynberg, D. et al. 
-            Carafe enables high quality in silico spectral library generation 
-            for data-independent acquisition proteomics. 
+            Wen, B., Hsu, C., Shteynberg, D. et al.
+            Carafe enables high quality in silico spectral library generation
+            for data-independent acquisition proteomics.
             Nat Commun 16, 9815 (2025).
             """;
 
         JTextArea textArea = new JTextArea(helpText);
         textArea.setEditable(false);
         textArea.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        textArea.setBackground(CARD_COLOR);
 
         JScrollPane scrollPane = new JScrollPane(textArea);
         scrollPane.setPreferredSize(new Dimension(500, 400));
@@ -2722,12 +2404,12 @@ public class CarafeGUI extends JFrame {
         }
 
         @Override
-        public int getScrollableUnitIncrement(java.awt.Rectangle visibleRect, int orientation, int direction) {
+        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
             return 16;
         }
 
         @Override
-        public int getScrollableBlockIncrement(java.awt.Rectangle visibleRect, int orientation, int direction) {
+        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
             return 16;
         }
 
@@ -2742,23 +2424,24 @@ public class CarafeGUI extends JFrame {
         }
     }
 
-    /**
-     * Main entry point for the GUI
-     */
     public static void main(String[] args) {
-        // Enable anti-aliasing
         System.setProperty("awt.useSystemAAFontSettings", "on");
         System.setProperty("swing.aatext", "true");
 
-        // Set FlatLaf look and feel
         try {
             FlatLightLaf.setup();
+            UIManager.put("defaultFont", new Font("Segoe UI", Font.PLAIN, 13));
             UIManager.put("Button.arc", 10);
             UIManager.put("Component.arc", 10);
             UIManager.put("ProgressBar.arc", 10);
             UIManager.put("TextComponent.arc", 8);
-            UIManager.put("TabbedPane.selectedBackground", Color.WHITE);
             UIManager.put("TabbedPane.showTabSeparators", true);
+            UIManager.put("TabbedPane.tabInsets", new Insets(8, 14, 8, 14));
+            UIManager.put("ScrollBar.width", 12);
+            UIManager.put("ScrollBar.thumbArc", 999);
+            UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
+            UIManager.put("Component.focusWidth", 1);
+            UIManager.put("Component.innerFocusWidth", 0);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -2767,6 +2450,5 @@ public class CarafeGUI extends JFrame {
             CarafeGUI gui = new CarafeGUI();
             gui.setVisible(true);
         });
-        
     }
 }
