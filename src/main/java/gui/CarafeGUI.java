@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.prefs.Preferences;
+
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -44,9 +45,13 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
+
+import main.java.input.CParameter;
 import org.apache.commons.lang3.StringUtils;
+
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+
 import ai.djl.util.cuda.CudaUtils;
 import main.java.util.GPUTools;
 import main.java.util.GenericUtils;
@@ -77,9 +82,11 @@ public class CarafeGUI extends JFrame {
     // Window size constants
     private static final int DEFAULT_WIDTH = 700;   // Default window width
     private static final int DEFAULT_HEIGHT = 750;   // Default window height
-    private static final int MIN_WIDTH = 600;       // Minimum window width
-    private static final int MIN_HEIGHT = 600;       // Minimum window height
+    private static final int MIN_WIDTH = 700;       // Minimum window width
+    private static final int MIN_HEIGHT = 750;       // Minimum window height
     private static final int COMPONENT_HEIGHT = 32;  // Standard height for input components
+    private boolean enforcingMinSize = false;
+
 
     // Input fields
     private JComboBox<String> workflowCombo;
@@ -93,13 +100,13 @@ public class CarafeGUI extends JFrame {
     private JComboBox<String> diannPathCombo;
     private JTextField additionalOptionsField;
     
-    // Input panel rows for dynamic visibility
-    private JPanel diannReportRow;
-    private JPanel trainMsRow;
-    private JPanel trainDbRow;
-    private JPanel projectMsRow;
-    private JPanel libraryDbRow;
-    private JPanel diannExeRow;
+    // Input panel rows components for dynamic visibility
+    private java.util.List<JComponent> diannReportRowComponents;
+    private java.util.List<JComponent> trainMsRowComponents;
+    private java.util.List<JComponent> trainDbRowComponents;
+    private java.util.List<JComponent> projectMsRowComponents;
+    private java.util.List<JComponent> libraryDbRowComponents;
+    private java.util.List<JComponent> diannExeRowComponents;
     private JPanel inputFieldsPanel;
 
     // Training Data Generation settings
@@ -162,6 +169,7 @@ public class CarafeGUI extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
         setPreferredSize(new Dimension(DEFAULT_WIDTH, DEFAULT_HEIGHT));
+        setResizable(true);
 
         // Set look and feel - already set in main(), but fallback here
         try {
@@ -177,6 +185,12 @@ public class CarafeGUI extends JFrame {
         // refresh status after components are created
         refreshStatusLabel();
         pack();
+        // Ensure the window is not smaller than the minimum size after packing
+        Dimension packedSize = getSize();
+        Dimension minSize = getMinimumSize();
+        int newWidth = Math.max(packedSize.width, minSize.width);
+        int newHeight = Math.max(packedSize.height, minSize.height);
+        setSize(newWidth, newHeight);
         setLocationRelativeTo(null);
     }
 
@@ -219,10 +233,11 @@ public class CarafeGUI extends JFrame {
     private JScrollPane wrapInScrollPane(JPanel panel) {
         JScrollPane scrollPane = new JScrollPane(panel);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         scrollPane.getHorizontalScrollBar().setUnitIncrement(16);
+        scrollPane.getViewport().setBackground(BACKGROUND_COLOR);
         return scrollPane;
     }
 
@@ -279,7 +294,7 @@ public class CarafeGUI extends JFrame {
         rightPanel.add(darkModeToggle);
 
         // Version info
-        JLabel versionLabel = new JLabel("v2.0.0-beta");
+        JLabel versionLabel = new JLabel(CParameter.getVersion());
         versionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         versionLabel.setForeground(new Color(255, 255, 255, 180));
         rightPanel.add(versionLabel);
@@ -303,7 +318,7 @@ public class CarafeGUI extends JFrame {
     }
 
     private JPanel createInputPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
+        JPanel panel = new ScrollablePanel(new BorderLayout());
         panel.setBackground(BACKGROUND_COLOR);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
@@ -333,62 +348,51 @@ public class CarafeGUI extends JFrame {
         panel.add(workflowPanel, BorderLayout.NORTH);
 
         // Center section: Dynamic input fields
-        inputFieldsPanel = new JPanel();
-        inputFieldsPanel.setLayout(new BoxLayout(inputFieldsPanel, BoxLayout.Y_AXIS));
+        inputFieldsPanel = new JPanel(new GridBagLayout());
         inputFieldsPanel.setBackground(BACKGROUND_COLOR);
 
+        int gridy = 0;
+
         // Create all input rows
-        trainMsRow = createInputRow("Train MS File:", 
+        trainMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train MS File:",
             trainMsFileField = createTextField("Path to mzML file or folder for training"),
             createMsButtonsPanel(trainMsFileField));
 
-        diannReportRow = createInputRow("DIA-NN Report:", 
+        diannReportRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DIA-NN Report:",
             diannReportFileField = createTextField("Path to DIA-NN report.tsv or report.parquet"),
             createBrowseButton(diannReportFileField, "DIA-NN Report", new String[]{"tsv", "parquet"}));
 
-        trainDbRow = createInputRow("Train Protein Database:", 
+        trainDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train Protein Database:",
             trainDbFileField = createTextField("Path to protein FASTA for training"),
             createBrowseButton(trainDbFileField, "FASTA Files", new String[]{"fasta", "fa"}));
 
-        projectMsRow = createInputRow("Project MS File:", 
+        projectMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Project MS File:",
             projectMsFileField = createTextField("Path to mzML file or folder for project"),
             createMsButtonsPanel(projectMsFileField));
 
-        libraryDbRow = createInputRow("Library Protein Database:", 
+        libraryDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Library Protein Database:",
             libraryDbFileField = createTextField("Path to protein FASTA for library generation"),
             createBrowseButton(libraryDbFileField, "FASTA Files", new String[]{"fasta", "fa"}));
 
-        JPanel outputRow = createInputRow("Output Directory:", 
+        addInputRowToPanel(inputFieldsPanel, gridy++, "Output Directory:",
             outputDirField = createTextField("Path to output directory"),
             createFolderButton(outputDirField));
 
-        JPanel pythonRow = createInputRow("Python Executable:", 
+        addInputRowToPanel(inputFieldsPanel, gridy++, "Python Executable:",
             pythonPathCombo = createPythonComboBox(),
             createPythonBrowseButton());
 
-        diannExeRow = createInputRow("DIA-NN Executable:", 
+        diannExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DIA-NN Executable:",
             diannPathCombo = createDiannComboBox(),
             createDiannBrowseButton());
 
-        JPanel additionalRow = createInputRow("Additional Options:", 
+        addInputRowToPanel(inputFieldsPanel, gridy++, "Additional Options:",
             additionalOptionsField = createTextField("Additional command line options"),
             null);
-
-        // Add all rows to the panel
-        inputFieldsPanel.add(trainMsRow);
-        inputFieldsPanel.add(diannReportRow);
-        inputFieldsPanel.add(trainDbRow);
-        inputFieldsPanel.add(projectMsRow);
-        inputFieldsPanel.add(libraryDbRow);
-        inputFieldsPanel.add(outputRow);
-        inputFieldsPanel.add(pythonRow);
-        inputFieldsPanel.add(diannExeRow);
-        inputFieldsPanel.add(additionalRow);
 
         // Info panel
         JPanel infoWrapper = new JPanel(new BorderLayout());
         infoWrapper.setBackground(BACKGROUND_COLOR);
-        infoWrapper.setBorder(BorderFactory.createEmptyBorder(15, 0, 0, 0));
         infoWrapper.add(createInfoCard(
                 "Workflow Guide",
                 "Workflow 1: Generate spectral library by running DIA-NN search first\n" +
@@ -398,10 +402,20 @@ public class CarafeGUI extends JFrame {
                 "Workflow 3: Complete DIA analysis pipeline\n" +
                 "  - Requires: Train MS, Project MS, both databases"
         ), BorderLayout.CENTER);
-        inputFieldsPanel.add(infoWrapper);
+        
+        GridBagConstraints gbcInfo = new GridBagConstraints();
+        gbcInfo.gridx = 0;
+        gbcInfo.gridy = gridy++;
+        gbcInfo.gridwidth = 3;
+        gbcInfo.fill = GridBagConstraints.HORIZONTAL;
+        gbcInfo.insets = new Insets(15, COL_SPACING, 0, COL_SPACING);
+        inputFieldsPanel.add(infoWrapper, gbcInfo);
 
         // Add vertical glue for spacing
-        inputFieldsPanel.add(Box.createVerticalGlue());
+        GridBagConstraints gbcGlue = new GridBagConstraints();
+        gbcGlue.gridy = gridy;
+        gbcGlue.weighty = 1.0;
+        inputFieldsPanel.add(Box.createVerticalGlue(), gbcGlue);
 
         panel.add(inputFieldsPanel, BorderLayout.CENTER);
 
@@ -411,35 +425,37 @@ public class CarafeGUI extends JFrame {
         return panel;
     }
 
-    private JPanel createInputRow(String labelText, JComponent inputField, JComponent buttonComponent) {
-        JPanel row = new JPanel(new GridBagLayout());
-        row.setBackground(BACKGROUND_COLOR);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, COMPONENT_HEIGHT + ROW_SPACING * 2));
-
+    private java.util.List<JComponent> addInputRowToPanel(JPanel container, int gridy, String labelText, JComponent inputField, JComponent buttonComponent) {
+        java.util.List<JComponent> rowComponents = new java.util.ArrayList<>();
         GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridy = gridy;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(ROW_SPACING, COL_SPACING, ROW_SPACING, COL_SPACING);
         gbc.anchor = GridBagConstraints.WEST;
 
         // Label
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
-        row.add(createLabel(labelText), gbc);
+        gbc.gridx = 0; gbc.weightx = 0;
+        JLabel label = createLabel(labelText);
+        container.add(label, gbc);
+        rowComponents.add(label);
 
         // Input field
         gbc.gridx = 1; gbc.weightx = 1;
         if (buttonComponent == null) {
             gbc.gridwidth = 2;
         }
-        row.add(inputField, gbc);
+        container.add(inputField, gbc);
+        rowComponents.add(inputField);
         gbc.gridwidth = 1;
 
         // Button (if provided)
         if (buttonComponent != null) {
             gbc.gridx = 2; gbc.weightx = 0;
-            row.add(buttonComponent, gbc);
+            container.add(buttonComponent, gbc);
+            rowComponents.add(buttonComponent);
         }
 
-        return row;
+        return rowComponents;
     }
 
     private JPanel createMsButtonsPanel(JTextField targetField) {
@@ -448,6 +464,14 @@ public class CarafeGUI extends JFrame {
         msButtonsPanel.add(createBrowseButton(targetField, "mzML Files", new String[]{"mzML"}));
         msButtonsPanel.add(createFolderButton(targetField));
         return msButtonsPanel;
+    }
+
+    private void setVisible(java.util.List<JComponent> components, boolean visible) {
+        if (components != null) {
+            for (JComponent component : components) {
+                component.setVisible(visible);
+            }
+        }
     }
 
     private void updateInputFieldsVisibility() {
@@ -459,28 +483,28 @@ public class CarafeGUI extends JFrame {
 
         switch (globalWorkflowIndex) {
             case 0: // Workflow 1
-                diannReportRow.setVisible(false);
-                trainMsRow.setVisible(true);
-                trainDbRow.setVisible(true);
-                projectMsRow.setVisible(false);
-                libraryDbRow.setVisible(true);
-                diannExeRow.setVisible(true);
+                setVisible(diannReportRowComponents, false);
+                setVisible(trainMsRowComponents, true);
+                setVisible(trainDbRowComponents, true);
+                setVisible(projectMsRowComponents, false);
+                setVisible(libraryDbRowComponents, true);
+                setVisible(diannExeRowComponents, true);
                 break;
             case 1: // Workflow 2
-                diannReportRow.setVisible(true);
-                trainMsRow.setVisible(true);
-                trainDbRow.setVisible(false);
-                projectMsRow.setVisible(false);
-                libraryDbRow.setVisible(true);
-                diannExeRow.setVisible(false);
+                setVisible(diannReportRowComponents, true);
+                setVisible(trainMsRowComponents, true);
+                setVisible(trainDbRowComponents, false);
+                setVisible(projectMsRowComponents, false);
+                setVisible(libraryDbRowComponents, true);
+                setVisible(diannExeRowComponents, false);
                 break;
             case 2: // Workflow 3
-                diannReportRow.setVisible(false);
-                trainMsRow.setVisible(true);
-                trainDbRow.setVisible(true);
-                projectMsRow.setVisible(true);
-                libraryDbRow.setVisible(true);
-                diannExeRow.setVisible(true);
+                setVisible(diannReportRowComponents, false);
+                setVisible(trainMsRowComponents, true);
+                setVisible(trainDbRowComponents, true);
+                setVisible(projectMsRowComponents, true);
+                setVisible(libraryDbRowComponents, true);
+                setVisible(diannExeRowComponents, true);
                 break;
         }
 
@@ -490,7 +514,7 @@ public class CarafeGUI extends JFrame {
     }
 
     private JPanel createTrainingDataPanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
+        JPanel panel = new ScrollablePanel(new GridBagLayout());
         panel.setBackground(BACKGROUND_COLOR);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
@@ -581,7 +605,7 @@ public class CarafeGUI extends JFrame {
     }
 
     private JPanel createModelTrainingPanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
+        JPanel panel = new ScrollablePanel(new GridBagLayout());
         panel.setBackground(BACKGROUND_COLOR);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
@@ -653,7 +677,7 @@ public class CarafeGUI extends JFrame {
     }
 
     private JPanel createLibraryGenerationPanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
+        JPanel panel = new ScrollablePanel(new GridBagLayout());
         panel.setBackground(BACKGROUND_COLOR);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
@@ -2011,14 +2035,14 @@ public class CarafeGUI extends JFrame {
                     });
                 }
             case 1 -> {
-                    // generate library only with DIA-NN report
+                    // generate a spectral library only with a DIA-NN report
                     String libraryDb = libraryDbFileField.getText().trim();
                     if (libraryDb.isEmpty()) {
                         JOptionPane.showMessageDialog(this, "Please provide a library protein database file.", "Input Required", JOptionPane.WARNING_MESSAGE);
                         return;
                     }
                     String carafe_cmd = buildCarafeCommand();
-                    executeCommand(carafe_cmd);
+                    executeCommand(new CmdTask(carafe_cmd,"Carafe","Run Carafe to generate spectral library..."));
                 }
             case 2 -> {
                     // End to end workflow: DIA-NN search for training data + Carafe library generation + DIA-NN search for project MS files
@@ -2528,12 +2552,12 @@ public class CarafeGUI extends JFrame {
     }
 
 
-    private void executeCommand(String command) {
+    private void executeCommand(CmdTask command) {
         isRunning = true;
         runButton.setEnabled(false);
         stopButton.setEnabled(true);
         progressBar.setIndeterminate(true);
-        progressBar.setString("Running...");
+        progressBar.setString(command.task_description);
 
         // Switch to console tab so the user sees logs when running a single command
         if (tabbedPane != null) {
@@ -2552,7 +2576,7 @@ public class CarafeGUI extends JFrame {
         if (!pythonPath.isEmpty()) {
             consoleArea.append("Python: " + pythonPath + "\n");
         }
-        consoleArea.append("Command: " + command + "\n");
+        consoleArea.append("Command: " + command.cmd + "\n");
         consoleArea.append("========================================\n\n");
 
         executor = Executors.newSingleThreadExecutor();
@@ -2560,9 +2584,9 @@ public class CarafeGUI extends JFrame {
             try {
                 ProcessBuilder pb = new ProcessBuilder();
                 if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                    pb.command("cmd", "/c", command);
+                    pb.command("cmd", "/c", command.cmd);
                 } else {
-                    pb.command("bash", "-c", command);
+                    pb.command("bash", "-c", command.cmd);
                 }
                 pb.redirectErrorStream(true);
 
@@ -2621,9 +2645,7 @@ public class CarafeGUI extends JFrame {
     private void stopCarafe() {
         if (currentProcess != null && currentProcess.isAlive()) {
             // Destroy all descendant processes first (child processes spawned by the main process)
-            currentProcess.descendants().forEach(processHandle -> {
-                processHandle.destroyForcibly();
-            });
+            currentProcess.descendants().forEach(ProcessHandle::destroyForcibly);
             // Then destroy the main process
             currentProcess.destroyForcibly();
             
@@ -2689,6 +2711,37 @@ public class CarafeGUI extends JFrame {
         JOptionPane.showMessageDialog(this, scrollPane, "Carafe Help", JOptionPane.INFORMATION_MESSAGE);
     }
 
+    private static class ScrollablePanel extends JPanel implements javax.swing.Scrollable {
+        public ScrollablePanel(java.awt.LayoutManager layout) {
+            super(layout);
+        }
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(java.awt.Rectangle visibleRect, int orientation, int direction) {
+            return 16;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(java.awt.Rectangle visibleRect, int orientation, int direction) {
+            return 16;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
+    }
+
     /**
      * Main entry point for the GUI
      */
@@ -2714,5 +2767,6 @@ public class CarafeGUI extends JFrame {
             CarafeGUI gui = new CarafeGUI();
             gui.setVisible(true);
         });
+        
     }
 }
