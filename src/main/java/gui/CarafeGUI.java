@@ -178,6 +178,7 @@ public class CarafeGUI extends JFrame {
     private ExecutorService executor;
     private Process currentProcess;
     private volatile boolean isRunning = false;
+    private String cachedGpuStatus = "Checking..."; // Field to hold the result
 
     // Preferences for remembering last used directory
     private static final Preferences prefs = Preferences.userNodeForPackage(CarafeGUI.class);
@@ -210,7 +211,7 @@ public class CarafeGUI extends JFrame {
 
         initComponents();
         applyThemeToCustomComponents(); // Important: sync custom-colored components to current theme
-        refreshStatusLabel();
+        updateGpuStatusAsync(); // Initial check
 
         pack();
         Dimension packedSize = getSize();
@@ -748,10 +749,7 @@ public class CarafeGUI extends JFrame {
             // we update only the root and our specialized components.
             updateHeaderForegrounds();
 
-            // Sync InfoCards and other custom logic
-            for (InfoCardRef ref : infoCards) {
-                updateInfoCardTheme(ref);
-            }
+            applyThemeToCustomComponents();
 
             // 3. Fast refresh of the window contents
             SwingUtilities.updateComponentTreeUI(this);
@@ -791,12 +789,13 @@ public class CarafeGUI extends JFrame {
 
 
     /**
-     * Optimized sync method. Note that we removed the console font reset here
-     * because SwingUtilities.updateComponentTreeUI will handle it much faster.
+     * Optimized sync method.
      */
     private void applyThemeToCustomComponents() {
-        for (InfoCardRef ref : infoCards) {
-            updateInfoCardTheme(ref);
+        if (infoCards != null) {
+            for (InfoCardRef ref : infoCards) {
+                updateInfoCardTheme(ref);
+            }
         }
         refreshStatusLabel();
     }
@@ -1514,19 +1513,44 @@ public class CarafeGUI extends JFrame {
 
     private void refreshStatusLabel() {
         if (statusLabel == null) return;
-        String gpuText;
-        try {
-            gpuText = isGPUAvailable() ? "Available" : "Not Available";
-        } catch (Exception e) {
-            gpuText = "Unknown";
-        }
+
         String py = "Not Set";
         try {
             if (pythonPathCombo != null && pythonPathCombo.getSelectedItem() != null) {
                 py = pythonPathCombo.getSelectedItem().toString();
             }
         } catch (Exception ignored) {}
-        statusLabel.setText("Ready | GPU: " + gpuText + " | Python: " + py);
+
+        statusLabel.setText("Ready | GPU: " + cachedGpuStatus + " | Python: " + py);
+    }
+
+    /**
+     * The slow hardware check moved to a background thread.
+     */
+    private void updateGpuStatusAsync() {
+        // 1. Get the current path safely on the EDT
+        final String pyPath = (pythonPathCombo != null && pythonPathCombo.getSelectedItem() != null)
+                ? pythonPathCombo.getSelectedItem().toString()
+                : "";
+
+        // 2. Start checking in the background
+        new Thread(() -> {
+            try {
+                // Reuse your existing slow logic logic
+                boolean available = isGPUAvailable();
+
+                // 3. Update the UI once the check is done
+                SwingUtilities.invokeLater(() -> {
+                    this.cachedGpuStatus = available ? "Available" : "Not Available";
+                    refreshStatusLabel();
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    this.cachedGpuStatus = "Unknown";
+                    refreshStatusLabel();
+                });
+            }
+        }).start();
     }
 
     // Helper methods for creating styled components
@@ -1784,7 +1808,8 @@ public class CarafeGUI extends JFrame {
             Object selected = combo.getSelectedItem();
             if (selected != null) {
                 prefs.put(PREF_PYTHON_PATH, selected.toString());
-                refreshStatusLabel();
+                // Trigger background check instead of slow EDT check
+                updateGpuStatusAsync();
             }
         });
 
@@ -3130,23 +3155,14 @@ public class CarafeGUI extends JFrame {
         System.setProperty("swing.aatext", "true");
 
         try {
-            // Default to Light; user toggle persists preference after first run
-            FlatLightLaf.setup();
+            // Load preference before setup
+            boolean dark = prefs.getBoolean(PREF_DARK_MODE, false);
+            if (dark) FlatDarkLaf.setup(); else FlatLightLaf.setup();
 
-            // Apply global UI polish (A)
-            UIManager.put("defaultFont", new Font("Segoe UI", Font.PLAIN, 13));
-            UIManager.put("Button.arc", 10);
-            UIManager.put("Component.arc", 10);
-            UIManager.put("ProgressBar.arc", 10);
-            UIManager.put("TextComponent.arc", 8);
-            UIManager.put("TabbedPane.showTabSeparators", true);
-            UIManager.put("TabbedPane.tabInsets", new Insets(8, 14, 8, 14));
-            UIManager.put("ScrollBar.width", 12);
-            UIManager.put("ScrollBar.thumbArc", 999);
-            UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
-            UIManager.put("Component.focusWidth", 1);
-            UIManager.put("Component.innerFocusWidth", 0);
-            UIManager.put("Component.hideMnemonics", true);
+            // Use the centralized polish method instead of duplicating code here
+            CarafeGUI temp = new CarafeGUI();
+            temp.customizeUIDefaults();
+
         } catch (Exception e) {
             e.printStackTrace();
         }
