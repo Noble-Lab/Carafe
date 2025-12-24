@@ -348,7 +348,7 @@ public class CarafeGUI extends JFrame {
         return headerPanel;
     }
 
-    private JPanel createHeader() {
+    private JPanel createHeader_v2() {
         headerPanel = new JPanel(new BorderLayout()) {
 
             @Override
@@ -370,6 +370,7 @@ public class CarafeGUI extends JFrame {
                 Color bottom = dark ? adjust(base,  -8) : adjust(base, +25);
 
                 Graphics2D g2 = (Graphics2D) g.create();
+                // Paints header background with gradient and highlight
                 try {
                     g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -399,6 +400,7 @@ public class CarafeGUI extends JFrame {
             public void updateUI() {
                 super.updateUI();
 
+                // Updates UI components based on dark mode setting
                 SwingUtilities.invokeLater(() -> {
                     boolean dark = com.formdev.flatlaf.FlatLaf.isLafDark();
 
@@ -509,7 +511,168 @@ public class CarafeGUI extends JFrame {
         return headerPanel;
     }
 
-// ---------------- helpers ----------------
+    private JPanel createHeader() {
+        // Create the panel with custom painting logic
+        headerPanel = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                int w = getWidth();
+                int h = getHeight();
+                if (w <= 0 || h <= 0) {
+                    super.paintComponent(g);
+                    return;
+                }
+
+                boolean dark = FlatLaf.isLafDark();
+                Color base = lafColor("Carafe.headerBase", new Color(0x2F82B7));
+
+                // 1. Calculate adaptive gradient colors
+                Color top    = dark ? adjust(base, -40) : adjust(base, 60);
+                Color mid    = dark ? adjust(base, -20) : adjust(base, 35);
+                Color bottom = dark ? adjust(base, -10) : adjust(base, 15);
+
+                Graphics2D g2 = (Graphics2D) g.create();
+                try {
+                    g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                    // 2. Main Gradient Background
+                    LinearGradientPaint paint = new LinearGradientPaint(
+                            0f, 0f, 0f, (float) h,
+                            new float[]{0f, 0.5f, 1f},
+                            new Color[]{top, mid, bottom}
+                    );
+                    g2.setPaint(paint);
+                    g2.fillRect(0, 0, w, h);
+
+                    // 3. Subtle Gloss Highlight
+                    int highlightH = (int) (h * 0.5f);
+                    Color hiTop = new Color(255, 255, 255, dark ? 15 : 30);
+                    Color hiBot = new Color(255, 255, 255, 0);
+                    g2.setPaint(new GradientPaint(0, 0, hiTop, 0, highlightH, hiBot));
+                    g2.fillRect(0, 0, w, highlightH);
+                } finally {
+                    g2.dispose();
+                }
+                super.paintComponent(g);
+            }
+
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                updateHeaderForegrounds();
+            }
+        };
+
+        headerPanel.setOpaque(false);
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(20, 25, 20, 25));
+
+        // 4. Layout: Left Side (Logo & Title)
+        headerTitlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        headerTitlePanel.setOpaque(false);
+
+        headerIconLabel = new JLabel("C");
+        headerIconLabel.setFont(new Font("Segoe UI", Font.BOLD, 42));
+
+        headerTextPanel = new JPanel();
+        headerTextPanel.setOpaque(false);
+        headerTextPanel.setLayout(new BoxLayout(headerTextPanel, BoxLayout.Y_AXIS));
+
+        headerTitleLabel = new JLabel("Carafe");
+        headerTitleLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+
+        headerSubtitleLabel = new JLabel("AI-Powered Spectral Library Generator for DIA Proteomics");
+        headerSubtitleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+
+        headerTextPanel.add(headerTitleLabel);
+        headerTextPanel.add(Box.createVerticalStrut(3));
+        headerTextPanel.add(headerSubtitleLabel);
+
+        headerTitlePanel.add(headerIconLabel);
+        headerTitlePanel.add(headerTextPanel);
+
+        // 5. Layout: Right Side (Toggle & Version)
+        headerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+        headerRightPanel.setOpaque(false);
+
+        // We create the toggle with a custom paintComponent to ENSURE it is rounded and transparent
+        darkModeToggle = new JToggleButton() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                try {
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                    boolean dark = FlatLaf.isLafDark();
+                    // Semi-transparent background (Darker in dark mode, lighter in light mode)
+                    Color bg = dark ? new Color(0, 0, 0, 60) : new Color(255, 255, 255, 60);
+                    if (getModel().isRollover()) bg = withAlpha(bg, 100);
+
+                    g2.setColor(bg);
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+
+                    // Subtle border
+                    g2.setColor(withAlpha(getForeground(), 80));
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 15, 15);
+                } finally {
+                    g2.dispose();
+                }
+                super.paintComponent(g);
+            }
+        };
+
+        darkModeToggle.setContentAreaFilled(false);
+        darkModeToggle.setBorderPainted(false);
+        darkModeToggle.setOpaque(false);
+        darkModeToggle.setFocusPainted(false);
+        darkModeToggle.setMargin(new Insets(6, 16, 6, 16));
+        darkModeToggle.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        darkModeToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        darkModeToggle.addActionListener(e -> toggleDarkMode(darkModeToggle.isSelected()));
+
+        headerVersionLabel = new JLabel(CParameter.getVersion());
+        headerVersionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+        headerRightPanel.add(darkModeToggle);
+        headerRightPanel.add(headerVersionLabel);
+
+        headerPanel.add(headerTitlePanel, BorderLayout.WEST);
+        headerPanel.add(headerRightPanel, BorderLayout.EAST);
+
+        // Sync initial state
+        updateHeaderForegrounds();
+
+        return headerPanel;
+    }
+
+    /**
+     * Updates the foreground colors of all header components based on
+     * the current theme and background luminance.
+     */
+    private void updateHeaderForegrounds() {
+        boolean dark = FlatLaf.isLafDark();
+        Color base = lafColor("Carafe.headerBase", new Color(0x2F82B7));
+
+        // Use mid-gradient color as reference for text contrast
+        Color bgSample = dark ? adjust(base, -20) : adjust(base, 35);
+        Color fgPrimary = pickOnColor(bgSample);
+
+        if (headerIconLabel != null)     headerIconLabel.setForeground(fgPrimary);
+        if (headerTitleLabel != null)    headerTitleLabel.setForeground(fgPrimary);
+        if (headerSubtitleLabel != null) headerSubtitleLabel.setForeground(withAlpha(fgPrimary, 210));
+        if (headerVersionLabel != null)  headerVersionLabel.setForeground(withAlpha(fgPrimary, 180));
+
+        if (darkModeToggle != null) {
+            darkModeToggle.setSelected(dark);
+            darkModeToggle.setText(dark ? "Light Mode" : "Dark Mode");
+            // This ensures the font is never White-on-White if pickOnColor returns dark for light backgrounds
+            darkModeToggle.setForeground(fgPrimary);
+        }
+
+        if (headerPanel != null) headerPanel.repaint();
+    }
+
+    // ---------------- helpers ----------------
 
     private static Color adjust(Color c, int delta) {
         int r = Math.max(0, Math.min(255, c.getRed() + delta));
@@ -576,12 +739,19 @@ public class CarafeGUI extends JFrame {
             UIManager.setLookAndFeel(isDark ? new FlatDarkLaf() : new FlatLightLaf());
             customizeUIDefaults();
             com.formdev.flatlaf.FlatLaf.updateUI();
+            // Sync our new header logic
+            updateHeaderForegrounds();
             for (InfoCardRef ref : infoCards) {
                 updateInfoCardTheme(ref);
             }
             updateConsoleTheme();
+            // Sync all other custom-styled components
+            // applyThemeToCustomComponents();
             revalidate();
             repaint();
+
+            // Persist the preference
+            prefs.putBoolean(PREF_DARK_MODE, isDark);
         } catch (Exception e) {
             e.printStackTrace();
         }
