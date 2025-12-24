@@ -1376,10 +1376,32 @@ public class CarafeGUI extends JFrame {
                 BorderFactory.createEmptyBorder(10, 10, 10, 10)
         ));
 
+        // 1. Create a header wrapper for the title and the copy button
+        JPanel headerWrapper = new JPanel(new BorderLayout());
+        headerWrapper.setOpaque(false);
+        headerWrapper.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
+
         JLabel consoleLabel = new JLabel("[>] Console Output");
         consoleLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        consoleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
-        panel.add(consoleLabel, BorderLayout.NORTH);
+        headerWrapper.add(consoleLabel, BorderLayout.WEST);
+
+        // 2. Add the Copy button with the same style as other buttons
+        JButton copyButton = new JButton("Copy Output");
+        styleButton(copyButton);
+        copyButton.addActionListener(e -> {
+            String content = consoleArea.getText();
+            if (content != null && !content.isEmpty()) {
+                java.awt.datatransfer.StringSelection selection = new java.awt.datatransfer.StringSelection(content);
+                java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);
+
+                // Visual feedback: briefly change text
+                copyButton.setText("Copied!");
+                new javax.swing.Timer(1500, evt -> copyButton.setText("Copy Output")).start();
+            }
+        });
+        headerWrapper.add(copyButton, BorderLayout.EAST);
+
+        panel.add(headerWrapper, BorderLayout.NORTH);
 
         consoleArea = new JTextArea();
         consoleArea.setEditable(false);
