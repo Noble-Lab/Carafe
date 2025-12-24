@@ -6,10 +6,15 @@ import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.LinearGradientPaint;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -52,9 +57,10 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.apache.commons.lang3.StringUtils;
 
+import com.formdev.flatlaf.FlatClientProperties;
 import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatLightLaf;
 import com.formdev.flatlaf.FlatLaf;
+import com.formdev.flatlaf.FlatLightLaf;
 
 import ai.djl.util.cuda.CudaUtils;
 import main.java.input.CParameter;
@@ -291,7 +297,7 @@ public class CarafeGUI extends JFrame {
         return scrollPane;
     }
 
-    private JPanel createHeader() {
+    private JPanel createHeader_v1() {
         headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBorder(BorderFactory.createEmptyBorder(20, 25, 20, 25));
 
@@ -341,6 +347,196 @@ public class CarafeGUI extends JFrame {
 
         return headerPanel;
     }
+
+    private JPanel createHeader() {
+        headerPanel = new JPanel(new BorderLayout()) {
+
+            @Override
+            protected void paintComponent(Graphics g) {
+                int w = getWidth();
+                int h = getHeight();
+                if (w <= 0 || h <= 0) {
+                    super.paintComponent(g);
+                    return;
+                }
+
+                boolean dark = com.formdev.flatlaf.FlatLaf.isLafDark();
+
+                Color base = UIManager.getColor("Carafe.headerBase");
+                if (base == null) base = new Color(0x2F82B7);
+
+                Color top    = dark ? adjust(base, -35) : adjust(base, +70);
+                Color mid    = dark ? adjust(base, -18) : adjust(base, +45);
+                Color bottom = dark ? adjust(base,  -8) : adjust(base, +25);
+
+                Graphics2D g2 = (Graphics2D) g.create();
+                try {
+                    g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                    LinearGradientPaint paint = new LinearGradientPaint(
+                            0f, 0f, 0f, (float) h,
+                            new float[]{0f, 0.55f, 1f},
+                            new Color[]{top, mid, bottom}
+                    );
+                    g2.setPaint(paint);
+                    g2.fillRect(0, 0, w, h);
+
+                    int highlightH = (int) (h * 0.55f);
+                    Color hiTop = new Color(255, 255, 255, dark ? 18 : 28);
+                    Color hiBot = new Color(255, 255, 255, 0);
+                    g2.setPaint(new GradientPaint(0, 0, hiTop, 0, highlightH, hiBot));
+                    g2.fillRect(0, 0, w, highlightH);
+
+                } finally {
+                    g2.dispose();
+                }
+
+                super.paintComponent(g);
+            }
+
+            @Override
+            public void updateUI() {
+                super.updateUI();
+
+                SwingUtilities.invokeLater(() -> {
+                    boolean dark = com.formdev.flatlaf.FlatLaf.isLafDark();
+
+                    Color base = UIManager.getColor("Carafe.headerBase");
+                    if (base == null) base = new Color(0x2F82B7);
+
+                    Color top    = dark ? adjust(base, -35) : adjust(base, +70);
+                    Color mid    = dark ? adjust(base, -18) : adjust(base, +45);
+                    Color bottom = dark ? adjust(base,  -8) : adjust(base, +25);
+
+                    Color bgSample = mid;
+
+                    Color fgPrimary = pickOnColor(bgSample);              
+                    Color fgSecondary = withAlpha(fgPrimary, 215);        
+                    Color fgTertiary  = withAlpha(fgPrimary, 190);      
+
+                    if (headerIconLabel != null) headerIconLabel.setForeground(fgPrimary);
+                    if (headerTitleLabel != null) headerTitleLabel.setForeground(fgPrimary);
+                    if (headerSubtitleLabel != null) headerSubtitleLabel.setForeground(fgSecondary);
+                    if (headerVersionLabel != null) headerVersionLabel.setForeground(fgTertiary);
+
+                    if (darkModeToggle != null) {
+                        darkModeToggle.setText(dark ? "Light Mode" : "Dark Mode");
+                        darkModeToggle.setForeground(fgPrimary);
+
+                        String bg = (fgPrimary.equals(Color.WHITE))
+                                ? "rgba(255,255,255,30)"
+                                : "rgba(0,0,0,18)";
+                        String bd = (fgPrimary.equals(Color.WHITE))
+                                ? "rgba(255,255,255,55)"
+                                : "rgba(0,0,0,45)";
+                        darkModeToggle.putClientProperty(
+                                FlatClientProperties.BUTTON_TYPE,
+                                FlatClientProperties.BUTTON_TYPE_ROUND_RECT
+                        );
+                        darkModeToggle.putClientProperty(
+                                FlatClientProperties.COMPONENT_ROUND_RECT,
+                                Boolean.TRUE
+                        );
+                        darkModeToggle.setMargin(new Insets(6, 16, 6, 16));
+                        darkModeToggle.setFocusPainted(false);
+                    }
+
+                    repaint();
+                });
+            }
+        };
+
+        headerPanel.setOpaque(false);
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(20, 25, 20, 25));
+
+        // Logo and title
+        headerTitlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
+        headerTitlePanel.setOpaque(false);
+
+        headerIconLabel = new JLabel("C");
+        headerIconLabel.setFont(new Font("Segoe UI", Font.BOLD, 42));
+
+        headerTextPanel = new JPanel();
+        headerTextPanel.setOpaque(false);
+        headerTextPanel.setLayout(new BoxLayout(headerTextPanel, BoxLayout.Y_AXIS));
+
+        headerTitleLabel = new JLabel("Carafe");
+        headerTitleLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+
+        headerSubtitleLabel = new JLabel("AI-Powered Spectral Library Generator for DIA Proteomics");
+        headerSubtitleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+
+        headerTextPanel.add(headerTitleLabel);
+        headerTextPanel.add(Box.createVerticalStrut(3));
+        headerTextPanel.add(headerSubtitleLabel);
+
+        headerTitlePanel.add(headerIconLabel);
+        headerTitlePanel.add(headerTextPanel);
+
+        headerPanel.add(headerTitlePanel, BorderLayout.WEST);
+
+        // Right panel with version and dark mode toggle
+        headerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+        headerRightPanel.setOpaque(false);
+
+        darkModeToggle = new JToggleButton();
+        darkModeToggle.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        darkModeToggle.setFocusPainted(false);
+        darkModeToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        darkModeToggle.putClientProperty(
+                FlatClientProperties.BUTTON_TYPE,
+                FlatClientProperties.BUTTON_TYPE_ROUND_RECT
+        );
+        darkModeToggle.putClientProperty(
+                FlatClientProperties.COMPONENT_ROUND_RECT,
+                Boolean.TRUE
+        );
+        darkModeToggle.addActionListener(e -> toggleDarkMode(darkModeToggle.isSelected()));
+        headerRightPanel.add(darkModeToggle);
+
+        headerVersionLabel = new JLabel(CParameter.getVersion());
+        headerVersionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        headerRightPanel.add(headerVersionLabel);
+
+        headerPanel.add(headerRightPanel, BorderLayout.EAST);
+
+        boolean isDark = com.formdev.flatlaf.FlatLaf.isLafDark();
+        darkModeToggle.setSelected(isDark);
+        darkModeToggle.setText(isDark ? "Light Mode" : "Dark Mode");
+
+        headerPanel.updateUI();
+        return headerPanel;
+    }
+
+// ---------------- helpers ----------------
+
+    private static Color adjust(Color c, int delta) {
+        int r = Math.max(0, Math.min(255, c.getRed() + delta));
+        int g = Math.max(0, Math.min(255, c.getGreen() + delta));
+        int b = Math.max(0, Math.min(255, c.getBlue() + delta));
+        return new Color(r, g, b);
+    }
+
+    private static Color withAlpha(Color c, int a) {
+        return new Color(c.getRed(), c.getGreen(), c.getBlue(), Math.max(0, Math.min(255, a)));
+    }
+
+    private static Color pickOnColor(Color bg) {
+        // relative luminance (sRGB)
+        double r = bg.getRed() / 255.0;
+        double g = bg.getGreen() / 255.0;
+        double b = bg.getBlue() / 255.0;
+
+        r = (r <= 0.03928) ? (r / 12.92) : Math.pow((r + 0.055) / 1.055, 2.4);
+        g = (g <= 0.03928) ? (g / 12.92) : Math.pow((g + 0.055) / 1.055, 2.4);
+        b = (b <= 0.03928) ? (b / 12.92) : Math.pow((b + 0.055) / 1.055, 2.4);
+
+        double L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+        return (L > 0.70) ? new Color(20, 20, 20) : Color.WHITE;
+    }
+
 
     /**
      * C) Correct dark mode switching (robust version):
@@ -438,13 +634,9 @@ public class CarafeGUI extends JFrame {
         if (darkModeToggle != null) {
             darkModeToggle.setSelected(dark);
             darkModeToggle.setText(dark ? "Light Mode" : "Dark Mode");
-            darkModeToggle.setForeground(Color.WHITE);
-            darkModeToggle.setBackground(PRIMARY_DARK);
-            darkModeToggle.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(new Color(255, 255, 255, 100)),
-                    BorderFactory.createEmptyBorder(5, 10, 5, 10)
-            ));
-            darkModeToggle.setOpaque(true);
+            Color bg = dark ? PRIMARY_DARK : PRIMARY_LIGHT;
+            darkModeToggle.putClientProperty("JButton.background", bg);
+            darkModeToggle.putClientProperty("JButton.foreground", Color.black);
         }
 
         // Info cards
