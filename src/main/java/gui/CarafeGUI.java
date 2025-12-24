@@ -736,22 +736,29 @@ public class CarafeGUI extends JFrame {
 
     private void toggleDarkMode(boolean isDark) {
         try {
-            UIManager.setLookAndFeel(isDark ? new FlatDarkLaf() : new FlatLightLaf());
+            // 1. Set the new Look and Feel state globally
+            if (isDark) {
+                FlatDarkLaf.setup();
+            } else {
+                FlatLightLaf.setup();
+            }
             customizeUIDefaults();
-            com.formdev.flatlaf.FlatLaf.updateUI();
-            // Sync our new header logic
+
+            // 2. Instead of calling the heavy FlatLaf.updateUI(),
+            // we update only the root and our specialized components.
             updateHeaderForegrounds();
+
+            // Sync InfoCards and other custom logic
             for (InfoCardRef ref : infoCards) {
                 updateInfoCardTheme(ref);
             }
-            updateConsoleTheme();
-            // Sync all other custom-styled components
-            // applyThemeToCustomComponents();
-            revalidate();
-            repaint();
+
+            // 3. Fast refresh of the window contents
+            SwingUtilities.updateComponentTreeUI(this);
 
             // Persist the preference
             prefs.putBoolean(PREF_DARK_MODE, isDark);
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -784,51 +791,13 @@ public class CarafeGUI extends JFrame {
 
 
     /**
-     * Re-sync any components that had manual colors/borders with the new theme.
-     * Without this, parts of UI may keep old colors after switching LaF.
+     * Optimized sync method. Note that we removed the console font reset here
+     * because SwingUtilities.updateComponentTreeUI will handle it much faster.
      */
     private void applyThemeToCustomComponents() {
-        boolean dark = FlatLaf.isLafDark();
-
-        // Header keeps brand identity
-        if (headerPanel != null) headerPanel.setBackground(PRIMARY_COLOR);
-        if (headerTitlePanel != null) headerTitlePanel.setBackground(PRIMARY_COLOR);
-        if (headerTextPanel != null) headerTextPanel.setBackground(PRIMARY_COLOR);
-        if (headerRightPanel != null) headerRightPanel.setBackground(PRIMARY_COLOR);
-
-        if (headerIconLabel != null) headerIconLabel.setForeground(Color.WHITE);
-        if (headerTitleLabel != null) headerTitleLabel.setForeground(Color.WHITE);
-        if (headerSubtitleLabel != null) headerSubtitleLabel.setForeground(new Color(255, 255, 255, 200));
-        if (headerVersionLabel != null) headerVersionLabel.setForeground(new Color(255, 255, 255, 180));
-
-        if (darkModeToggle != null) {
-            darkModeToggle.setSelected(dark);
-            darkModeToggle.setText(dark ? "Light Mode" : "Dark Mode");
-            Color bg = dark ? PRIMARY_DARK : PRIMARY_LIGHT;
-            darkModeToggle.putClientProperty("JButton.background", bg);
-            darkModeToggle.putClientProperty("JButton.foreground", Color.black);
-        }
-
-        // Info cards
         for (InfoCardRef ref : infoCards) {
             updateInfoCardTheme(ref);
         }
-
-        // Console: follow current theme (no hard-coded dark-only)
-        if (consoleArea != null) {
-            consoleArea.setFont(new Font("Consolas", Font.PLAIN, 12));
-            consoleArea.setBackground(lafColor("TextArea.background", dark ? new Color(30, 30, 30) : Color.WHITE));
-            consoleArea.setForeground(lafColor("TextArea.foreground", dark ? new Color(220, 220, 220) : Color.BLACK));
-            consoleArea.setCaretColor(lafColor("TextArea.caretForeground", consoleArea.getForeground()));
-        }
-
-        // Re-apply borders for buttons that we manually styled
-        restyleButtonsRecursively(this.getContentPane());
-
-        // Rebuild some cached borders (e.g., footer/console borders) by revalidating
-        if (tabbedPane != null) tabbedPane.revalidate();
-        if (progressBar != null) progressBar.revalidate();
-
         refreshStatusLabel();
     }
 
