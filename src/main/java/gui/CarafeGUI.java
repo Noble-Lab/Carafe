@@ -1444,7 +1444,7 @@ public class CarafeGUI extends JFrame {
         JPanel statusBar = new JPanel(new BorderLayout());
         statusBar.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
 
-        this.statusLabel = new JLabel("Ready | GPU: " + (isGPUAvailable() ? "Available" : "Not Available"));
+        this.statusLabel = new JLabel("Ready | GPU: " + cachedGpuStatus);
         statusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         statusBar.add(statusLabel, BorderLayout.WEST);
 
@@ -1457,14 +1457,14 @@ public class CarafeGUI extends JFrame {
         return footer;
     }
 
-    private boolean isGPUAvailable() {
+    private boolean isGPUAvailable(String pyPath) {
         try {
             if (CudaUtils.hasCuda()) {
                 return true;
             } else {
                 GPUTools gpuTools = new GPUTools();
-                if (pythonPathCombo != null && pythonPathCombo.getSelectedItem() != null) {
-                    gpuTools.py_path = pythonPathCombo.getSelectedItem().toString();
+                if (pyPath != null && !pyPath.isEmpty()) {
+                    gpuTools.py_path = pyPath;
                 }
                 GPUTools.TorchGpuStatus st = gpuTools.checkTorchGpu();
                 return st.gpuAvailable;
@@ -1512,6 +1512,7 @@ public class CarafeGUI extends JFrame {
     private void updateGpuStatusAsync() {
         if (pythonPathCombo == null) return;
 
+        // Capture the path on the EDT
         final String currentPy = (pythonPathCombo.getSelectedItem() != null)
                 ? pythonPathCombo.getSelectedItem().toString()
                 : "";
@@ -1521,8 +1522,8 @@ public class CarafeGUI extends JFrame {
 
         new Thread(() -> {
             try {
-                // Ensure the check uses the specific path we just grabbed
-                boolean available = isGPUAvailable();
+                // Use the captured path safely in the background
+                boolean available = isGPUAvailable(currentPy);
                 SwingUtilities.invokeLater(() -> {
                     this.cachedGpuStatus = available ? "Available" : "Not Available";
                     refreshStatusLabel();
@@ -2413,7 +2414,8 @@ public class CarafeGUI extends JFrame {
         Object deviceSel = deviceCombo.getSelectedItem();
         String device = deviceSel == null ? "auto" : deviceSel.toString().trim();
         if (device.equalsIgnoreCase("auto")) {
-            cmd.append("-device ").append(isGPUAvailable() ? "gpu" : "cpu").append(" ");
+            boolean available = "Available".equals(cachedGpuStatus);
+            cmd.append("-device ").append(available ? "gpu" : "cpu").append(" ");
         } else {
             cmd.append("-device ").append(device).append(" ");
         }
