@@ -223,37 +223,22 @@ public class CarafeGUI extends JFrame {
     }
 
     /**
-     * A) Most common UIManager keys ("quality boost" set)
-     * Keep it "safe": do NOT force global background/foreground, let FlatLaf do it.
+     * Centralized UI Defaults.
+     * Can now be made static since it only touches UIManager.
      */
-    private void customizeUIDefaults() {
+    private static void customizeUIDefaults() {
         UIManager.put("defaultFont", new Font("Segoe UI", Font.PLAIN, 13));
-
-        // Rounded corners
         UIManager.put("Button.arc", 10);
         UIManager.put("Component.arc", 10);
-        UIManager.put("TextComponent.arc", 8);
-        UIManager.put("TextField.arc", 8);
         UIManager.put("ProgressBar.arc", 10);
-
-        // Focus
-        UIManager.put("Component.focusWidth", 1);
-        UIManager.put("Component.innerFocusWidth", 0);
-
-        // Tabs
+        UIManager.put("TextComponent.arc", 8);
         UIManager.put("TabbedPane.showTabSeparators", true);
         UIManager.put("TabbedPane.tabInsets", new Insets(8, 14, 8, 14));
-
-        // Scrollbars
         UIManager.put("ScrollBar.width", 12);
         UIManager.put("ScrollBar.thumbArc", 999);
         UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
-
-        // Slightly nicer menus/tooltips (optional but safe)
-        UIManager.put("ToolTip.border", BorderFactory.createEmptyBorder(6, 8, 6, 8));
-        UIManager.put("PopupMenu.border", BorderFactory.createEmptyBorder(2, 2, 2, 2));
-
-        // Disable menu mnemonics underline until Alt pressed (Windows-like)
+        UIManager.put("Component.focusWidth", 1);
+        UIManager.put("Component.innerFocusWidth", 0);
         UIManager.put("Component.hideMnemonics", true);
     }
 
@@ -1524,29 +1509,27 @@ public class CarafeGUI extends JFrame {
         statusLabel.setText("Ready | GPU: " + cachedGpuStatus + " | Python: " + py);
     }
 
-    /**
-     * The slow hardware check moved to a background thread.
-     */
     private void updateGpuStatusAsync() {
-        // 1. Get the current path safely on the EDT
-        final String pyPath = (pythonPathCombo != null && pythonPathCombo.getSelectedItem() != null)
+        if (pythonPathCombo == null) return;
+
+        final String currentPy = (pythonPathCombo.getSelectedItem() != null)
                 ? pythonPathCombo.getSelectedItem().toString()
                 : "";
 
-        // 2. Start checking in the background
+        this.cachedGpuStatus = "Checking...";
+        refreshStatusLabel();
+
         new Thread(() -> {
             try {
-                // Reuse your existing slow logic logic
+                // Ensure the check uses the specific path we just grabbed
                 boolean available = isGPUAvailable();
-
-                // 3. Update the UI once the check is done
                 SwingUtilities.invokeLater(() -> {
                     this.cachedGpuStatus = available ? "Available" : "Not Available";
                     refreshStatusLabel();
                 });
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
-                    this.cachedGpuStatus = "Unknown";
+                    this.cachedGpuStatus = "Error";
                     refreshStatusLabel();
                 });
             }
@@ -3155,14 +3138,11 @@ public class CarafeGUI extends JFrame {
         System.setProperty("swing.aatext", "true");
 
         try {
-            // Load preference before setup
             boolean dark = prefs.getBoolean(PREF_DARK_MODE, false);
             if (dark) FlatDarkLaf.setup(); else FlatLightLaf.setup();
 
-            // Use the centralized polish method instead of duplicating code here
-            CarafeGUI temp = new CarafeGUI();
-            temp.customizeUIDefaults();
-
+            // Call defaults directly without creating a dummy window
+            customizeUIDefaults();
         } catch (Exception e) {
             e.printStackTrace();
         }
