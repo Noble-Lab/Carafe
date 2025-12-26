@@ -1,5 +1,7 @@
 package main.java.util;
 
+import oshi.SystemInfo;
+import oshi.hardware.GlobalMemory;
 
 public class GenericUtils {
 
@@ -49,6 +51,22 @@ public class GenericUtils {
      */
     public static boolean isJava24OrHigher() {
         return getJavaMajorVersion() >= 24;
+    }
+
+    /**
+     * Retrieves the available system memory in gigabytes.
+     * @return Available memory in GB
+     */
+    public static double get_system_memory_available(){
+        SystemInfo si = new SystemInfo();
+        GlobalMemory mem = si.getHardware().getMemory();
+
+        double total = 1.0*mem.getTotal() / 1024 / 1024 / 1024; // Gb
+        double available = 1.0*mem.getAvailable() / 1024 / 1024 / 1024; // Gb
+
+        System.out.printf("Total RAM: %.2f GB%n", total);
+        System.out.printf("Available RAM: %.2f GB%n", available);
+        return available;
     }
 
 }

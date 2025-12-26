@@ -2346,21 +2346,38 @@ public class CarafeGUI extends JFrame {
 
     private String buildCarafeCommand() {
         StringBuilder cmd = new StringBuilder();
+        boolean exe_launch = false;
         String javaExec = getJavaExecutable();
+        if(javaExec.endsWith("java.exe") || javaExec.endsWith("java")) {
+            // use as is
+        } else if(javaExec.endsWith("Carafe.exe")) {
+            // it is likely launched from bundled Carafe.exe
+            File javaFile = new File(javaExec);
+            // navigate to ../runtime/bin/java.exe
+            exe_launch = true;
+        }else{
+            // fallback to "java" in PATH
+            javaExec = "java";
+        }
         if (javaExec.contains(" ")) {
             javaExec = '"' + javaExec + '"';
         }
-        cmd.append(javaExec).append(" -Xmx8G ");
+        // get the computer memory and set Xmx accordingly
+        int memory_use = (int) Math.ceil(GenericUtils.get_system_memory_available()*0.8);
 
-        int javaVersion = GenericUtils.getJavaMajorVersion();
-        if (javaVersion >= 18 && javaVersion <= 23) {
-            cmd.append("-Djava.security.manager=allow ");
+        if(exe_launch) {
+            cmd.append(javaExec).append(" ");
+        }else{
+            cmd.append(javaExec).append(" -Xmx").append(memory_use).append("G ");
+
+            int javaVersion = GenericUtils.getJavaMajorVersion();
+            if (javaVersion >= 18 && javaVersion <= 23) {
+                cmd.append("-Djava.security.manager=allow ");
+            }
+            cmd.append("-jar ");
+            String carafeJarPath = getCarafeJarPath();
+            cmd.append(carafeJarPath).append(" ");
         }
-
-        cmd.append("-jar ");
-
-        String jarPath = getJarPath();
-        cmd.append(jarPath).append(" ");
 
         int workflow = workflowCombo.getSelectedIndex();
 
@@ -2932,7 +2949,7 @@ public class CarafeGUI extends JFrame {
         }
     }
 
-    private String getJarPath() {
+    private String getCarafeJarPath() {
         try {
             String path = CarafeGUI.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
             if (System.getProperty("os.name").toLowerCase().contains("windows")) {

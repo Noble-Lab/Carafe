@@ -932,6 +932,12 @@ public class AIGear {
             AIWorker.ccs_enabled = true;
         }
 
+        GenericUtils.get_system_memory_available();
+        Runtime rt = Runtime.getRuntime();
+        System.out.printf("Xms (current heap) = %.2f MB%n", rt.totalMemory() / 1024.0 / 1024.0);
+        System.out.printf("Xmx (max heap) = %.2f GB%n", rt.maxMemory() / 1024.0 / 1024.0 / 1024.0);
+
+
         if(cmd.hasOption("ms") && !cmd.hasOption("model_dir")){
             String ms_file = cmd.getOptionValue("ms");
 
