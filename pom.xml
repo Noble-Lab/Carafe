@@ -8,12 +8,18 @@
     <artifactId>carafe</artifactId>
     <version>2.0.0-beta</version>
 
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
     <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>ai.djl</groupId>
                 <artifactId>bom</artifactId>
-                <version>0.29.0</version>
+                <version>0.36.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -84,25 +90,25 @@
     <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
-        <version>3.12.0</version>
+        <version>3.18.0</version>
     </dependency>
 
     <dependency>
         <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-avro</artifactId>
-        <version>1.14.1</version>
+        <version>1.16.0</version>
     </dependency>
 
     <dependency>
         <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-hadoop</artifactId>
-        <version>1.14.1</version>
+        <version>1.16.0</version>
     </dependency>
 
     <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
-        <version>1.11.3</version>
+        <version>1.12.1</version>
     </dependency>
 
     <dependency>
@@ -121,7 +127,7 @@
     <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
-        <version>3.4.1</version>
+        <version>3.4.2</version>
         <exclusions>
             <exclusion>
                 <groupId>org.slf4j</groupId>
@@ -134,7 +140,7 @@
     <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-core</artifactId>
-        <version>3.4.1</version>
+        <version>3.4.2</version>
         <exclusions>
             <exclusion>
                 <groupId>org.slf4j</groupId>
@@ -143,15 +149,17 @@
         </exclusions>
     </dependency>
 
+    <!-- https://mvnrepository.com/artifact/com.github.dpaukov/combinatoricslib3 -->
     <dependency>
         <groupId>com.github.dpaukov</groupId>
         <artifactId>combinatoricslib3</artifactId>
-        <version>3.3.3</version>
+        <version>3.4.0</version>
     </dependency>
 
+    <!-- https://mvnrepository.com/artifact/net.sf.jfasta/jfasta -->
     <dependency>
-        <groupId>JFASTA</groupId>
-        <artifactId>JFASTA</artifactId>
+        <groupId>net.sf.jfasta</groupId>
+        <artifactId>jfasta</artifactId>
         <version>2.2.0</version>
     </dependency>
 
@@ -203,7 +211,7 @@
     <dependency>
         <groupId>org.testng</groupId>
         <artifactId>testng</artifactId>
-        <version>RELEASE</version>
+        <version>7.10.2</version>
         <scope>compile</scope>
     </dependency>
 
@@ -218,7 +226,7 @@
     <dependency>
         <groupId>org.eclipse.collections</groupId>
         <artifactId>eclipse-collections</artifactId>
-        <version>12.0.0.M3</version>
+        <version>13.0.0</version>
     </dependency>
 
     <!-- FlatLaf - Modern Look and Feel for Swing -->
@@ -284,6 +292,27 @@
     </resources>
     <plugins>
 
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-resources-plugin</artifactId>
+            <version>3.3.1</version>
+            <configuration>
+                <encoding>${project.build.sourceEncoding}</encoding>
+                <propertiesEncoding>${project.build.sourceEncoding}</propertiesEncoding>
+            </configuration>
+        </plugin>
+
+
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <version>3.13.0</version>
+            <configuration>
+                <source>21</source>
+                <target>21</target>
+                <encoding>${project.build.sourceEncoding}</encoding>
+            </configuration>
+        </plugin>
 
         <plugin>
             <artifactId>maven-surefire-plugin</artifactId>
@@ -323,6 +352,7 @@
         <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-dependency-plugin</artifactId>
+            <version>3.7.0</version>
             <executions>
                 <execution>
                     <id>copy-dependencies</id>
@@ -339,14 +369,6 @@
                     </configuration>
                 </execution>
             </executions>
-        </plugin>
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <configuration>
-                <source>21</source>
-                <target>21</target>
-            </configuration>
         </plugin>
 
 

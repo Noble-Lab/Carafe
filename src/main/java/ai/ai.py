@@ -1,14 +1,10 @@
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-import torch
 import os
 import argparse
 import sys
-import pandas as pd
-import numpy as np
 import importlib.util
-from peptdeep.settings import global_settings,add_user_defined_modifications
 import sys
 import re
 
@@ -27,7 +23,8 @@ def train_ms2(in_dir:str,
               nce=27,
               mode_type="general",
               use_grid_nce_search=False,
-              log_transform=False):
+              log_transform=False,
+              threads=1):
     from peptdeep.pretrained_models import ModelManager
     import numpy as np
     import pandas as pd
@@ -42,7 +39,7 @@ def train_ms2(in_dir:str,
         model_mgr = ModelManager(mask_modloss=False, device=device)
         model_mgr.load_installed_models('phos')
     model_mgr.train_verbose = True
-    model_mgr.thread_num = 36
+    model_mgr.thread_num = threads
     model_mgr.epoch_to_train_ms2 = 20
     model_mgr.warmup_epoch_to_train_ms2 = 10
     model_mgr.batch_size_to_train_ms2 = 512
@@ -76,15 +73,21 @@ def train_ms2(in_dir:str,
         valid = pd.DataFrame(0, index=range(b.shape[0]), columns=b.columns)
 
     if device == 'cpu':
-        ## get the number of cpus
-        n_cpu = os.cpu_count()
-        torch.set_num_threads(n_cpu)
-    model_mgr.train_ms2_model(psm_df=a,matched_intensity_df=b,matched_valid_intensity_df=valid)
+        # CPU-only tuning: enforce pools during training
+        with threadpool_limits(limits=1, user_api="blas"):
+            with threadpool_limits(limits=threads, user_api="openmp"):
+                torch.set_num_threads(threads)
+                print("torch intra", torch.get_num_threads())
+                print("torch interop", torch.get_num_interop_threads())
+                model_mgr.train_ms2_model(psm_df=a,matched_intensity_df=b,matched_valid_intensity_df=valid)
+    else:
+        # GPU mode
+        model_mgr.train_ms2_model(psm_df=a,matched_intensity_df=b,matched_valid_intensity_df=valid)
     model_mgr.ms2_model.save(out_dir+"/ms2_model.pt")
     return model_mgr
 
 
-def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
+def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1):
     import pandas as pd
     import numpy as np
     import math
@@ -99,7 +102,7 @@ def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
         model_mgr.load_installed_models('phos')
     
     model_mgr.train_verbose = True
-    model_mgr.thread_num = 36
+    model_mgr.thread_num = threads
     model_mgr.epoch_to_train_rt_ccs=40
     model_mgr.warmup_epoch_to_train_rt_ccs = 10
     #model_mgr.warmup_epoch_to_train_ms2 = 10
@@ -120,14 +123,18 @@ def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
     a['mods'] = a['mods'].fillna("")
     # a['rt_norm'] = a['apex_rt']
     if device == 'cpu':
-        ## get the number of cpus
-        n_cpu = os.cpu_count()
-        torch.set_num_threads(n_cpu)
-    model_mgr.train_rt_model(psm_df=a)
+        with threadpool_limits(limits=1, user_api="blas"):
+            with threadpool_limits(limits=threads, user_api="openmp"):
+                torch.set_num_threads(threads)
+                print("torch intra", torch.get_num_threads())
+                print("torch interop", torch.get_num_interop_threads())
+                model_mgr.train_rt_model(psm_df=a)
+    else:
+        model_mgr.train_rt_model(psm_df=a)
     model_mgr.rt_model.save(out_dir+"/rt_model.pt")
     return model_mgr
 
-def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
+def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1):
     import pandas as pd
     import numpy as np
     import math
@@ -142,7 +149,7 @@ def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
         model_mgr.load_installed_models('phos')
 
     model_mgr.train_verbose = True
-    model_mgr.thread_num = 36
+    model_mgr.thread_num = threads
     model_mgr.epoch_to_train_rt_ccs=40
     model_mgr.warmup_epoch_to_train_rt_ccs = 10
     #model_mgr.warmup_epoch_to_train_ms2 = 10
@@ -162,10 +169,6 @@ def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
     a['mod_sites'] = a['mod_sites'].fillna("")
     a['mods'] = a['mods'].fillna("")
     # a['rt_norm'] = a['apex_rt']
-    if device == 'cpu':
-        ## get the number of cpus
-        n_cpu = os.cpu_count()
-        torch.set_num_threads(n_cpu)
 
     #from alphabase.peptide.precursor import (
     #    refine_precursor_df,
@@ -173,11 +176,20 @@ def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu'):
     #)
     #if 'precursor_mz' not in a.columns:
     #    update_precursor_mz(a)
-    model_mgr.train_ccs_model(psm_df=a)
+    if device == 'cpu':
+        with threadpool_limits(limits=1, user_api="blas"):
+            with threadpool_limits(limits=threads, user_api="openmp"):
+                torch.set_num_threads(threads)
+                print("torch intra", torch.get_num_threads())
+                print("torch interop", torch.get_num_interop_threads())
+                model_mgr.train_ccs_model(psm_df=a)
+    else:
+        model_mgr.train_ccs_model(psm_df=a)
     model_mgr.ccs_model.save(out_dir+"/ccs_model.pt")
     return model_mgr
 
 def set_seed(seed):
+    import numpy as np
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -194,6 +206,64 @@ def check_models_from_docker():
         print("The pre-trained models: /data/peptdeep/pretrained_models/pretrained_models.zip")
     else:
         print("Will download pre-trained models from github.")
+
+# =========================
+# ENV setup BEFORE numpy/pandas/torch
+# =========================
+def configure_env_for_device(device: str, n_physical: int):
+    """
+    Must run BEFORE importing numpy/pandas/torch.
+
+    CPU:
+      - Use physical cores (often best on dual-socket / HT-heavy machines)
+    GPU:
+      - Keep CPU-side thread pools smaller to reduce overhead/oversubscription
+    """
+    device = (device or "gpu").lower()
+
+    # If user already set these from the command line, respect them.
+    if device == "cpu":
+        os.environ.setdefault("OMP_NUM_THREADS", str(n_physical))
+        os.environ.setdefault("MKL_NUM_THREADS", str(n_physical))
+    else:
+        # GPU mode: you can tune this; 2-8 is typically reasonable.
+        os.environ.setdefault("OMP_NUM_THREADS", "4")
+        os.environ.setdefault("MKL_NUM_THREADS", "4")
+
+    # Keep other libs from creating extra pools
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
+    # Optional: reduce OpenMP spinning
+    os.environ.setdefault("KMP_BLOCKTIME", "0")
+    os.environ.setdefault("OMP_PROC_BIND", "true")
+
+    # Optional: avoid torch.compile / inductor on Windows if you don't have MSVC "cl".
+    # If you *do* have cl and want compilation, set TORCHDYNAMO_DISABLE=0 in env before running.
+    if os.name == "nt":
+        os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+
+
+def print_thread_state(tag: str = ""):
+    if tag:
+        print(f"\n==== {tag} ====")
+    print("Python:", sys.version.split()[0])
+    print("torch:", torch.__version__)
+    print("device mode:", device)
+    print("n_physical:", n_physical, "n_logical:", n_logical)
+    print("OMP_NUM_THREADS", os.environ.get("OMP_NUM_THREADS"))
+    print("MKL_NUM_THREADS", os.environ.get("MKL_NUM_THREADS"))
+    print("torch intra", torch.get_num_threads())
+    print("torch interop", torch.get_num_interop_threads())
+    try:
+        print("mkldnn enabled:", bool(getattr(torch.backends, "mkldnn", None) and torch.backends.mkldnn.enabled))
+    except Exception:
+        pass
+    try:
+        import pprint
+        pprint.pp(threadpool_info())
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
@@ -218,7 +288,7 @@ if __name__ == "__main__":
     in_dir = args.in_dir
     out_dir = args.out_dir
     out_prefix = args.out_prefix
-    device = args.device
+    device = args.device.strip().lower()
     instrument = args.instrument
     nce = float(args.nce)
     tf_type = args.tf_type
@@ -229,15 +299,35 @@ if __name__ == "__main__":
     else:
         use_valid = True
 
-    set_seed(int(args.seed))
+    # =========================
+    # 2) CPU topology + affinity (before heavy imports)
+    # =========================
+    n_logical = os.cpu_count() or 1
+    try:
+        import psutil
+        n_physical = psutil.cpu_count(logical=False) or n_logical
+    except Exception:
+        n_physical = max(1, n_logical // 2)
 
-    if device == 'cpu':
-        ## get the number of cpus
-        n_cpu = os.cpu_count()
-        torch.set_num_threads(n_cpu)
-        torch.set_num_interop_threads(n_cpu)
-        os.environ["OMP_NUM_THREADS"] = str(n_cpu)
-        os.environ["MKL_NUM_THREADS"] = str(n_cpu)
+    configure_env_for_device(device, n_physical)
+
+    import torch
+
+    # Critical CPU tuning
+    if device == "cpu":
+        torch.set_num_threads(n_physical)
+        try:
+            torch.set_num_interop_threads(1)
+        except RuntimeError as e:
+            print("[warn] set_num_interop_threads skipped:", e)
+
+    print("torch intra", torch.get_num_threads())
+    print("torch interop", torch.get_num_interop_threads())
+
+    set_seed(int(args.seed))  # keep after torch import
+
+    from peptdeep.settings import global_settings,add_user_defined_modifications
+    import pandas as pd
 
     package_name = 'peptdeep'
     spec = importlib.util.find_spec(package_name)
@@ -264,16 +354,20 @@ if __name__ == "__main__":
 
     check_models_from_docker()
 
+    print_thread_state(tag="Thread/BLAS summary (startup)")
+    from threadpoolctl import threadpool_limits, threadpool_info
     if tf_type == "all" or tf_type == "test":
         if tf_type == "test":
             print("Test mode ...")
-        model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device)
+        model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device,threads=n_physical)
         if os.path.exists(os.path.join(in_dir,"ccs_train_data.tsv")):
             ccs_data = pd.read_csv(os.path.join(in_dir,"ccs_train_data.tsv"),sep="\t")
             if ccs_data.shape[0] >= 100:
-                model_mgr_ccs = train_ccs(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device)
-        model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid)
+                model_mgr_ccs = train_ccs(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device,threads=n_physical)
+        model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid,threads=n_physical)
     elif tf_type == "rt":
-        model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device)
+        model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device,threads=n_physical)
     elif tf_type == "ms2":
-        model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid)
+        model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid,threads=n_physical)
+
+    os._exit(0)

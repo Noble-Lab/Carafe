@@ -187,6 +187,11 @@ public class CarafeGUI extends JFrame {
     private static final String PREF_DIANN_PATH = "diannPath";
     private static final String PREF_DARK_MODE = "darkMode";
 
+    /**
+     * Time usage tracking map.
+     */
+    private final java.util.Map<String, Double> timeUsageMap = new java.util.LinkedHashMap<>();
+
     public CarafeGUI() {
         setTitle("Carafe - Spectral Library Generator");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -2387,7 +2392,6 @@ public class CarafeGUI extends JFrame {
         }
 
         String diannReport = diannReportFileField.getText().trim();
-        System.out.println("diannReport:" + diannReport);
         if (!diannReport.isEmpty()) {
             cmd.append("-i \"").append(diannReport).append("\" ");
         }
@@ -2529,12 +2533,12 @@ public class CarafeGUI extends JFrame {
                     SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
                 }
 
-                executeChainedCommands(new CmdTask[]{new CmdTask(diann_cmd, "DIA-NN", "Run DIA-NN search on the training MS data...")}, () -> {
+                executeChainedCommands(new CmdTask[]{new CmdTask(diann_cmd, "DIA-NN", "Run DIA-NN search on the training MS data")}, () -> {
                     final CmdTask[] commandContainer = new CmdTask[1];
                     try {
                         SwingUtilities.invokeAndWait(() -> {
                             diannReportFileField.setText(diann_report_file);
-                            commandContainer[0] = new CmdTask(buildCarafeCommand(), "Carafe", "Run Carafe to generate fine-tuned library ...");
+                            commandContainer[0] = new CmdTask(buildCarafeCommand(), "Carafe", "Run Carafe to generate fine-tuned library");
                         });
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -2549,7 +2553,7 @@ public class CarafeGUI extends JFrame {
                     return;
                 }
                 String carafe_cmd = buildCarafeCommand();
-                executeCommand(new CmdTask(carafe_cmd, "Carafe", "Run Carafe to generate spectral library..."));
+                executeCommand(new CmdTask(carafe_cmd, "Carafe", "Run Carafe to generate spectral library"));
             }
             case 2 -> {
                 String trainMsFile = trainMsFileField.getText().trim();
@@ -2599,13 +2603,13 @@ public class CarafeGUI extends JFrame {
                     SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
                 }
 
-                executeChainedCommands(new CmdTask[]{new CmdTask(diann_cmd, "DIA-NN", "Run DIA-NN search on the training MS data...")}, () -> {
+                executeChainedCommands(new CmdTask[]{new CmdTask(diann_cmd, "DIA-NN", "Run DIA-NN search on the training MS data")}, () -> {
                     final CmdTask[] commands = new CmdTask[2];
                     try {
                         SwingUtilities.invokeAndWait(() -> {
                             diannReportFileField.setText(diann_report_file);
-                            commands[0] = new CmdTask(buildCarafeCommand(), "Carafe", "Run Carafe to generate fine-tuned library ...");
-                            commands[1] = new CmdTask(buildDIANNCommand(projectMsFile, carafeLibraryPath, libraryDb, diann_project_dir), "DIA-NN", "DIA-NN search for project data using fine-tuned library ...");
+                            commands[0] = new CmdTask(buildCarafeCommand(), "Carafe", "Run Carafe to generate fine-tuned library");
+                            commands[1] = new CmdTask(buildDIANNCommand(projectMsFile, carafeLibraryPath, libraryDb, diann_project_dir), "DIA-NN", "DIA-NN search for project data using fine-tuned library");
                         });
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -2642,6 +2646,8 @@ public class CarafeGUI extends JFrame {
         progressBar.setIndeterminate(true);
         progressBar.setString("Running DIA-NN...");
 
+        timeUsageMap.clear();
+
         Object selectedPython = pythonPathCombo.getSelectedItem();
         String pythonPath = selectedPython != null ? selectedPython.toString().trim() : "";
         if (!pythonPath.isEmpty()) {
@@ -2651,6 +2657,7 @@ public class CarafeGUI extends JFrame {
         executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
             try {
+                int stepIndex = 1;
                 for (CmdTask command : initialCommands) {
                     if (!isRunning) return;
 
@@ -2661,7 +2668,13 @@ public class CarafeGUI extends JFrame {
                     consoleArea.append("Command: " + command.cmd + "\n");
                     consoleArea.append("========================================\n\n");
 
+                    long start = System.nanoTime();
                     int exitCode = runSingleCommand(command.cmd, pythonPath);
+                    long end = System.nanoTime();
+                    double minutes = (end - start) / 1e9 / 60.0;
+                    String key = String.format("%02d. %s - %s", stepIndex++, command.tool_name, command.task_description);
+                    timeUsageMap.put(key, minutes);
+
                     if (exitCode != 0) {
                         SwingUtilities.invokeLater(() -> {
                             consoleArea.append("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
@@ -2683,8 +2696,12 @@ public class CarafeGUI extends JFrame {
                         consoleArea.append("Running: " + command.task_description + "\n");
                         consoleArea.append("Command: " + command.cmd + "\n");
                         consoleArea.append("========================================\n\n");
-
+                        long start = System.nanoTime();
                         int exitCode = runSingleCommand(command.cmd, pythonPath);
+                        long end = System.nanoTime();
+                        double minutes = (end - start) / 1e9 / 60.0;
+                        String key = String.format("%02d. %s - %s", stepIndex++, command.tool_name, command.task_description);
+                        timeUsageMap.put(key, minutes);
                         if (exitCode != 0) {
                             SwingUtilities.invokeLater(() -> {
                                 consoleArea.append("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
@@ -2699,6 +2716,13 @@ public class CarafeGUI extends JFrame {
                 SwingUtilities.invokeLater(() -> {
                     consoleArea.append("\n[SUCCESS] Workflow completed successfully!\n");
                     progressBar.setString("Completed");
+                    consoleArea.append("\n[SUMMARY] Step durations (min):\n");
+                    double totalTime = 0.0;
+                    for (java.util.Map.Entry<String, Double> e : timeUsageMap.entrySet()) {
+                        consoleArea.append(" - " + e.getKey() + " : " + String.format("%.2f",e.getValue()) + "\n");
+                        totalTime += e.getValue();
+                    }
+                    consoleArea.append("Total time: " + String.format("%.2f", totalTime) + " min\n");
                     finishExecution();
                 });
 
@@ -2979,6 +3003,7 @@ public class CarafeGUI extends JFrame {
         stopButton.setEnabled(true);
         progressBar.setIndeterminate(true);
         progressBar.setString(command.task_description);
+        timeUsageMap.clear();
 
         if (tabbedPane != null) {
             SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
@@ -2997,7 +3022,7 @@ public class CarafeGUI extends JFrame {
         }
         consoleArea.append("Command: " + command.cmd + "\n");
         consoleArea.append("========================================\n\n");
-
+        long start = System.nanoTime();
         executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
             try {
@@ -3039,8 +3064,16 @@ public class CarafeGUI extends JFrame {
                 int exitCode = currentProcess.waitFor();
                 SwingUtilities.invokeLater(() -> {
                     if (exitCode == 0) {
+                        long end = System.nanoTime();
+                        double minutes = (end - start) / 1e9 / 60.0;
+                        String key = "01. " + command.tool_name + " - " + command.task_description;
+                        timeUsageMap.put(key, minutes);
                         consoleArea.append("\n[SUCCESS] Carafe completed successfully!\n");
                         progressBar.setString("Completed");
+                        consoleArea.append("\n[SUMMARY] Step durations (min):\n");
+                        for (java.util.Map.Entry<String, Double> e : timeUsageMap.entrySet()) {
+                            consoleArea.append(" - " + e.getKey() + " : " + String.format("%.2f",e.getValue()) + "\n");
+                        }
                     } else {
                         consoleArea.append("\n[ERROR] Carafe exited with code: " + exitCode + "\n");
                         progressBar.setString("Failed");

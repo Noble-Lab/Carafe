@@ -2515,6 +2515,7 @@ public class AIGear {
 
         String[] cmd_list_short = new String[] {
                 this.python_bin,
+                "-u",  // Forces immediate flushing to pipes
                 ai_py,
                 "--in_dir", in_dir,
                 "--out_dir", out_dir,
