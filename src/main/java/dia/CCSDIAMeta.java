@@ -333,6 +333,10 @@ public class CCSDIAMeta{
         System.out.println("Precursor ion m/z range: " + this.precursor_ion_mz_min + "-" + this.precursor_ion_mz_max);
         System.out.println("Retention time range: " + this.rt_min + "-" + this.rt_max);
         System.out.println("Min fragment ion intensity: "+this.min_fragment_ion_intensity);
+        if(CParameter.rt_win <= 0.0){
+            set_peak_refinement_rt_win_auto();
+            System.out.println("Set peak refinement RT window size automatically: "+CParameter.rt_win+" min");
+        }
     }
 
     public long get_fragment_ion_mz_bin_index(double mz){
@@ -403,6 +407,17 @@ public class CCSDIAMeta{
                 }
             }
             return ce;
+        }
+    }
+
+    public void set_peak_refinement_rt_win_auto(){
+        double rt_range = this.rt_max - this.rt_min;
+        if(rt_range <= 30.0){
+            CParameter.rt_win = 0.5;
+        }else if(rt_range > 30.0 && rt_range <=60.0){
+            CParameter.rt_win = 1.0;
+        }else if(rt_range > 60){
+            CParameter.rt_win = 1.5;
         }
     }
 

@@ -242,10 +242,52 @@ public class DIAMeta {
             System.out.println("Precursor ion m/z range: " + this.precursor_ion_mz_min + "-" + this.precursor_ion_mz_max);
         }
         System.out.println("Retention time range: " + this.rt_min + "-" + this.rt_max);
+        if(CParameter.rt_win <= 0.0){
+            set_peak_refinement_rt_win_auto();
+            System.out.println("Set peak refinement RT window size automatically: "+CParameter.rt_win+" min");
+        }
     }
 
     public long get_fragment_ion_mz_bin_index(double mz){
         return Math.round((mz - this.fragment_ion_mz_min) / this.fragment_ion_mz_bin_size);
     }
 
+    public boolean is_staggered_isolation_window(){
+        boolean is_staggered = false;
+        // sort isolation windows by mz_start
+        List<String> isoWinList = new ArrayList<>(this.isolationWindowMap.keySet());
+        isoWinList.sort(new Comparator<String>() {
+            @Override
+            public int compare(String o1, String o2) {
+                return Double.compare(isolationWindowMap.get(o1).mz_lower, isolationWindowMap.get(o2).mz_lower);
+            }
+        });
+        int n_staggered = 0;
+        for(int i=0; i<isoWinList.size()-1; i++){
+            // 50% overlap between adjacent isolation windows
+            double mz_lower = isolationWindowMap.get(isoWinList.get(i)).mz_lower;
+            double mz_upper = isolationWindowMap.get(isoWinList.get(i)).mz_upper;
+            double mz_lower_next = isolationWindowMap.get(isoWinList.get(i+1)).mz_lower;
+            // calculate the percentage of overlap of current window with next window
+            double overlap = (mz_upper - mz_lower_next)/(mz_upper - mz_lower);
+            if(overlap > 0.4){
+                n_staggered++;
+            }
+        }
+        if(n_staggered > 0.5*isoWinList.size()){
+            is_staggered = true;
+        }
+        return is_staggered;
+    }
+
+    public void set_peak_refinement_rt_win_auto(){
+        double rt_range = this.rt_max - this.rt_min;
+        if(rt_range <= 30.0){
+            CParameter.rt_win = 0.5;
+        }else if(rt_range >= 30.0 && rt_range <=60.0){
+            CParameter.rt_win = 1.0;
+        }else if(rt_range > 60){
+            CParameter.rt_win = 1.5;
+        }
+    }
 }

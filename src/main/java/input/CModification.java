@@ -216,7 +216,9 @@ public final class CModification {
             // TODO: need to handle terminal modifications
             // mods: Acetyl@Protein_N-term mod_sites: 0
             if (jMod.position.toLowerCase().contains("term") && one_time_message) {
-                System.err.println("Terminal modification is not supported:" + mod_name);
+                if (CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                    System.err.println("Terminal modification is not supported:" + mod_name);
+                }
                 one_time_message = false;
             }
             String site_unimod_acc = jMod.site + "(" + jMod.unimod_accession + ")";
@@ -318,6 +320,19 @@ public final class CModification {
         }
     }
 
+    public LinkedHashMap<Integer, String> get_top_mod_list(int top_n) {
+        LinkedHashMap<Integer, String> mod_id2name = new LinkedHashMap<>();
+        ModificationFactory ptmFactory = ModificationFactory.getInstance();
+        for (int ptm_id : id2ptmname.keySet()) {
+            Modification ptm = ptmFactory.getModification(id2ptmname.get(ptm_id));
+            mod_id2name.put(ptm_id, ptm.getName() + "[" + String.format("%.4f",ptm.getMass()) + "]");
+            if(mod_id2name.size() >= top_n) {
+                break;
+            }
+        }
+        return mod_id2name;
+    }
+
     public void change_mod_mass(int ptm_id, double mass){
         ModificationFactory ptmFactory = ModificationFactory.getInstance();
         Modification ptm = ptmFactory.getModification(id2ptmname.get(ptm_id));
@@ -328,7 +343,9 @@ public final class CModification {
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
-        System.out.println("Mass of " + ptm.getName() + " changed to " + ptm.getMass());
+        if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+            System.out.println("Mass of " + ptm.getName() + " changed to " + ptm.getMass());
+        }
 
     }
 }

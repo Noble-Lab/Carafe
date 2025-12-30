@@ -24,7 +24,8 @@ def train_ms2(in_dir:str,
               mode_type="general",
               use_grid_nce_search=False,
               log_transform=False,
-              threads=1):
+              threads=1,
+              verbose=1):
     from peptdeep.pretrained_models import ModelManager
     import numpy as np
     import pandas as pd
@@ -77,8 +78,9 @@ def train_ms2(in_dir:str,
         with threadpool_limits(limits=1, user_api="blas"):
             with threadpool_limits(limits=threads, user_api="openmp"):
                 torch.set_num_threads(threads)
-                print("torch intra", torch.get_num_threads())
-                print("torch interop", torch.get_num_interop_threads())
+                if verbose >=2:
+                    print("torch intra", torch.get_num_threads())
+                    print("torch interop", torch.get_num_interop_threads())
                 model_mgr.train_ms2_model(psm_df=a,matched_intensity_df=b,matched_valid_intensity_df=valid)
     else:
         # GPU mode
@@ -87,7 +89,7 @@ def train_ms2(in_dir:str,
     return model_mgr
 
 
-def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1):
+def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1,verbose=1):
     import pandas as pd
     import numpy as np
     import math
@@ -126,15 +128,16 @@ def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1
         with threadpool_limits(limits=1, user_api="blas"):
             with threadpool_limits(limits=threads, user_api="openmp"):
                 torch.set_num_threads(threads)
-                print("torch intra", torch.get_num_threads())
-                print("torch interop", torch.get_num_interop_threads())
+                if verbose >=2:
+                    print("torch intra", torch.get_num_threads())
+                    print("torch interop", torch.get_num_interop_threads())
                 model_mgr.train_rt_model(psm_df=a)
     else:
         model_mgr.train_rt_model(psm_df=a)
     model_mgr.rt_model.save(out_dir+"/rt_model.pt")
     return model_mgr
 
-def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1):
+def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1,verbose=1):
     import pandas as pd
     import numpy as np
     import math
@@ -180,8 +183,9 @@ def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=
         with threadpool_limits(limits=1, user_api="blas"):
             with threadpool_limits(limits=threads, user_api="openmp"):
                 torch.set_num_threads(threads)
-                print("torch intra", torch.get_num_threads())
-                print("torch interop", torch.get_num_interop_threads())
+                if verbose >=2:
+                    print("torch intra", torch.get_num_threads())
+                    print("torch interop", torch.get_num_interop_threads())
                 model_mgr.train_ccs_model(psm_df=a)
     else:
         model_mgr.train_ccs_model(psm_df=a)
@@ -282,6 +286,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', default=2024, help='Random seed for training')
     parser.add_argument('--no_masking', action='store_true', help='disable masking for training')
     parser.add_argument('--user_mod', default=None, help='User defined modification')
+    parser.add_argument('--verbose', type=int, default=1, help='log level. 1: info, 2: debug')
 
     args = parser.parse_args()
 
@@ -321,8 +326,9 @@ if __name__ == "__main__":
         except RuntimeError as e:
             print("[warn] set_num_interop_threads skipped:", e)
 
-    print("torch intra", torch.get_num_threads())
-    print("torch interop", torch.get_num_interop_threads())
+    if args.verbose >=2:
+        print("torch intra", torch.get_num_threads())
+        print("torch interop", torch.get_num_interop_threads())
 
     set_seed(int(args.seed))  # keep after torch import
 
@@ -354,7 +360,8 @@ if __name__ == "__main__":
 
     check_models_from_docker()
 
-    print_thread_state(tag="Thread/BLAS summary (startup)")
+    if args.verbose >=2:
+        print_thread_state(tag="Thread/BLAS summary (startup)")
     from threadpoolctl import threadpool_limits, threadpool_info
     if tf_type == "all" or tf_type == "test":
         if tf_type == "test":

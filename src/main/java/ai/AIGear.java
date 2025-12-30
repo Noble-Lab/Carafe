@@ -552,7 +552,7 @@ public class AIGear {
         options.addOption("lf_type", true, "Spectral library format: DIA-NN (default), EncyclopeDIA, Skyline (blib) or mzSpecLib");
         options.addOption("lf_format", true, "Spectral library file format: tsv (default) or parquet");
         options.addOption("lf_frag_mz_min", true, "The minimum mz of fragment to consider for library generation, default is 200");
-        options.addOption("lf_frag_mz_max", true, "The minimum mz of fragment to consider for library generation, default is 1800");
+        options.addOption("lf_frag_mz_max", true, "The maximum mz of fragment to consider for library generation, default is 1800");
         options.addOption("lf_top_n_frag", true, "The maximum number of fragment ions to consider for library generation, default is 20");
         options.addOption("lf_min_n_frag", true, "The minimum number of fragment ions to consider for library generation, default is 2");
         options.addOption("lf_frag_n_min", true, "The minimum fragment ion number to consider for library generation, default is 2");
@@ -588,6 +588,8 @@ public class AIGear {
         // This is the fine-tuned model directory
         options.addOption("model_dir", true, "The directory of the model to use for spectral library generation");
 
+        options.addOption("verbose", true, "The level of detail of the log: 1 (info, default), 2 (debug)");
+
         options.addOption("h", false, "Help");
 
         CommandLineParser parser = new DefaultParser(false);
@@ -599,6 +601,15 @@ public class AIGear {
             System.out.println("java -Xmx4G -jar carafe.jar");
             f.printHelp("Options", options);
             return;
+        }
+
+        if(cmd.hasOption("verbose")){
+            int log_level = Integer.parseInt(cmd.getOptionValue("verbose"));
+            if(log_level==1){
+                CParameter.verbose = CParameter.VerboseType.INFO;
+            }else if(log_level==2){
+                CParameter.verbose = CParameter.VerboseType.DEBUG;
+            }
         }
 
         if(cmd.hasOption("user_var_mods")){
@@ -710,7 +721,12 @@ public class AIGear {
         }
 
         if(cmd.hasOption("rf_rt_win")){
-            CParameter.rt_win = Double.parseDouble(cmd.getOptionValue("rf_rt_win"));
+            if(cmd.getOptionValue("rf_rt_win").equalsIgnoreCase("auto")) {
+                // will determine rt window based on LC gradient length
+                CParameter.rt_win = 0;
+            }else{
+                CParameter.rt_win = Double.parseDouble(cmd.getOptionValue("rf_rt_win"));
+            }
         }
 
 
@@ -2525,7 +2541,8 @@ public class AIGear {
                 "--tf_type", CParameter.tf_type,
                 "--nce", String.valueOf(this.nce),
                 "--seed", String.valueOf(this.global_random_seed),
-                "--mode", mode
+                "--mode", mode,
+                "--verbose", String.valueOf(CParameter.verbose.getValue())
         };
         ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
 
@@ -8579,7 +8596,7 @@ public class AIGear {
 
                 }
                 if(!apex_found){
-                    System.out.println("Apex not found:"+peptideMatch.rt_apex+","+peptideMatch.rt_start+","+peptideMatch.rt_end);
+                    Cloger.getInstance().logger.error("Apex not found:"+peptideMatch.rt_apex+","+peptideMatch.rt_start+","+peptideMatch.rt_end);
                     System.exit(1);
                 }
                 if(!boundary_left_found || !boundary_right_found || !apex_found){
@@ -8666,17 +8683,19 @@ public class AIGear {
                                     peptideMatch.rt_end = peak.boundary_right_rt;
                                     peptideMatch.rt_apex = peak.apex_rt;
                                 }else{
-                                    System.err.println("The original apex index is not in the refined peak boundary:"+original_peak_index+","+
-                                            boundary_left_index+","+
-                                            boundary_right_index+","+
-                                            peak.apex_index+","+
-                                            peak.boundary_left_index+","+peak.boundary_right_index+","+
-                                            peak.boundary_left_rt+","+
-                                            peak.apex_rt+","+
-                                            peak.boundary_right_rt+","+
-                                            pepXIC_smoothed.getRowDimension()+","+
-                                            pepXIC_smoothed.getColumnDimension());
-                                    System.err.println(peptideMatch.peptide.getSequence()+"\t"+peptideMatch.index+"\t"+peptideMatch.precursor_charge+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
+                                    if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                                        System.err.println("The original apex index is not in the refined peak boundary:" + original_peak_index + "," +
+                                                boundary_left_index + "," +
+                                                boundary_right_index + "," +
+                                                peak.apex_index + "," +
+                                                peak.boundary_left_index + "," + peak.boundary_right_index + "," +
+                                                peak.boundary_left_rt + "," +
+                                                peak.apex_rt + "," +
+                                                peak.boundary_right_rt + "," +
+                                                pepXIC_smoothed.getRowDimension() + "," +
+                                                pepXIC_smoothed.getColumnDimension());
+                                        System.err.println(peptideMatch.peptide.getSequence() + "\t" + peptideMatch.index + "\t" + peptideMatch.precursor_charge + "\t" + peptideMatch.scan + "\t" + peptideMatch.rt_start + "\t" + peptideMatch.rt_apex + "\t" + peptideMatch.rt_end);
+                                    }
                                     // If this is the case, use the original peak boundary
                                     peak.boundary_left_index = boundary_left_index;
                                     peak.boundary_right_index = boundary_right_index;
@@ -8952,17 +8971,19 @@ public class AIGear {
                                     peptideMatch.rt_end = peak.boundary_right_rt;
                                     peptideMatch.rt_apex = peak.apex_rt;
                                 }else{
-                                    System.err.println("The original apex index is not in the refined peak boundary:"+original_peak_index+","+
-                                            boundary_left_index+","+
-                                            boundary_right_index+","+
-                                            peak.apex_index+","+
-                                            peak.boundary_left_index+","+peak.boundary_right_index+","+
-                                            peak.boundary_left_rt+","+
-                                            peak.apex_rt+","+
-                                            peak.boundary_right_rt+","+
-                                            pepXIC_smoothed.getRowDimension()+","+
-                                            pepXIC_smoothed.getColumnDimension());
-                                    System.err.println(peptideMatch.peptide.getSequence()+"\t"+peptideMatch.index+"\t"+peptideMatch.precursor_charge+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
+                                    if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                                        System.err.println("The original apex index is not in the refined peak boundary:" + original_peak_index + "," +
+                                                boundary_left_index + "," +
+                                                boundary_right_index + "," +
+                                                peak.apex_index + "," +
+                                                peak.boundary_left_index + "," + peak.boundary_right_index + "," +
+                                                peak.boundary_left_rt + "," +
+                                                peak.apex_rt + "," +
+                                                peak.boundary_right_rt + "," +
+                                                pepXIC_smoothed.getRowDimension() + "," +
+                                                pepXIC_smoothed.getColumnDimension());
+                                        System.err.println(peptideMatch.peptide.getSequence() + "\t" + peptideMatch.index + "\t" + peptideMatch.precursor_charge + "\t" + peptideMatch.scan + "\t" + peptideMatch.rt_start + "\t" + peptideMatch.rt_apex + "\t" + peptideMatch.rt_end);
+                                    }
                                     // If this is the case, use the original peak boundary
                                     peak.boundary_left_index = boundary_left_index;
                                     peak.boundary_right_index = boundary_right_index;
@@ -9197,17 +9218,19 @@ public class AIGear {
                                     peptideMatch.rt_end = peak.boundary_right_rt;
                                     peptideMatch.rt_apex = peak.apex_rt;
                                 }else{
-                                    System.err.println("The original apex index is not in the refined peak boundary:"+original_peak_index+","+
-                                            boundary_left_index+","+
-                                            boundary_right_index+","+
-                                            peak.apex_index+","+
-                                            peak.boundary_left_index+","+peak.boundary_right_index+","+
-                                            peak.boundary_left_rt+","+
-                                            peak.apex_rt+","+
-                                            peak.boundary_right_rt+","+
-                                            pepXIC_smoothed.getRowDimension()+","+
-                                            pepXIC_smoothed.getColumnDimension());
-                                    System.err.println(peptideMatch.peptide.getSequence()+"\t"+peptideMatch.index+"\t"+peptideMatch.precursor_charge+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
+                                    if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                                        System.err.println("The original apex index is not in the refined peak boundary:" + original_peak_index + "," +
+                                                boundary_left_index + "," +
+                                                boundary_right_index + "," +
+                                                peak.apex_index + "," +
+                                                peak.boundary_left_index + "," + peak.boundary_right_index + "," +
+                                                peak.boundary_left_rt + "," +
+                                                peak.apex_rt + "," +
+                                                peak.boundary_right_rt + "," +
+                                                pepXIC_smoothed.getRowDimension() + "," +
+                                                pepXIC_smoothed.getColumnDimension());
+                                        System.err.println(peptideMatch.peptide.getSequence() + "\t" + peptideMatch.index + "\t" + peptideMatch.precursor_charge + "\t" + peptideMatch.scan + "\t" + peptideMatch.rt_start + "\t" + peptideMatch.rt_apex + "\t" + peptideMatch.rt_end);
+                                    }
                                     // If this is the case, use the original peak boundary
                                     peak.boundary_left_index = boundary_left_index;
                                     peak.boundary_right_index = boundary_right_index;
@@ -9437,19 +9460,21 @@ public class AIGear {
                                     peptideMatch.rt_apex = peak.apex_rt;
                                     refined_peak_boundary = true;
                                 }else{
-                                    System.err.println("The original apex index is not in the refined peak boundary:"+
-                                            xicQueryResult.id+","+
-                                            original_peak_index+","+
-                                            boundary_left_index+","+
-                                            boundary_right_index+","+
-                                            peak.apex_index+","+
-                                            peak.boundary_left_index+","+peak.boundary_right_index+","+
-                                            peak.boundary_left_rt+","+
-                                            peak.apex_rt+","+
-                                            peak.boundary_right_rt+","+
-                                            pepXIC_smoothed.getRowDimension()+","+
-                                            pepXIC_smoothed.getColumnDimension());
-                                    System.err.println(peptideMatch.peptide.getSequence()+"\t"+peptideMatch.index+"\t"+peptideMatch.precursor_charge+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
+                                    if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                                        System.err.println("The original apex index is not in the refined peak boundary:" +
+                                                xicQueryResult.id + "," +
+                                                original_peak_index + "," +
+                                                boundary_left_index + "," +
+                                                boundary_right_index + "," +
+                                                peak.apex_index + "," +
+                                                peak.boundary_left_index + "," + peak.boundary_right_index + "," +
+                                                peak.boundary_left_rt + "," +
+                                                peak.apex_rt + "," +
+                                                peak.boundary_right_rt + "," +
+                                                pepXIC_smoothed.getRowDimension() + "," +
+                                                pepXIC_smoothed.getColumnDimension());
+                                        System.err.println(peptideMatch.peptide.getSequence() + "\t" + peptideMatch.index + "\t" + peptideMatch.precursor_charge + "\t" + peptideMatch.scan + "\t" + peptideMatch.rt_start + "\t" + peptideMatch.rt_apex + "\t" + peptideMatch.rt_end);
+                                    }
                                     // If this is the case, use the original peak boundary
                                     peak.boundary_left_index = boundary_left_index;
                                     peak.boundary_right_index = boundary_right_index;
@@ -10131,7 +10156,9 @@ public class AIGear {
 
 
         if (matches == null || matches.length == 0) {
-            System.err.println("No ions matched!");
+            if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                System.err.println("No ions matched!");
+            }
             return (new ArrayList<>());
         }else{
             return new ArrayList<>(Arrays.asList(matches));
@@ -10250,7 +10277,9 @@ public class AIGear {
 
 
         if (ion_matches.isEmpty()) {
-            System.err.println("No ions matched!");
+            if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                System.err.println("No ions matched!");
+            }
             return (new ArrayList<>());
         }else{
             return ion_matches;
@@ -10420,7 +10449,9 @@ public class AIGear {
 
 
         if (ion_matches.isEmpty()) {
-            System.err.println("No ions matched!");
+            if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                System.err.println("No ions matched!");
+            }
             // return (new ArrayList<>());
             return -1;
         }else{
@@ -10558,7 +10589,9 @@ public class AIGear {
 
 
         if (ion_matches.isEmpty()) {
-            System.err.println("No ions matched!");
+            if(CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                System.err.println("No ions matched!");
+            }
             // return (new ArrayList<>());
             return -1;
         }else{

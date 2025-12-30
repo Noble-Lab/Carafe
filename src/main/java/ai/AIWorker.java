@@ -74,7 +74,8 @@ public final  class AIWorker implements Runnable{
                 "--instrument", this.ms_instrument,
                 "--tf_type", CParameter.tf_type,
                 "--nce", String.valueOf(this.nce),
-                "--mode", mode
+                "--mode", mode,
+                "--verbose", String.valueOf(CParameter.verbose.getValue())
         };
         ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
 

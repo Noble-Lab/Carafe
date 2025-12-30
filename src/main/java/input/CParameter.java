@@ -107,6 +107,24 @@ public class CParameter {
      */
     public static double NCE = 27;
 
+    public static VerboseType verbose = VerboseType.INFO;
+
+    // define an enum for the type of verbose: INFO, DEBUG
+    // 1 is INFO and 2 is DEBUG
+    public enum VerboseType {
+        INFO(1), DEBUG(2);
+
+        private final int value;
+
+        VerboseType(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
+
     public static double get_mass_error(double precursor_mass, double pep_mass, boolean is_ppm){
         double delta_mass;
         if(is_ppm){

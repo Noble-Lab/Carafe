@@ -17,7 +17,8 @@ def predict_ms2(model_dir:str,
                 mode_type='general',
                 log_transform=False,
                 fast_mode=False,
-                mod2mass=None):
+                mod2mass=None,
+                verbose=1):
     import pandas as pd
     from peptdeep.pretrained_models import ModelManager
     import alphabase.peptide.fragment as fragment
@@ -55,8 +56,9 @@ def predict_ms2(model_dir:str,
         with threadpool_limits(limits=1, user_api="blas"):
             with threadpool_limits(limits=n_physical, user_api="openmp"):
                 torch.set_num_threads(n_physical)
-                print("torch intra", torch.get_num_threads())
-                print("torch interop", torch.get_num_interop_threads())
+                if verbose >= 2:
+                    print("torch intra", torch.get_num_threads())
+                    print("torch interop", torch.get_num_interop_threads())
                 pred_res = model_mgr.predict_ms2(a) # the order of rows in a will be changed after the prediction if there is no nAA in it.
     else:
         pred_res = model_mgr.predict_ms2(a)
@@ -124,7 +126,8 @@ def predict_rt(model_dir:str,
                out_prefix="rt_pred",
                device='gpu',
                mode_type='general',
-               fast_mode=False):
+               fast_mode=False,
+               verbose=1):
     import pandas as pd
     from peptdeep.pretrained_models import ModelManager
     if mode_type == 'general':
@@ -164,8 +167,9 @@ def predict_rt(model_dir:str,
         with threadpool_limits(limits=1, user_api="blas"):
             with threadpool_limits(limits=n_physical, user_api="openmp"):
                 torch.set_num_threads(n_physical)
-                print("torch intra", torch.get_num_threads())
-                print("torch interop", torch.get_num_interop_threads())
+                if verbose >= 2:
+                    print("torch intra", torch.get_num_threads())
+                    print("torch interop", torch.get_num_interop_threads())
                 pred_res = model_mgr.predict_rt(a)
     else:
         pred_res = model_mgr.predict_rt(a)
@@ -185,7 +189,8 @@ def predict_ccs(model_dir:str,
                out_prefix="ccs_pred",
                device='gpu',
                mode_type='general',
-               fast_mode=False):
+               fast_mode=False,
+               verbose=1):
     import pandas as pd
     from peptdeep.pretrained_models import ModelManager
     if mode_type == 'general':
@@ -224,8 +229,9 @@ def predict_ccs(model_dir:str,
         with threadpool_limits(limits=1, user_api="blas"):
             with threadpool_limits(limits=n_physical, user_api="openmp"):
                 torch.set_num_threads(n_physical)
-                print("torch intra", torch.get_num_threads())
-                print("torch interop", torch.get_num_interop_threads())
+                if verbose >= 2:
+                    print("torch intra", torch.get_num_threads())
+                    print("torch interop", torch.get_num_interop_threads())
                 pred_res = model_mgr.predict_mobility(a)
     else:
         pred_res = model_mgr.predict_mobility(a)
@@ -336,7 +342,7 @@ if __name__ == "__main__":
     parser.add_argument('--ccs', action='store_true', help='Predict CCS')
     parser.add_argument('--mod2mass', default=None, help='Change the mass of modifications, e.g., Deamidated@N=0')
     parser.add_argument('--user_mod', default=None, help='User defined modification')
-
+    parser.add_argument('--verbose', type=int, default=1, help='log level. 1: info, 2: debug')
 
     args = parser.parse_args()
     device = (args.device or "gpu").lower()
@@ -362,8 +368,9 @@ if __name__ == "__main__":
         except RuntimeError as e:
             print("[warn] set_num_interop_threads skipped:", e)
 
-    print("torch intra", torch.get_num_threads())
-    print("torch interop", torch.get_num_interop_threads())
+    if args.verbose >= 2:
+        print("torch intra", torch.get_num_threads())
+        print("torch interop", torch.get_num_interop_threads())
 
     set_seed(2024)
     from peptdeep.settings import global_settings,add_user_defined_modifications
@@ -396,7 +403,8 @@ if __name__ == "__main__":
     import pandas as pd
     import numpy as np
 
-    print_thread_state(tag="Thread/BLAS summary (startup)")
+    if args.verbose >= 2:
+        print_thread_state(tag="Thread/BLAS summary (startup)")
     from threadpoolctl import threadpool_limits, threadpool_info
     if args.tf_type == "all":
         model_mgr_rt = predict_ms2(model_dir=args.model_dir, 
@@ -409,14 +417,16 @@ if __name__ == "__main__":
                                mode_type=args.mode,
                                log_transform=args.log_transform,
                                fast_mode=args.fast,
-                               mod2mass=args.mod2mass)
+                               mod2mass=args.mod2mass,
+                               verbose=args.verbose)
         model_mgr = predict_rt(model_dir=args.model_dir, 
                            pred_file=args.in_file, 
                            out_dir=args.out_dir, 
                            out_prefix=args.out_prefix, 
                            device=args.device,
                            mode_type=args.mode,
-                           fast_mode=args.fast)
+                           fast_mode=args.fast,
+                           verbose=args.verbose)
         if args.ccs:
             model_mgr_ccs = predict_ccs(model_dir=args.model_dir,
                                        pred_file=args.in_file,
@@ -424,7 +434,8 @@ if __name__ == "__main__":
                                        out_prefix=args.out_prefix,
                                        device=args.device,
                                        mode_type=args.mode,
-                                       fast_mode=args.fast)
+                                       fast_mode=args.fast,
+                                       verbose=args.verbose)
     elif args.tf_type == "rt":
         model_mgr = predict_rt(model_dir=args.model_dir, 
                            pred_file=args.in_file, 
@@ -432,7 +443,8 @@ if __name__ == "__main__":
                            out_prefix=args.out_prefix, 
                            device=args.device,
                            mode_type=args.mode,
-                           fast_mode=args.fast)
+                           fast_mode=args.fast,
+                           verbose=args.verbose)
         model_mgr_rt = predict_ms2(model_dir="generic", 
                                 pred_file=args.in_file, 
                                 out_dir=args.out_dir, 
@@ -442,7 +454,8 @@ if __name__ == "__main__":
                                 nce=float(args.nce),
                                 mode_type=args.mode,
                                 fast_mode=args.fast,
-                                mod2mass=args.mod2mass)
+                                mod2mass=args.mod2mass,
+                                verbose=args.verbose)
     elif args.tf_type == "ms2":
         model_mgr = predict_rt(model_dir="generic", 
                                 pred_file=args.in_file, 
@@ -450,7 +463,8 @@ if __name__ == "__main__":
                                 out_prefix=args.out_prefix, 
                                 device=args.device,
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                verbose=args.verbose)
         model_mgr_rt = predict_ms2(model_dir=args.model_dir, 
                                 pred_file=args.in_file, 
                                 out_dir=args.out_dir, 
@@ -461,7 +475,8 @@ if __name__ == "__main__":
                                 mode_type=args.mode,
                                 log_transform=args.log_transform,
                                 fast_mode=args.fast,
-                                mod2mass=args.mod2mass)
+                                mod2mass=args.mod2mass,
+                                verbose=args.verbose)
     elif args.tf_type == "test":
         print("Test mode ...")
         model_mgr_rt = predict_ms2(model_dir=args.model_dir, 
@@ -474,14 +489,16 @@ if __name__ == "__main__":
                                mode_type=args.mode,
                                log_transform=args.log_transform,
                                fast_mode=args.fast,
-                               mod2mass=args.mod2mass)
+                               mod2mass=args.mod2mass,
+                               verbose=args.verbose)
         model_mgr = predict_rt(model_dir=args.model_dir, 
                            pred_file=args.in_file, 
                            out_dir=args.out_dir, 
                            out_prefix=args.out_prefix, 
                            device=args.device,
                            mode_type=args.mode,
-                           fast_mode=args.fast)
+                           fast_mode=args.fast,
+                           verbose=args.verbose)
         if args.ccs:
             model_mgr_ccs = predict_ccs(model_dir=args.model_dir,
                                 pred_file=args.in_file,
@@ -489,7 +506,8 @@ if __name__ == "__main__":
                                 out_prefix=args.out_prefix,
                                 device=args.device,
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                verbose=args.verbose)
         pretrained_model_out_dir = os.path.join(args.out_dir, "pretrained_models")
         if not os.path.exists(pretrained_model_out_dir):
             os.makedirs(pretrained_model_out_dir)
@@ -499,7 +517,8 @@ if __name__ == "__main__":
                                 out_prefix=args.out_prefix, 
                                 device=args.device,
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                verbose=args.verbose)
         model_mgr_rt = predict_ms2(model_dir="generic", 
                                 pred_file=args.in_file, 
                                 out_dir=pretrained_model_out_dir, 
@@ -509,7 +528,8 @@ if __name__ == "__main__":
                                 nce=float(args.nce),
                                 mode_type=args.mode,
                                 fast_mode=args.fast,
-                                mod2mass=args.mod2mass)
+                                mod2mass=args.mod2mass,
+                                verbose=args.verbose)
         if args.ccs:
             model_mgr_ccs = predict_ccs(model_dir="generic",
                                 pred_file=args.in_file,
@@ -517,7 +537,8 @@ if __name__ == "__main__":
                                 out_prefix=args.out_prefix,
                                 device=args.device,
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                verbose=args.verbose)
     else:
         model_mgr = predict_rt(model_dir="generic", 
                                 pred_file=args.in_file, 
@@ -525,7 +546,8 @@ if __name__ == "__main__":
                                 out_prefix=args.out_prefix, 
                                 device=args.device,
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                verbose=args.verbose)
         model_mgr_rt = predict_ms2(model_dir="generic", 
                                 pred_file=args.in_file, 
                                 out_dir=args.out_dir, 
@@ -535,7 +557,8 @@ if __name__ == "__main__":
                                 nce=float(args.nce),
                                 mode_type=args.mode,
                                 fast_mode=args.fast,
-                                mod2mass=args.mod2mass)
+                                mod2mass=args.mod2mass,
+                                verbose=args.verbose)
         if args.ccs:
             model_mgr_ccs = predict_ccs(model_dir="generic",
                                 pred_file=args.in_file,
@@ -543,7 +566,8 @@ if __name__ == "__main__":
                                 out_prefix=args.out_prefix,
                                 device=args.device,
                                 mode_type=args.mode,
-                                fast_mode=args.fast)
+                                fast_mode=args.fast,
+                                verbose=args.verbose)
 
     os._exit(0)
     
