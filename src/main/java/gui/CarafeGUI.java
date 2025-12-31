@@ -284,16 +284,15 @@ public class CarafeGUI extends JFrame {
 
         // Main content with tabs
         tabbedPane = new JTabbedPane();
-        tabbedPane.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-
+        tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
         tabbedPane.setFont(new Font("Segoe UI", Font.PLAIN, 13));
 
         inputScrollPane = wrapInScrollPane(createInputPanel());
-        tabbedPane.addTab("1. Workflow", inputScrollPane);
-        tabbedPane.addTab("2. Training Data Generation", wrapInScrollPane(createTrainingDataPanel()));
-        tabbedPane.addTab("3. Model Training", wrapInScrollPane(createModelTrainingPanel()));
-        tabbedPane.addTab("4. Library Generation", wrapInScrollPane(createLibraryGenerationPanel()));
-        tabbedPane.addTab("5. Console", createConsolePanel());
+        tabbedPane.addTab("Workflow", inputScrollPane);
+        tabbedPane.addTab("Training Data Generation", wrapInScrollPane(createTrainingDataPanel()));
+        tabbedPane.addTab("Model Training", wrapInScrollPane(createModelTrainingPanel()));
+        tabbedPane.addTab("Library Generation", wrapInScrollPane(createLibraryGenerationPanel()));
+        tabbedPane.addTab("Console", createConsolePanel());
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
@@ -918,7 +917,7 @@ public class CarafeGUI extends JFrame {
         GridBagConstraints wgbc = new GridBagConstraints();
         wgbc.fill = GridBagConstraints.HORIZONTAL;
         wgbc.insets = new Insets(0, COL_SPACING, 15, COL_SPACING);
-        wgbc.anchor = GridBagConstraints.WEST;
+        wgbc.anchor = GridBagConstraints.EAST;
 
         wgbc.gridx = 0;
         wgbc.gridy = 0;
@@ -1045,7 +1044,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridy = gridy;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(ROW_SPACING, COL_SPACING, ROW_SPACING, COL_SPACING);
-        gbc.anchor = GridBagConstraints.WEST;
+        gbc.anchor = GridBagConstraints.EAST;
 
         gbc.gridx = 0;
         gbc.weightx = 0;
@@ -2376,28 +2375,68 @@ public class CarafeGUI extends JFrame {
                     System.getenv("USERPROFILE") + "\\DIA-NN",
                     "C:\\DIA-NN",
                     "C:\\Program Files\\DIA-NN",
-                    "C:\\Program Files (x86)\\DIA-NN"
+                    "C:\\Program Files (x86)\\DIA-NN",
+                    "D:\\DIA-NN",
+                    "D:\\Program Files\\DIA-NN",
+                    "D:\\Program Files (x86)\\DIA-NN",
+                    "E:\\DIA-NN",
+                    "E:\\Program Files\\DIA-NN",
+                    "E:\\Program Files (x86)\\DIA-NN"
             };
 
             for (String basePath : windowsPaths) {
-                if (basePath == null)
-                    continue;
                 File baseDir = new File(basePath);
                 if (baseDir.exists() && baseDir.isDirectory()) {
                     File diannExe = new File(baseDir, "diann.exe");
-                    if (diannExe.exists()) {
+                    if (diannExe.exists() && !diannPaths.contains(diannExe.getAbsolutePath())) {
                         diannPaths.add(diannExe.getAbsolutePath());
                     }
                     File[] subDirs = baseDir.listFiles(File::isDirectory);
                     if (subDirs != null) {
                         for (File subDir : subDirs) {
                             diannExe = new File(subDir, "diann.exe");
-                            if (diannExe.exists()) {
+                            if (diannExe.exists() && !diannPaths.contains(diannExe.getAbsolutePath())) {
                                 diannPaths.add(diannExe.getAbsolutePath());
                             }
                         }
                     }
                 }
+            }
+
+            // Special check for user request: Root:\*\DIA-NN pattern
+            // Scans all available root drives (C:\, D:\, etc.) for a "DIA-NN" folder one
+            // level deep
+            File[] roots = File.listRoots();
+            if (roots != null) {
+                for (File root : roots) {
+                    if (root.exists() && root.isDirectory()) {
+                        File[] subDirs = root.listFiles(File::isDirectory);
+                        if (subDirs != null) {
+                            for (File dir : subDirs) {
+                                File diannSubDir = new File(dir, "DIA-NN");
+                                if (diannSubDir.exists() && diannSubDir.isDirectory()) {
+                                    // Check for C:\Something\DIA-NN\diann.exe
+                                    File diannExe = new File(diannSubDir, "diann.exe");
+                                    if (diannExe.exists() && !diannPaths.contains(diannExe.getAbsolutePath())) {
+                                        diannPaths.add(diannExe.getAbsolutePath());
+                                    }
+
+                                    // Check for C:\Something\DIA-NN\1.8.1\diann.exe (versioned subdirs)
+                                    File[] deepDirs = diannSubDir.listFiles(File::isDirectory);
+                                    if (deepDirs != null) {
+                                        for (File deep : deepDirs) {
+                                            File deepExe = new File(deep, "diann.exe");
+                                            if (deepExe.exists() && !diannPaths.contains(deepExe.getAbsolutePath())) {
+                                                diannPaths.add(deepExe.getAbsolutePath());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
             }
 
             try {
@@ -2416,7 +2455,9 @@ public class CarafeGUI extends JFrame {
             } catch (Exception ignored) {
             }
 
-        } else {
+        } else
+
+        {
             String[] unixPaths = {
                     "/usr/local/bin/diann",
                     "/usr/bin/diann",
@@ -2425,8 +2466,6 @@ public class CarafeGUI extends JFrame {
             };
 
             for (String path : unixPaths) {
-                if (path == null)
-                    continue;
                 File file = new File(path);
                 if (file.exists() && file.canExecute()) {
                     diannPaths.add(path);
@@ -2451,7 +2490,7 @@ public class CarafeGUI extends JFrame {
         }
 
         if (diannPaths.isEmpty()) {
-            diannPaths.add(isWindows ? "diann.exe" : "diann");
+            // diannPaths.add(isWindows ? "diann.exe" : "diann");
         }
         return diannPaths;
     }
