@@ -2079,7 +2079,8 @@ public class CarafeGUI extends JFrame {
         String pythonPrototype = isWindows ? "C:\\Python39\\python.exe" : "/usr/bin/python3";
         combo.setPrototypeDisplayValue(pythonPrototype);
 
-        java.util.List<String> pythonPaths = detectPythonInstallations();
+        // java.util.List<String> pythonPaths = detectPythonInstallations();
+        java.util.List<String> pythonPaths = new java.util.ArrayList<>();
         for (String path : pythonPaths) {
             combo.addItem(path);
         }
