@@ -2,12 +2,15 @@ package main.java.gui;
 
 import java.awt.*;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -195,6 +198,8 @@ public class CarafeGUI extends JFrame {
     private String diannVersion = "";
     private boolean isDiannV2 = false;
 
+    private BufferedWriter logWriter;
+
     public CarafeGUI() {
         setTitle("Carafe - Spectral Library Generator");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -253,6 +258,22 @@ public class CarafeGUI extends JFrame {
     private static Color lafColor(String key, Color fallback) {
         Color c = UIManager.getColor(key);
         return c != null ? c : fallback;
+    }
+
+    private synchronized void logToConsole(String message) {
+        SwingUtilities.invokeLater(() -> {
+            consoleArea.append(message);
+            consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+        });
+
+        if (logWriter != null) {
+            try {
+                logWriter.write(message);
+                logWriter.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private void initComponents() {
@@ -1920,7 +1941,7 @@ public class CarafeGUI extends JFrame {
                             tabbedPane.setSelectedIndex(Math.max(0, tabbedPane.getTabCount() - 1));
                         progressBar.setIndeterminate(true);
                         progressBar.setString("Python installation...");
-                        consoleArea.append("\n[INSTALL] Python installation started...\n");
+                        logToConsole("\n[INSTALL] Python installation started...\n");
                         consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
                     });
 
@@ -1944,7 +1965,7 @@ public class CarafeGUI extends JFrame {
                                             final String decoded = new String(line.getBytes("ISO-8859-1"),
                                                     StandardCharsets.UTF_8);
                                             SwingUtilities.invokeLater(() -> {
-                                                consoleArea.append(decoded + "\n");
+                                                logToConsole(decoded + "\n");
                                                 consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
                                             });
                                         }
@@ -1960,7 +1981,7 @@ public class CarafeGUI extends JFrame {
                                         final String decoded = new String(line.getBytes("ISO-8859-1"),
                                                 StandardCharsets.UTF_8);
                                         SwingUtilities.invokeLater(() -> {
-                                            consoleArea.append(decoded + "\n");
+                                            logToConsole(decoded + "\n");
                                             consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
                                         });
                                     }
@@ -1987,7 +2008,7 @@ public class CarafeGUI extends JFrame {
 
                     final String installedPath = py_path;
                     SwingUtilities.invokeLater(() -> {
-                        consoleArea.append("[INSTALL] Completed. Python installed at: " + installedPath + "\n");
+                        logToConsole("[INSTALL] Completed. Python installed at: " + installedPath + "\n");
                         consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
 
                         boolean found = false;
@@ -2012,7 +2033,7 @@ public class CarafeGUI extends JFrame {
                 } catch (Exception ex) {
                     final String msg = ex.getMessage() == null ? ex.toString() : ex.getMessage();
                     SwingUtilities.invokeLater(() -> {
-                        consoleArea.append("[INSTALL] Failed: " + msg + "\n");
+                        logToConsole("[INSTALL] Failed: " + msg + "\n");
                         consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
                         JOptionPane.showMessageDialog(CarafeGUI.this,
                                 "Python installation failed:\n" + msg,
@@ -3216,7 +3237,31 @@ public class CarafeGUI extends JFrame {
         }
 
         int workflow = workflowCombo.getSelectedIndex();
-        consoleArea.append("Workflow: " + (workflow + 1) + "\n");
+
+        String outDir = outputDirField.getText().trim();
+        if (outDir.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please specify an output directory!", "Warning",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Initialize log writer
+        try {
+            // Ensure outDir exists first if not already
+            File outDirFile = new File(outDir);
+            if (!outDirFile.exists()) {
+                outDirFile.mkdirs();
+            }
+            logWriter = new BufferedWriter(new FileWriter(outDir + File.separator + "carafe_log.txt"));
+        } catch (IOException e) {
+            logToConsole("Failed to create log file: " + e.getMessage() + "\n");
+        }
+
+        logToConsole("Workflow: " + (workflow + 1) + "\n");
+        // export date and time
+        String date = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        logToConsole("Date: " + date + "\n");
+
         switch (workflow) {
             case 0 -> {
                 String trainMsFile = trainMsFileField.getText().trim();
@@ -3237,16 +3282,22 @@ public class CarafeGUI extends JFrame {
                             "Input Required", JOptionPane.WARNING_MESSAGE);
                     return;
                 }
-                String outDir = outputDirField.getText().trim();
-                if (outDir.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please specify an output directory!", "Warning",
-                            JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
                 String diann_train_dir = outDir + File.separator + "diann_train";
                 File diannTrainDirFile = new File(diann_train_dir);
                 if (!diannTrainDirFile.exists()) {
                     diannTrainDirFile.mkdirs();
+                }
+
+                // Initialize log writer
+                try {
+                    // Ensure outDir exists first if not already
+                    File outDirFile = new File(outDir);
+                    if (!outDirFile.exists()) {
+                        outDirFile.mkdirs();
+                    }
+                    logWriter = new BufferedWriter(new FileWriter(outDir + File.separator + "carafe_log.txt"));
+                } catch (IOException e) {
+                    logToConsole("Failed to create log file: " + e.getMessage() + "\n");
                 }
 
                 // Check for RAW conversion logic
@@ -3353,7 +3404,6 @@ public class CarafeGUI extends JFrame {
                 // Check for RAW conversion logic even for Workflow 1 if trainMsFile is
                 // populated and RAW
                 String trainMsFile = trainMsFileField.getText().trim();
-                String outDir = outputDirField.getText().trim();
 
                 CmdTask conversionTask = null;
                 String effectiveMsFile = null;
@@ -3437,12 +3487,6 @@ public class CarafeGUI extends JFrame {
                 if (libraryDb.isEmpty()) {
                     JOptionPane.showMessageDialog(this, "Please provide a library protein database file.",
                             "Input Required", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-                String outDir = outputDirField.getText().trim();
-                if (outDir.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please specify an output directory!", "Warning",
-                            JOptionPane.WARNING_MESSAGE);
                     return;
                 }
                 String diann_train_dir = outDir + File.separator + "diann_train";
@@ -3592,10 +3636,10 @@ public class CarafeGUI extends JFrame {
 
                     updateProgressBarForCommand(command.task_description);
 
-                    consoleArea.append("\n========================================\n");
-                    consoleArea.append("Running: " + command.task_description + "\n");
-                    consoleArea.append("Command: " + command.cmd + "\n");
-                    consoleArea.append("========================================\n\n");
+                    logToConsole("\n========================================\n");
+                    logToConsole("Running: " + command.task_description + "\n");
+                    logToConsole("Command: " + command.cmd + "\n");
+                    logToConsole("========================================\n\n");
 
                     long start = System.nanoTime();
                     int exitCode = runSingleCommand(command, pythonPath);
@@ -3607,7 +3651,7 @@ public class CarafeGUI extends JFrame {
 
                     if (exitCode != 0) {
                         SwingUtilities.invokeLater(() -> {
-                            consoleArea.append("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
+                            logToConsole("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
                             progressBar.setString("Failed");
                             finishExecution();
                         });
@@ -3623,10 +3667,10 @@ public class CarafeGUI extends JFrame {
 
                         updateProgressBarForCommand(command.task_description);
 
-                        consoleArea.append("\n========================================\n");
-                        consoleArea.append("Running: " + command.task_description + "\n");
-                        consoleArea.append("Command: " + command.cmd + "\n");
-                        consoleArea.append("========================================\n\n");
+                        logToConsole("\n========================================\n");
+                        logToConsole("Running: " + command.task_description + "\n");
+                        logToConsole("Command: " + command.cmd + "\n");
+                        logToConsole("========================================\n\n");
                         long start = System.nanoTime();
                         int exitCode = runSingleCommand(command, pythonPath);
                         long end = System.nanoTime();
@@ -3636,7 +3680,7 @@ public class CarafeGUI extends JFrame {
                         timeUsageMap.put(key, minutes);
                         if (exitCode != 0) {
                             SwingUtilities.invokeLater(() -> {
-                                consoleArea.append("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
+                                logToConsole("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
                                 progressBar.setString("Failed");
                                 finishExecution();
                             });
@@ -3646,21 +3690,21 @@ public class CarafeGUI extends JFrame {
                 }
 
                 SwingUtilities.invokeLater(() -> {
-                    consoleArea.append("\n[SUCCESS] Workflow completed successfully!\n");
+                    logToConsole("\n[SUCCESS] Workflow completed successfully!\n");
                     progressBar.setString("Completed");
-                    consoleArea.append("\n[SUMMARY] Step durations (min):\n");
+                    logToConsole("\n[SUMMARY] Step durations (min):\n");
                     double totalTime = 0.0;
                     for (java.util.Map.Entry<String, Double> e : timeUsageMap.entrySet()) {
-                        consoleArea.append(" - " + e.getKey() + " : " + String.format("%.2f", e.getValue()) + "\n");
+                        logToConsole(" - " + e.getKey() + " : " + String.format("%.2f", e.getValue()) + "\n");
                         totalTime += e.getValue();
                     }
-                    consoleArea.append("Total time: " + String.format("%.2f", totalTime) + " min\n");
+                    logToConsole("Total time: " + String.format("%.2f", totalTime) + " min\n");
                     finishExecution();
                 });
 
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
-                    consoleArea.append("\n[ERROR] Error: " + e.getMessage() + "\n");
+                    logToConsole("\n[ERROR] Error: " + e.getMessage() + "\n");
                     progressBar.setString("Error");
                     finishExecution();
                 });
@@ -3748,7 +3792,7 @@ public class CarafeGUI extends JFrame {
                     "[DEBUG] DIANN env: OMP_NUM_THREADS=%s, MKL_NUM_THREADS=%s, KMP_AFFINITY=%s", dbgOmp, dbgMkl,
                     dbgKmp);
             SwingUtilities.invokeLater(() -> {
-                consoleArea.append(dbgMsg + "\n");
+                logToConsole(dbgMsg + "\n");
                 consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
             });
         }
@@ -3760,7 +3804,7 @@ public class CarafeGUI extends JFrame {
         while ((line = reader.readLine()) != null) {
             final String output = line;
             SwingUtilities.invokeLater(() -> {
-                consoleArea.append(output + "\n");
+                logToConsole(output + "\n");
                 consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
             });
         }
@@ -4131,13 +4175,13 @@ public class CarafeGUI extends JFrame {
             prefs.put(PREF_PYTHON_PATH, pythonPath);
         }
 
-        consoleArea.append("\n========================================\n");
-        consoleArea.append("Starting Carafe...\n");
+        logToConsole("\n========================================\n");
+        logToConsole("Starting Carafe...\n");
         if (!pythonPath.isEmpty()) {
-            consoleArea.append("Python: " + pythonPath + "\n");
+            logToConsole("Python: " + pythonPath + "\n");
         }
-        consoleArea.append("Command: " + command.cmd + "\n");
-        consoleArea.append("========================================\n\n");
+        logToConsole("Command: " + command.cmd + "\n");
+        logToConsole("========================================\n\n");
         long start = System.nanoTime();
         executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
@@ -4173,7 +4217,7 @@ public class CarafeGUI extends JFrame {
                 while ((line = reader.readLine()) != null) {
                     final String output = line;
                     SwingUtilities.invokeLater(() -> {
-                        consoleArea.append(output + "\n");
+                        logToConsole(output + "\n");
                         consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
                     });
                 }
@@ -4185,14 +4229,14 @@ public class CarafeGUI extends JFrame {
                         double minutes = (end - start) / 1e9 / 60.0;
                         String key = "01. " + command.task_name + " - " + command.task_description;
                         timeUsageMap.put(key, minutes);
-                        consoleArea.append("\n[SUCCESS] Carafe completed successfully!\n");
+                        logToConsole("\n[SUCCESS] Carafe completed successfully!\n");
                         progressBar.setString("Completed");
-                        consoleArea.append("\n[SUMMARY] Step durations (min):\n");
+                        logToConsole("\n[SUMMARY] Step durations (min):\n");
                         for (java.util.Map.Entry<String, Double> e : timeUsageMap.entrySet()) {
-                            consoleArea.append(" - " + e.getKey() + " : " + String.format("%.2f", e.getValue()) + "\n");
+                            logToConsole(" - " + e.getKey() + " : " + String.format("%.2f", e.getValue()) + "\n");
                         }
                     } else {
-                        consoleArea.append("\n[ERROR] Carafe exited with code: " + exitCode + "\n");
+                        logToConsole("\n[ERROR] Carafe exited with code: " + exitCode + "\n");
                         progressBar.setString("Failed");
                     }
                     finishExecution();
@@ -4200,7 +4244,7 @@ public class CarafeGUI extends JFrame {
 
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
-                    consoleArea.append("\n[ERROR] Error: " + e.getMessage() + "\n");
+                    logToConsole("\n[ERROR] Error: " + e.getMessage() + "\n");
                     progressBar.setString("Error");
                     finishExecution();
                 });
@@ -4217,7 +4261,7 @@ public class CarafeGUI extends JFrame {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            consoleArea.append("\n[STOPPED] Process stopped by user.\n");
+            logToConsole("\n[STOPPED] Process stopped by user.\n");
         }
         finishExecution();
     }
@@ -4229,6 +4273,15 @@ public class CarafeGUI extends JFrame {
         progressBar.setIndeterminate(false);
         if (executor != null) {
             executor.shutdown();
+        }
+
+        if (logWriter != null) {
+            try {
+                logWriter.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            logWriter = null;
         }
     }
 
