@@ -44,7 +44,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
-import com.compomics.util.experiment.biology.modifications.Modification;
 import main.java.input.CModification;
 import org.apache.commons.lang3.StringUtils;
 
@@ -227,10 +226,24 @@ public class CarafeGUI extends JFrame {
         updateGpuStatusAsync(); // Initial check
 
         pack();
-        Dimension packedSize = getSize();
-        Dimension minSize = getMinimumSize();
-        int newWidth = Math.max(packedSize.width, minSize.width);
-        int newHeight = Math.max(packedSize.height, minSize.height);
+
+        // Dynamic sizing based on monitor resolution
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        int newWidth;
+        int newHeight;
+        if (screenSize.height > 1080) {
+            int targetWidth = DEFAULT_WIDTH + 100;
+            int targetHeight = DEFAULT_HEIGHT + 100;
+
+            // Ensure we respect minimums and don't exceed screen
+            newWidth = Math.max(MIN_WIDTH, Math.min(targetWidth, screenSize.width));
+            newHeight = Math.max(MIN_HEIGHT, Math.min(targetHeight, screenSize.height));
+        } else {
+            Dimension packedSize = getSize();
+            Dimension minSize = getMinimumSize();
+            newWidth = Math.max(packedSize.width, minSize.width);
+            newHeight = Math.max(packedSize.height, minSize.height);
+        }
         setSize(newWidth, newHeight);
         setLocationRelativeTo(null);
     }
