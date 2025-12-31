@@ -377,4 +377,9 @@ if __name__ == "__main__":
     elif tf_type == "ms2":
         model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid,threads=n_physical)
 
+    try:
+        from pyarrow import fs
+        fs.finalize_s3()
+    except:
+        pass
     os._exit(0)

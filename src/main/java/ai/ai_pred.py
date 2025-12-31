@@ -569,6 +569,11 @@ if __name__ == "__main__":
                                 fast_mode=args.fast,
                                 verbose=args.verbose)
 
+    try:
+        from pyarrow import fs
+        fs.finalize_s3()
+    except:
+        pass
     os._exit(0)
     
     
