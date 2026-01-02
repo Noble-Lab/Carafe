@@ -2927,8 +2927,7 @@ public class CarafeGUI extends JFrame {
             cmd.append(javaExec).append(" ");
         } else {
             cmd.append(javaExec).append(" -Xmx").append(memory_use).append("G ");
-            commandArgs.add("-Xmx");
-            commandArgs.add(memory_use + "G");
+            commandArgs.add("-Xmx" + memory_use + "G");
             int javaVersion = GenericUtils.getJavaMajorVersion();
             if (javaVersion >= 18 && javaVersion <= 23) {
                 cmd.append("-Djava.security.manager=allow ");
@@ -3802,7 +3801,10 @@ public class CarafeGUI extends JFrame {
         }
 
         String lowerCmd = commandString.toLowerCase();
+        // check if this is a diann command
+        boolean is_a_diann_task = false;
         if (lowerCmd.contains("diann") && lowerCmd.contains("--f ")) {
+            is_a_diann_task = true;
             java.util.Map<String, String> env = pb.environment();
             String target_omp_num_threads = "OMP_NUM_THREADS";
             String target_mkl_num_threads = "MKL_NUM_THREADS";
@@ -3852,9 +3854,17 @@ public class CarafeGUI extends JFrame {
 
         currentProcess = pb.start();
 
+        boolean errorDetected = false;
         BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()));
         String line;
         while ((line = reader.readLine()) != null) {
+            if(is_a_diann_task){
+                // currently only perform this check for DIANN tasks
+                String trimmed = line.trim();
+                if (trimmed.startsWith("ERROR:") || trimmed.startsWith("Error:")) {
+                    errorDetected = true;
+                }
+            }
             final String output = line;
             SwingUtilities.invokeLater(() -> {
                 logToConsole(output + "\n");
@@ -3862,7 +3872,11 @@ public class CarafeGUI extends JFrame {
             });
         }
 
-        return currentProcess.waitFor();
+        int exitCode = currentProcess.waitFor();
+        if (exitCode == 0 && errorDetected) {
+            return -1;
+        }
+        return exitCode;
     }
 
     private CmdTask buildDIANNCommand(String ms_file, String spectral_library_file, String database, String out_dir,
@@ -4019,11 +4033,68 @@ public class CarafeGUI extends JFrame {
             String varModSelected = varModSelectedField.getText().trim();
             if (varModSelected.equalsIgnoreCase("2")) {
                 diannArgs.add("--var-mods");
+                if((int)maxVarSpinner.getValue() >= 1) {
+                    diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+                }else{
+                    // show warning message
+                    JOptionPane.showMessageDialog(this,
+                            "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
+                            "Warning", JOptionPane.WARNING_MESSAGE);
+                    return null;
+                }
                 diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
                 diannArgs.add("--var-mod");
                 diannArgs.add("UniMod:35,15.994915,M");
             } else if (varModSelected.equalsIgnoreCase("0")) {
                 // no modification
+            } else if(varModSelected.equalsIgnoreCase("7,8,9")){
+                // --var-mod UniMod:21,79.966331,STY --peptidoforms
+                diannArgs.add("--var-mods");
+                if((int)maxVarSpinner.getValue() >= 1) {
+                    diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+                }else{
+                    // show warning message
+                    JOptionPane.showMessageDialog(this,
+                            "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
+                            "Warning", JOptionPane.WARNING_MESSAGE);
+                    return null;
+                }
+                diannArgs.add("--var-mod");
+                diannArgs.add("UniMod:21,79.966331,STY");
+                diannArgs.add("--peptidoforms");
+            } else if(varModSelected.equalsIgnoreCase("2,7,8,9")){
+                diannArgs.add("--var-mods");
+                if((int)maxVarSpinner.getValue() >= 1) {
+                    diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+                }else{
+                    // show warning message
+                    JOptionPane.showMessageDialog(this,
+                            "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
+                            "Warning", JOptionPane.WARNING_MESSAGE);
+                    return null;
+                }
+                diannArgs.add("--var-mod");
+                diannArgs.add("UniMod:21,79.966331,STY");
+                diannArgs.add("--peptidoforms");
+                diannArgs.add("--var-mod");
+                diannArgs.add("UniMod:35,15.994915,M");
+            } else if(varModSelected.equalsIgnoreCase("10")){
+                // --var-mod UniMod:121,114.042927,K --no-cut-after-mod UniMod:121 --peptidoforms
+                diannArgs.add("--var-mods");
+                if((int)maxVarSpinner.getValue() >= 1) {
+                    diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+                }else{
+                    // show warning message
+                    JOptionPane.showMessageDialog(this,
+                            "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
+                            "Warning", JOptionPane.WARNING_MESSAGE);
+                    return null;
+                }
+                diannArgs.add("--var-mod");
+                diannArgs.add("UniMod:121,114.042927,K");
+                diannArgs.add("--no-cut-after-mod");
+                diannArgs.add("UniMod:121");
+                diannArgs.add("--peptidoforms");
             } else {
                 JOptionPane.showMessageDialog(this,
                         "Unsupported modification settings. Please select '2' for Variable modifications.", "Warning",
