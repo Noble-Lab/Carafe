@@ -1602,14 +1602,14 @@ public class CarafeGUI extends JFrame {
         panel.add(createLabel("Enzyme:"), gbc);
 
         String[] enzymes = {
-                "1:Trypsin (default)",
-                "2:Trypsin (no P rule)",
-                "3:Arg-C",
-                "4:Arg-C (no P rule)",
-                "5:Arg-N",
-                "6:Glu-C",
-                "7:Lys-C",
-                "0:Non enzyme"
+                "1: Trypsin (default)",
+                "2: Trypsin (no P rule)",
+                "3: Arg-C",
+                "4: Arg-C (no P rule)",
+                "5: Arg-N",
+                "6: Glu-C",
+                "7: Lys-C",
+                "0: Non enzyme"
         };
         enzymeCombo = new JComboBox<>(enzymes);
         styleComboBox(enzymeCombo);
@@ -1768,7 +1768,7 @@ public class CarafeGUI extends JFrame {
         gbc.weightx = 0;
         panel.add(createLabel("Minimum Peptide m/z:"), gbc);
 
-        minPepMzSpinner = createSpinner(400, 100, 2000, 50);
+        minPepMzSpinner = createSpinner(300, 100, 2000, 50);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(minPepMzSpinner, gbc);
@@ -1778,7 +1778,7 @@ public class CarafeGUI extends JFrame {
         gbc.weightx = 0;
         panel.add(createLabel("Maximum Peptide m/z:"), gbc);
 
-        maxPepMzSpinner = createSpinner(1000, 100, 3000, 50);
+        maxPepMzSpinner = createSpinner(1800, 100, 3000, 50);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(maxPepMzSpinner, gbc);
@@ -1840,7 +1840,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 17;
         gbc.weightx = 0;
-        panel.add(createLabel("Min Num of Fragment Ions:",
+        panel.add(createLabel("Minimum Number of Fragment Ions:",
                 "The minimum number of fragment ions to consider for library generation"), gbc);
 
         libMinNumFragSpinner = createSpinner(2, 1, 3, 1);
@@ -1851,7 +1851,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 18;
         gbc.weightx = 0;
-        panel.add(createLabel("Min Fragment Ion Number:",
+        panel.add(createLabel("Minimum Fragment Ion Number:",
                 "The minimum fragment ion number to consider for library generation"), gbc);
 
         libFragNumMinSpinner = createSpinner(2, 1, 3, 1);
@@ -4396,6 +4396,16 @@ public class CarafeGUI extends JFrame {
             } else if (varModSelected.equalsIgnoreCase("0")) {
                 // no modification
             } else if(varModSelected.equalsIgnoreCase("7,8,9")){
+                // 1.8.1: diann.exe --lib "" --threads 8 --verbose 1 --out "C:\tools\DIA-NN\1.8.1\report.tsv"        --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --monitor-mod UniMod:21 --reanalyse --relaxed-prot-inf --smart-profiling --peak-center --no-ifs-removal
+                // 1.9.1: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\1.9.1/report.tsv"     --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --relaxed-prot-inf --rt-profiling
+                // 1.9.2: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\1.9.2/report.tsv"     --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --relaxed-prot-inf --rt-profiling
+                // 2.0:   diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.0\report.parquet"   --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
+                // 2.0.2: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.0.2\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
+                // 2.1.0: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.1.0\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
+                // 2.2.0: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.2.0\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
+                // 2.2.1: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.2.1\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
+                // 2.3.0: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.3.0\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
+                // 2.3.1: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.3.1\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
                 // --var-mod UniMod:21,79.966331,STY --peptidoforms
                 diannArgs.add("--var-mods");
                 if((int)maxVarSpinner.getValue() >= 1) {
@@ -4409,7 +4419,13 @@ public class CarafeGUI extends JFrame {
                 }
                 diannArgs.add("--var-mod");
                 diannArgs.add("UniMod:21,79.966331,STY");
-                diannArgs.add("--peptidoforms");
+                if(this.diannVersion.equalsIgnoreCase("1.8.1")) {
+                    // --monitor-mod UniMod:21
+                    diannArgs.add("--monitor-mod");
+                    diannArgs.add("UniMod:21");
+                }else{
+                    diannArgs.add("--peptidoforms");
+                }
             } else if(varModSelected.equalsIgnoreCase("2,7,8,9")){
                 diannArgs.add("--var-mods");
                 if((int)maxVarSpinner.getValue() >= 1) {
@@ -4423,9 +4439,15 @@ public class CarafeGUI extends JFrame {
                 }
                 diannArgs.add("--var-mod");
                 diannArgs.add("UniMod:21,79.966331,STY");
-                diannArgs.add("--peptidoforms");
                 diannArgs.add("--var-mod");
                 diannArgs.add("UniMod:35,15.994915,M");
+                if(this.diannVersion.equalsIgnoreCase("1.8.1")) {
+                    // --monitor-mod UniMod:21
+                    diannArgs.add("--monitor-mod");
+                    diannArgs.add("UniMod:21");
+                }else{
+                    diannArgs.add("--peptidoforms");
+                }
             } else if(varModSelected.equalsIgnoreCase("10")){
                 // --var-mod UniMod:121,114.042927,K --no-cut-after-mod UniMod:121 --peptidoforms
                 diannArgs.add("--var-mods");
@@ -4442,7 +4464,13 @@ public class CarafeGUI extends JFrame {
                 diannArgs.add("UniMod:121,114.042927,K");
                 diannArgs.add("--no-cut-after-mod");
                 diannArgs.add("UniMod:121");
-                diannArgs.add("--peptidoforms");
+                if(this.diannVersion.equalsIgnoreCase("1.8.1")) {
+                    // --monitor-mod UniMod:21
+                    diannArgs.add("--monitor-mod");
+                    diannArgs.add("UniMod:121");
+                }else{
+                    diannArgs.add("--peptidoforms");
+                }
             } else {
                 JOptionPane.showMessageDialog(this,
                         "Unsupported modification settings. Please select '2' for Variable modifications.", "Warning",
