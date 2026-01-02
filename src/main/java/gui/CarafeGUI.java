@@ -99,6 +99,10 @@ public class CarafeGUI extends JFrame {
     private JTextField carafeAdditionalOptionsField;
     private JTextField diannAdditionalOptionsField;
 
+    // Multi-file selection storage
+    private java.util.List<String> trainMsFiles = new java.util.ArrayList<>();
+    private java.util.List<String> projectMsFiles = new java.util.ArrayList<>();
+
     // Input panel rows components for dynamic visibility
     private java.util.List<JComponent> diannReportRowComponents;
     private java.util.List<JComponent> trainMsRowComponents;
@@ -787,18 +791,16 @@ public class CarafeGUI extends JFrame {
                 FlatLightLaf.setup();
             }
             customizeUIDefaults();
+            
+            // Persist preference FIRST so components reading it see the new state
+            prefs.putBoolean(PREF_DARK_MODE, isDark);
 
-            // 2. Instead of calling the heavy FlatLaf.updateUI(),
-            // we update only the root and our specialized components.
-            updateHeaderForegrounds();
-
-            applyThemeToCustomComponents();
-
-            // 3. Fast refresh of the window contents
+            // 2. Fast refresh of the window contents (resets standard properties)
             SwingUtilities.updateComponentTreeUI(this);
 
-            // Persist the preference
-            prefs.putBoolean(PREF_DARK_MODE, isDark);
+            // 3. Update custom components (re-apply overrides)
+            updateHeaderForegrounds();
+            applyThemeToCustomComponents();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -845,6 +847,15 @@ public class CarafeGUI extends JFrame {
                 updateInfoCardTheme(ref);
             }
         }
+        
+        // Refresh styles for file input fields (hyperlinks)
+        if (trainMsFileField != null && trainMsFiles != null) {
+             updateFileFieldState(trainMsFileField, trainMsFiles);
+        }
+        if (projectMsFileField != null && projectMsFiles != null) {
+             updateFileFieldState(projectMsFileField, projectMsFiles);
+        }
+        
         refreshStatusLabel();
     }
 
@@ -1086,10 +1097,231 @@ public class CarafeGUI extends JFrame {
 
     private JPanel createMsButtonsPanel(JTextField targetField) {
         JPanel msButtonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        msButtonsPanel.add(createBrowseButton(targetField, "mzML/raw Files", new String[] { "mzML", "raw" }));
-        msButtonsPanel.add(createFolderButton(targetField));
+        
+        JButton browse;
+        final java.util.List<String> associatedList;
+        
+        if (targetField == trainMsFileField) {
+            associatedList = trainMsFiles;
+            browse = createMultiFileBrowseButton(targetField, "mzML/raw Files", new String[]{"mzML", "raw"}, associatedList);
+            setupMultiFileFieldInteraction(targetField, associatedList);
+        } else if (targetField == projectMsFileField) {
+            associatedList = projectMsFiles;
+            browse = createMultiFileBrowseButton(targetField, "mzML/raw Files", new String[]{"mzML", "raw"}, associatedList);
+            setupMultiFileFieldInteraction(targetField, associatedList);
+        } else {
+            associatedList = null;
+            browse = createBrowseButton(targetField, "mzML/raw Files", new String[] { "mzML", "raw" });
+        }
+        
+        msButtonsPanel.add(browse);
+        
+        // Custom Folder Button logic to ensure list is cleared
+        JButton folderBtn = new JButton("Folder");
+        styleButton(folderBtn);
+        folderBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
+            chooser.setCurrentDirectory(new File(lastDir));
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File selectedDir = chooser.getSelectedFile();
+                if (associatedList != null) {
+                    associatedList.clear();
+                    updateFileFieldState(targetField, associatedList); 
+                    // updateFileFieldState with empty list sets text to empty usually but we want to set it to folder path.
+                    // So we must manually set text.
+                    targetField.setText(selectedDir.getAbsolutePath());
+                    // Force state to "Single File/Folder" mode manually since updateFileFieldState sees empty list
+                    targetField.setForeground(UIManager.getColor("TextField.foreground"));
+                    targetField.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
+                    targetField.setEditable(true);
+                } else {
+                    targetField.setText(selectedDir.getAbsolutePath());
+                }
+                prefs.put(PREF_LAST_DIR, selectedDir.getAbsolutePath());
+            }
+        });
+        
+        msButtonsPanel.add(folderBtn);
         return msButtonsPanel;
     }
+
+    private JButton createMultiFileBrowseButton(JTextField targetField, String description, String[] extensions, java.util.List<String> fileList) {
+        JButton button = new JButton("Browse");
+        styleButton(button);
+        button.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
+            chooser.setCurrentDirectory(new File(lastDir));
+            chooser.setMultiSelectionEnabled(true);
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            if (extensions != null && extensions.length > 0) {
+                FileNameExtensionFilter filter = new FileNameExtensionFilter(description, extensions);
+                chooser.setFileFilter(filter);
+            }
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File[] selectedFiles = chooser.getSelectedFiles();
+                if (selectedFiles.length > 0) {
+                    // Validation: Check for mixed extensions
+                    boolean hasMzML = false;
+                    boolean hasRaw = false;
+                    for (File f : selectedFiles) {
+                        String name = f.getName().toLowerCase();
+                        if (name.endsWith(".mzml")) hasMzML = true;
+                        if (name.endsWith(".raw")) hasRaw = true;
+                    }
+                    if (hasMzML && hasRaw) {
+                        JOptionPane.showMessageDialog(this,
+                                "Please select only mzML files OR only RAW files, not both.",
+                                "Invalid Selection",
+                                JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+
+                    fileList.clear();
+                    for (File f : selectedFiles) {
+                        fileList.add(f.getAbsolutePath());
+                    }
+                    updateFileFieldState(targetField, fileList);
+                    prefs.put(PREF_LAST_DIR, selectedFiles[0].getParent());
+                }
+            }
+        });
+        return button;
+    }
+
+    private void updateFileFieldState(JTextField field, java.util.List<String> files) {
+        java.util.Map<java.awt.font.TextAttribute, Object> attributes = new java.util.HashMap<>(field.getFont().getAttributes());
+        if (files.size() > 1) {
+            field.setEditable(false);
+            field.setText("(" + files.size() + " files selected)");
+            
+            // Theme-aware hyperlink color
+            boolean isDark = prefs.getBoolean(PREF_DARK_MODE, false);
+            if (isDark) {
+                field.setForeground(new Color(100, 180, 255)); // Light Blue for Dark Mode
+            } else {
+                field.setForeground(Color.BLUE);
+            }
+            
+            field.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            attributes.put(java.awt.font.TextAttribute.UNDERLINE, java.awt.font.TextAttribute.UNDERLINE_ON);
+        } else {
+             field.setForeground(UIManager.getColor("TextField.foreground"));
+             field.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
+             field.setEditable(true);
+             attributes.put(java.awt.font.TextAttribute.UNDERLINE, -1);
+             if (files.size() == 1) {
+                 field.setText(files.get(0));
+             } else if (files.isEmpty()) {
+                 field.setText("");
+             }
+        }
+        field.setFont(field.getFont().deriveFont(attributes));
+    }
+
+    private void setupMultiFileFieldInteraction(JTextField field, java.util.List<String> fileList) {
+        // Remove existing listeners if any? No easy way, assuming called once.
+        
+        field.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void update() {
+                if (field.isEditable()) {
+                    // If user is editing text manually, and it doesn't match the known single file,
+                    // or if list has multiple files (which shouldn't happen if editable, but safety check),
+                    // we clear the list to rely on text field content.
+                    if (!fileList.isEmpty()) {
+                        String text = field.getText();
+                        if (fileList.size() > 1) {
+                            // Should not be editable if multiple files!
+                            // But if it happened somehow, clear list.
+                            fileList.clear();
+                        } else if (fileList.size() == 1) {
+                            if (!text.equals(fileList.get(0))) {
+                                fileList.clear();
+                            }
+                        }
+                    }
+                }
+            }
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
+        });
+
+        field.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (!field.isEditable()) {
+                     // Summary Mode: Single Click opens dialog
+                     if (e.getClickCount() == 1) {
+                         showFileListDialog(field, fileList);
+                     }
+                }
+            }
+        });
+    }
+
+    private void showFileListDialog(JTextField field, java.util.List<String> fileList) {
+        javax.swing.JDialog d = new javax.swing.JDialog(this, "Edit File List", true);
+        d.setSize(600, 400);
+        d.setLocationRelativeTo(this);
+        d.setLayout(new BorderLayout());
+
+        JTextArea textArea = new JTextArea();
+        if (fileList.isEmpty() && !field.getText().trim().isEmpty() && !field.getText().startsWith("(")) {
+            // Populate with single/folder path from text field if list is empty
+            textArea.setText(field.getText().trim());
+        } else {
+            for (String path : fileList) {
+                textArea.append(path + "\n");
+            }
+        }
+        
+        d.add(new JScrollPane(textArea), BorderLayout.CENTER);
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton okBtn = new JButton("OK");
+        okBtn.addActionListener(ev -> {
+            // Validate lines
+            String[] lines = textArea.getText().split("\\n");
+            java.util.List<String> newPaths = new java.util.ArrayList<>();
+            boolean hasMzML = false;
+            boolean hasRaw = false;
+
+            for (String line : lines) {
+                String path = line.trim();
+                if (!path.isEmpty()) {
+                    newPaths.add(path);
+                    if (path.toLowerCase().endsWith(".mzml")) hasMzML = true;
+                    if (path.toLowerCase().endsWith(".raw")) hasRaw = true;
+                }
+            }
+            
+            if (hasMzML && hasRaw) {
+                 JOptionPane.showMessageDialog(d,
+                                "Please select only mzML files OR only RAW files, not both.",
+                                "Invalid Selection",
+                                JOptionPane.WARNING_MESSAGE);
+                 return;
+            }
+            
+            fileList.clear();
+            fileList.addAll(newPaths);
+            updateFileFieldState(field, fileList);
+            d.dispose();
+        });
+
+        JButton cancelBtn = new JButton("Cancel");
+        cancelBtn.addActionListener(ev -> d.dispose());
+        
+        btnPanel.add(okBtn);
+        btnPanel.add(cancelBtn);
+        d.add(btnPanel, BorderLayout.SOUTH);
+        d.setVisible(true);
+    }
+
+
 
     private void setVisible(java.util.List<JComponent> components, boolean visible) {
         if (components != null) {
@@ -2514,7 +2746,18 @@ public class CarafeGUI extends JFrame {
             return;
 
         boolean show = false;
-        if (trainMsFileField != null && trainMsFileField.isVisible()) {
+        
+        // 1. Check Multi-Select List
+        if (trainMsFiles != null && !trainMsFiles.isEmpty()) {
+             for (String f : trainMsFiles) {
+                 if (f.toLowerCase().endsWith(".raw")) {
+                     show = true;
+                     break;
+                 }
+             }
+        } 
+        // 2. Check Single File / Folder Text
+        else if (trainMsFileField != null && trainMsFileField.isVisible()) {
             String text = trainMsFileField.getText().trim();
             if (!text.isEmpty()) {
                 if (text.toLowerCase().endsWith(".raw")) {
@@ -3354,59 +3597,89 @@ public class CarafeGUI extends JFrame {
 
                 // Check for RAW conversion logic
                 CmdTask conversionTask = null;
-                String effectiveMsFile = trainMsFile;
-                List<String> predictedMzMLFiles = new ArrayList<>();
+                java.util.List<String> finalMsFiles = new ArrayList<>();
+                java.util.List<String> rawFilesToConvert = new ArrayList<>();
 
-                File trainFileObj = new File(trainMsFile);
-                if (trainFileObj.isDirectory()) {
-                    boolean hasMzML = false;
-                    File[] mzMLs = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
-                    if (mzMLs != null && mzMLs.length > 0)
-                        hasMzML = true;
-
-                    if (!hasMzML) {
-                        File[] rawFiles = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".raw"));
-                        if (rawFiles != null && rawFiles.length > 0) {
-                            String subDir = outDir + File.separator + "train_mzML";
-                            File subDirFile = new File(subDir);
-                            if (!subDirFile.exists())
-                                subDirFile.mkdirs();
-
-                            String wildcardPath = trainMsFile + File.separator + "*.raw";
-                            String convCmd = buildMsConvertCommand(wildcardPath, subDir);
-                            conversionTask = new CmdTask(convCmd, "MSConvert",
-                                    "Convert RAW files in directory to mzML");
-
-                            for (File raw : rawFiles) {
-                                String rawName = raw.getName();
-                                String baseName = rawName.lastIndexOf('.') > 0
-                                        ? rawName.substring(0, rawName.lastIndexOf('.'))
-                                        : rawName;
-                                predictedMzMLFiles.add(subDir + File.separator + baseName + ".mzML");
-                            }
-                            effectiveMsFile = subDir;
-                        }
+                // Resolve inputs
+                if (!trainMsFiles.isEmpty()) {
+                    for (String path : trainMsFiles) {
+                        if (path.toLowerCase().endsWith(".raw")) rawFilesToConvert.add(path);
+                        else finalMsFiles.add(path);
                     }
-                } else if (trainMsFile.toLowerCase().endsWith(".raw")) {
-                    String rawName = new File(trainMsFile).getName();
-                    String baseName = rawName.contains(".") ? rawName.substring(0, rawName.lastIndexOf('.')) : rawName;
-                    String mzmlPath = new File(outDir, baseName + ".mzML").getAbsolutePath();
+                } else if (!trainMsFile.isEmpty()) {
+                    File trainFileObj = new File(trainMsFile);
+                    if (trainFileObj.isDirectory()) {
+                        boolean hasMzML = false;
+                        File[] mzMLs = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
+                        if (mzMLs != null && mzMLs.length > 0) {
+                            hasMzML = true;
+                            for (File f : mzMLs) finalMsFiles.add(f.getAbsolutePath());
+                        }
 
-                    String convCmd = buildMsConvertCommand(trainMsFile, outDir);
-                    conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW to mzML");
-                    effectiveMsFile = mzmlPath;
-                    predictedMzMLFiles.add(mzmlPath);
+                        if (!hasMzML) {
+                            File[] rawFiles = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".raw"));
+                            if (rawFiles != null) {
+                                for (File f : rawFiles) rawFilesToConvert.add(f.getAbsolutePath());
+                            }
+                        }
+                    } else if (trainMsFile.toLowerCase().endsWith(".raw")) {
+                        rawFilesToConvert.add(trainMsFile);
+                    } else {
+                        finalMsFiles.add(trainMsFile);
+                    }
                 }
 
-                CmdTask diannTask;
-                if (!predictedMzMLFiles.isEmpty()) {
-                    diannTask = buildDIANNCommand(predictedMzMLFiles, "", trainDb, diann_train_dir);
-                } else {
-                    diannTask = buildDIANNCommand(effectiveMsFile, "", trainDb, diann_train_dir,
-                            conversionTask != null);
+                // Setup Conversion Task if needed
+                if (!rawFilesToConvert.isEmpty()) {
+                    String subDir = outDir + File.separator + "train_mzML";
+                    File subDirFile = new File(subDir);
+                    if (!subDirFile.exists())
+                        subDirFile.mkdirs();
+
+                    String convCmd = buildMsConvertCommand(rawFilesToConvert, subDir);
+                    conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW files to mzML");
+
+                    for (String rawPath : rawFilesToConvert) {
+                        String rawName = new File(rawPath).getName();
+                        String baseName = rawName.lastIndexOf('.') > 0
+                                ? rawName.substring(0, rawName.lastIndexOf('.'))
+                                : rawName;
+                        finalMsFiles.add(subDir + File.separator + baseName + ".mzML");
+                    }
                 }
+
+                if (finalMsFiles.isEmpty()) {
+                    JOptionPane.showMessageDialog(this,
+                            "Please select a valid mzML/timsTOF DIA file or a folder containing mzML files or timsTOF DIA raw files.",
+                            "Input Required", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                CmdTask diannTask = buildDIANNCommand(finalMsFiles, "", trainDb, diann_train_dir);
                 if (diannTask != null) {
                     diannTask.task_description = "Run DIA-NN search on the training MS data";
+                }
+
+                String effectiveMsFile = "";
+                if (!finalMsFiles.isEmpty()) {
+                    if (finalMsFiles.size() == 1) {
+                         effectiveMsFile = finalMsFiles.getFirst();
+                    } else {
+                         effectiveMsFile = new File(finalMsFiles.getFirst()).getParent();
+                         // need to check if all files are in the same directory
+                         for (String file : finalMsFiles) {
+                             if (!new File(file).getParent().equals(effectiveMsFile)) {
+                                 effectiveMsFile = "";
+                                 break;
+                             }
+                         }
+                         if (effectiveMsFile.isEmpty()) {
+                             JOptionPane.showMessageDialog(this,
+                                     "All files must be in the same directory.",
+                                     "Input Required", JOptionPane.WARNING_MESSAGE);
+                             return;
+                         }
+                    }
                 }
                 String diann_report_file;
                 if (isDiannV2) {
@@ -3515,15 +3788,29 @@ public class CarafeGUI extends JFrame {
                 }
             }
             case 2 -> {
-                String trainMsFile = trainMsFileField.getText().trim();
-                if (trainMsFile.isEmpty()) {
+                // Collect Train MS Files
+                java.util.List<String> effectiveTrainFiles = new java.util.ArrayList<>();
+                if (!trainMsFiles.isEmpty()) {
+                    effectiveTrainFiles.addAll(trainMsFiles);
+                } else if (!trainMsFileField.getText().trim().isEmpty()) {
+                    effectiveTrainFiles.add(trainMsFileField.getText().trim());
+                }
+
+                if (effectiveTrainFiles.isEmpty()) {
                     JOptionPane.showMessageDialog(this, "Please specify a training MS/MS file!", "Warning",
                             JOptionPane.WARNING_MESSAGE);
                     return;
                 }
 
-                String projectMsFile = projectMsFileField.getText().trim();
-                if (projectMsFile.isEmpty()) {
+                // Collect Project MS Files
+                java.util.List<String> effectiveProjectFiles = new java.util.ArrayList<>();
+                if (!projectMsFiles.isEmpty()) {
+                    effectiveProjectFiles.addAll(projectMsFiles);
+                } else if (!projectMsFileField.getText().trim().isEmpty()) {
+                    effectiveProjectFiles.add(projectMsFileField.getText().trim());
+                }
+
+                if (effectiveProjectFiles.isEmpty()) {
                     JOptionPane.showMessageDialog(this, "Please specify a project MS/MS file!", "Warning",
                             JOptionPane.WARNING_MESSAGE);
                     return;
@@ -3549,11 +3836,23 @@ public class CarafeGUI extends JFrame {
 
                 // Check for RAW conversion logic
                 CmdTask conversionTask = null;
-                String effectiveMsFile = trainMsFile;
-                List<String> predictedMzMLFiles = new ArrayList<>();
+                List<String> finalTrainMzMLFiles = new ArrayList<>();
+                String singleEffectiveMsFile = null; // Used only if we have a single file/folder path string logic for compatibility
 
-                File trainFileObj = new File(trainMsFile);
-                if (trainFileObj.isDirectory()) {
+                // Logic: 
+                // 1. If effectiveTrainFiles contains files (from List or single file from text), process them.
+                // 2. If it is a single entry that is a DIRECTORY, fall back to directory scanning logic.
+
+                boolean isDirectory = false;
+                if (effectiveTrainFiles.size() == 1) {
+                    if (new File(effectiveTrainFiles.get(0)).isDirectory()) {
+                        isDirectory = true;
+                    }
+                }
+
+                if (isDirectory) {
+                    // Fallback to existing directory scanning logic
+                    File trainFileObj = new File(effectiveTrainFiles.get(0));
                     boolean hasMzML = false;
                     File[] mzMLs = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
                     if (mzMLs != null && mzMLs.length > 0)
@@ -3567,7 +3866,7 @@ public class CarafeGUI extends JFrame {
                             if (!subDirFile.exists())
                                 subDirFile.mkdirs();
 
-                            String wildcardPath = trainMsFile + File.separator + "*.raw";
+                            String wildcardPath = trainFileObj.getAbsolutePath() + File.separator + "*.raw";
                             String convCmd = buildMsConvertCommand(wildcardPath, subDir);
                             conversionTask = new CmdTask(convCmd, "MSConvert",
                                     "Convert RAW files in directory to mzML");
@@ -3577,29 +3876,43 @@ public class CarafeGUI extends JFrame {
                                 String baseName = rawName.lastIndexOf('.') > 0
                                         ? rawName.substring(0, rawName.lastIndexOf('.'))
                                         : rawName;
-                                predictedMzMLFiles.add(subDir + File.separator + baseName + ".mzML");
+                                finalTrainMzMLFiles.add(subDir + File.separator + baseName + ".mzML");
                             }
-                            effectiveMsFile = subDir;
+                            singleEffectiveMsFile = subDir; // Pass subdir for searching
                         }
+                    } else {
+                        singleEffectiveMsFile = trainFileObj.getAbsolutePath();
                     }
-                } else if (trainMsFile.toLowerCase().endsWith(".raw")) {
-                    String rawName = new File(trainMsFile).getName();
-                    String baseName = rawName.contains(".") ? rawName.substring(0, rawName.lastIndexOf('.')) : rawName;
-                    String mzmlPath = new File(outDir, baseName + ".mzML").getAbsolutePath();
+                } else {
+                    // File List Logic (Single or Multiple)
+                    boolean isRaw = effectiveTrainFiles.stream().anyMatch(f -> f.toLowerCase().endsWith(".raw"));
+                    
+                    if (isRaw) {
+                        // Convert all RAW files
+                         String subDir = outDir + File.separator + "train_mzML";
+                         File subDirFile = new File(subDir);
+                         if (!subDirFile.exists()) subDirFile.mkdirs();
 
-                    String convCmd = buildMsConvertCommand(trainMsFile, outDir);
-                    conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW to mzML");
-                    effectiveMsFile = mzmlPath;
-                    predictedMzMLFiles.add(mzmlPath);
+                         String convCmd = buildMsConvertCommand(effectiveTrainFiles, subDir);
+                         conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW files to mzML");
+                         
+                         for(String f : effectiveTrainFiles) {
+                             String rawName = new File(f).getName();
+                             String baseName = rawName.contains(".") ? rawName.substring(0, rawName.lastIndexOf('.')) : rawName;
+                             finalTrainMzMLFiles.add(subDir + File.separator + baseName + ".mzML");
+                         }
+                    } else {
+                        finalTrainMzMLFiles.addAll(effectiveTrainFiles);
+                    }
                 }
 
                 CmdTask diannTask;
-                if (!predictedMzMLFiles.isEmpty()) {
-                    diannTask = buildDIANNCommand(predictedMzMLFiles, "", trainDb, diann_train_dir);
+                if (!finalTrainMzMLFiles.isEmpty()) {
+                    diannTask = buildDIANNCommand(finalTrainMzMLFiles, "", trainDb, diann_train_dir);
                 } else {
-                    diannTask = buildDIANNCommand(effectiveMsFile, "", trainDb, diann_train_dir,
-                            conversionTask != null);
+                    diannTask = buildDIANNCommand(singleEffectiveMsFile, "", trainDb, diann_train_dir, conversionTask != null);
                 }
+                
                 if (diannTask != null) {
                     diannTask.task_description = "Run DIA-NN search on the training MS data";
                 }
@@ -3628,20 +3941,55 @@ public class CarafeGUI extends JFrame {
                 } else {
                     initialTasks = new CmdTask[] { diannTask };
                 }
+                
+                String carafeMsInput = null;
+                if(!finalTrainMzMLFiles.isEmpty()) {
+                     File first = new File(finalTrainMzMLFiles.get(0));
+                     // If we converted, they are in subDir.
+                     if (conversionTask != null) {
+                         carafeMsInput = first.getParent();
+                     } else {
+                         carafeMsInput = first.getParent();
+                         // need to check if all files are in the same directory
+                         for (String file : finalTrainMzMLFiles) {
+                             if (!new File(file).getParent().equals(carafeMsInput)) {
+                                 carafeMsInput = "";
+                                 break;
+                             }
+                         }
+                         if (carafeMsInput.isEmpty()) {
+                             JOptionPane.showMessageDialog(this,
+                                     "All files must be in the same directory.",
+                                     "Input Required", JOptionPane.WARNING_MESSAGE);
+                             return;
+                         }
+                     }
+                } else {
+                    carafeMsInput = singleEffectiveMsFile;
+                }
+                
+                final String finalCarafeMsInput = carafeMsInput;
 
-                final String finalEffectiveMsFile = effectiveMsFile;
                 executeChainedCommands(initialTasks, () -> {
                     final CmdTask[] commands = new CmdTask[2];
                     try {
                         SwingUtilities.invokeAndWait(() -> {
                             diannReportFileField.setText(diann_report_file);
-                            CmdTask carafe_task = buildCarafeCommand(finalEffectiveMsFile);
+                            CmdTask carafe_task = buildCarafeCommand(finalCarafeMsInput);
                             if (carafe_task != null) {
                                 carafe_task.task_description = "Run Carafe to generate fine-tuned library";
                             }
                             commands[0] = carafe_task;
-                            commands[1] = buildDIANNCommand(projectMsFile, carafeLibraryPath, libraryDb,
-                                    diann_project_dir, false);
+                            
+                            // For the project search step, we also need to handle multiple project files!
+                            // New buildDIANNCommand supports List<String>
+                            if(!effectiveProjectFiles.isEmpty()) {
+                                commands[1] = buildDIANNCommand(effectiveProjectFiles, carafeLibraryPath, libraryDb, diann_project_dir);
+                            } else {
+                                // Fallback?? Should verify handled earlier.
+                                commands[1] = null; 
+                            }
+                            
                             if (commands[1] != null) {
                                 commands[1].task_description = "DIA-NN search for project data using fine-tuned library";
                             }
@@ -4494,6 +4842,50 @@ public class CarafeGUI extends JFrame {
         cmd.append(msConvertExec);
         cmd.append(" --filter \"peakPicking true 1-2\" --mzML ");
         cmd.append("\"").append(raw_file).append("\" ");
+        cmd.append("-o \"").append(out_dir).append("\"");
+
+        return cmd.toString();
+    }
+
+    private String buildMsConvertCommand(java.util.List<String> raw_files, String out_dir) {
+        String msConvertExec = "msconvert";
+        if (msConvertPathCombo != null) {
+            Object selected = msConvertPathCombo.getSelectedItem();
+            if (selected != null && !selected.toString().trim().isEmpty()) {
+                msConvertExec = selected.toString().trim();
+            }
+        }
+        
+        // If combo was empty/default, try prefs fallback if it differs from default
+        if (msConvertExec.equals("msconvert")) {
+             String pref = prefs.get(PREF_MSCONVERT_PATH, "");
+             if (!pref.isEmpty()) msConvertExec = pref;
+        }
+
+        System.out.println("DEBUG: Using MSConvert executable: " + msConvertExec);
+        
+        if (msConvertExec.equalsIgnoreCase("msconvert")) {
+             // TODO
+        } else {
+             // If explicit path, verify existence
+             if (!new File(msConvertExec).exists()) {
+                 JOptionPane.showMessageDialog(this, 
+                     "The specified MSConvert executable does not exist:\n" + msConvertExec + "\nUsing default 'msconvert' command instead.",
+                     "Configuration Warning", JOptionPane.WARNING_MESSAGE);
+                 msConvertExec = "msconvert";
+             }
+        }
+        if (msConvertExec.contains(" "))
+            msConvertExec = "\"" + msConvertExec + "\"";
+
+        StringBuilder cmd = new StringBuilder();
+        cmd.append(msConvertExec);
+        cmd.append(" --filter \"peakPicking true 1-2\" --mzML ");
+
+        // MSConvert accepts multiple files: msconvert file1 file2 ...
+        for (String f : raw_files) {
+            cmd.append("\"").append(f).append("\" ");
+        }
         cmd.append("-o \"").append(out_dir).append("\"");
 
         return cmd.toString();
