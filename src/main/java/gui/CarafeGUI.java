@@ -1193,7 +1193,7 @@ public class CarafeGUI extends JFrame {
 
     private void updateFileFieldState(JTextField field, java.util.List<String> files) {
         java.util.Map<java.awt.font.TextAttribute, Object> attributes = new java.util.HashMap<>(field.getFont().getAttributes());
-        if (files.size() > 1) {
+        if (files != null && files.size() > 1) {
             field.setEditable(false);
             field.setText("(" + files.size() + " files selected)");
             
@@ -1212,11 +1212,10 @@ public class CarafeGUI extends JFrame {
              field.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
              field.setEditable(true);
              attributes.put(java.awt.font.TextAttribute.UNDERLINE, -1);
-             if (files.size() == 1) {
+             if (files != null && files.size() == 1) {
                  field.setText(files.get(0));
-             } else if (files.isEmpty()) {
-                 field.setText("");
              }
+             // Do NOT clear text if list is empty, to preserve manual input
         }
         field.setFont(field.getFont().deriveFont(attributes));
     }
