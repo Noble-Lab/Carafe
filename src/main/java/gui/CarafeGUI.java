@@ -1011,27 +1011,38 @@ public class CarafeGUI extends JFrame {
         JButton folderBtn = new JButton("Folder");
         styleButton(folderBtn);
         folderBtn.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
-            chooser.setCurrentDirectory(new File(lastDir));
-            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File selectedDir = chooser.getSelectedFile();
-                if (associatedList != null) {
-                    associatedList.clear();
-                    updateFileFieldState(targetField, associatedList); 
-                    // updateFileFieldState with empty list sets text to empty usually but we want to set it to folder path.
-                    // So we must manually set text.
-                    targetField.setText(selectedDir.getAbsolutePath());
-                    // Force state to "Single File/Folder" mode manually since updateFileFieldState sees empty list
-                    targetField.setForeground(UIManager.getColor("TextField.foreground"));
-                    targetField.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
-                    targetField.setEditable(true);
-                } else {
-                    targetField.setText(selectedDir.getAbsolutePath());
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            new Thread(() -> {
+                try {
+                    JFileChooser chooser = new JFileChooser();
+                    String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
+                    chooser.setCurrentDirectory(new File(lastDir));
+                    chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                    SwingUtilities.invokeLater(() -> {
+                        setCursor(Cursor.getDefaultCursor());
+                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                            File selectedDir = chooser.getSelectedFile();
+                            if (associatedList != null) {
+                                associatedList.clear();
+                                updateFileFieldState(targetField, associatedList); 
+                                // updateFileFieldState with empty list sets text to empty usually but we want to set it to folder path.
+                                // So we must manually set text.
+                                targetField.setText(selectedDir.getAbsolutePath());
+                                // Force state to "Single File/Folder" mode manually since updateFileFieldState sees empty list
+                                targetField.setForeground(UIManager.getColor("TextField.foreground"));
+                                targetField.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
+                                targetField.setEditable(true);
+                            } else {
+                                targetField.setText(selectedDir.getAbsolutePath());
+                            }
+                            prefs.put(PREF_LAST_DIR, selectedDir.getAbsolutePath());
+                        }
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                    ex.printStackTrace();
                 }
-                prefs.put(PREF_LAST_DIR, selectedDir.getAbsolutePath());
-            }
+            }).start();
         });
         
         msButtonsPanel.add(folderBtn);
@@ -1042,42 +1053,53 @@ public class CarafeGUI extends JFrame {
         JButton button = new JButton("Browse");
         styleButton(button);
         button.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
-            chooser.setCurrentDirectory(new File(lastDir));
-            chooser.setMultiSelectionEnabled(true);
-            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            if (extensions != null && extensions.length > 0) {
-                FileNameExtensionFilter filter = new FileNameExtensionFilter(description, extensions);
-                chooser.setFileFilter(filter);
-            }
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File[] selectedFiles = chooser.getSelectedFiles();
-                if (selectedFiles.length > 0) {
-                    // Validation: Check for mixed extensions
-                    boolean hasMzML = false;
-                    boolean hasRaw = false;
-                    for (File f : selectedFiles) {
-                        String name = f.getName().toLowerCase();
-                        if (name.endsWith(".mzml")) hasMzML = true;
-                        if (name.endsWith(".raw")) hasRaw = true;
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            new Thread(() -> {
+                try {
+                    JFileChooser chooser = new JFileChooser();
+                    String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
+                    chooser.setCurrentDirectory(new File(lastDir));
+                    chooser.setMultiSelectionEnabled(true);
+                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+                    if (extensions != null && extensions.length > 0) {
+                        FileNameExtensionFilter filter = new FileNameExtensionFilter(description, extensions);
+                        chooser.setFileFilter(filter);
                     }
-                    if (hasMzML && hasRaw) {
-                        JOptionPane.showMessageDialog(this,
-                                "Please select only mzML files OR only RAW files, not both.",
-                                "Invalid Selection",
-                                JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    fileList.clear();
-                    for (File f : selectedFiles) {
-                        fileList.add(f.getAbsolutePath());
-                    }
-                    updateFileFieldState(targetField, fileList);
-                    prefs.put(PREF_LAST_DIR, selectedFiles[0].getParent());
+                    SwingUtilities.invokeLater(() -> {
+                        setCursor(Cursor.getDefaultCursor());
+                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                            File[] selectedFiles = chooser.getSelectedFiles();
+                            if (selectedFiles.length > 0) {
+                                // Validation: Check for mixed extensions
+                                boolean hasMzML = false;
+                                boolean hasRaw = false;
+                                for (File f : selectedFiles) {
+                                    String name = f.getName().toLowerCase();
+                                    if (name.endsWith(".mzml")) hasMzML = true;
+                                    if (name.endsWith(".raw")) hasRaw = true;
+                                }
+                                if (hasMzML && hasRaw) {
+                                    JOptionPane.showMessageDialog(this,
+                                            "Please select only mzML files OR only RAW files, not both.",
+                                            "Invalid Selection",
+                                            JOptionPane.WARNING_MESSAGE);
+                                    return;
+                                }
+    
+                                fileList.clear();
+                                for (File f : selectedFiles) {
+                                    fileList.add(f.getAbsolutePath());
+                                }
+                                updateFileFieldState(targetField, fileList);
+                                prefs.put(PREF_LAST_DIR, selectedFiles[0].getParent());
+                            }
+                        }
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                    ex.printStackTrace();
                 }
-            }
+            }).start();
         });
         return button;
     }
@@ -2005,19 +2027,30 @@ public class CarafeGUI extends JFrame {
         JButton button = new JButton("Browse");
         styleButton(button);
         button.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
-            chooser.setCurrentDirectory(new File(lastDir));
-            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            if (extensions != null && extensions.length > 0) {
-                FileNameExtensionFilter filter = new FileNameExtensionFilter(description, extensions);
-                chooser.setFileFilter(filter);
-            }
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File selectedFile = chooser.getSelectedFile();
-                targetField.setText(selectedFile.getAbsolutePath());
-                prefs.put(PREF_LAST_DIR, selectedFile.getParent());
-            }
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            new Thread(() -> {
+                try {
+                    JFileChooser chooser = new JFileChooser();
+                    String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
+                    chooser.setCurrentDirectory(new File(lastDir));
+                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+                    if (extensions != null && extensions.length > 0) {
+                        FileNameExtensionFilter filter = new FileNameExtensionFilter(description, extensions);
+                        chooser.setFileFilter(filter);
+                    }
+                    SwingUtilities.invokeLater(() -> {
+                        setCursor(Cursor.getDefaultCursor());
+                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                            File selectedFile = chooser.getSelectedFile();
+                            targetField.setText(selectedFile.getAbsolutePath());
+                            prefs.put(PREF_LAST_DIR, selectedFile.getParent());
+                        }
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                    ex.printStackTrace();
+                }
+            }).start();
         });
         return button;
     }
@@ -2026,53 +2059,76 @@ public class CarafeGUI extends JFrame {
         JButton button = new JButton("Folder");
         styleButton(button);
         button.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
-            chooser.setCurrentDirectory(new File(lastDir));
-            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File selectedDir = chooser.getSelectedFile();
-                targetField.setText(selectedDir.getAbsolutePath());
-                prefs.put(PREF_LAST_DIR, selectedDir.getAbsolutePath());
-            }
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            new Thread(() -> {
+                try {
+                    JFileChooser chooser = new JFileChooser();
+                    String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
+                    chooser.setCurrentDirectory(new File(lastDir));
+                    chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                    SwingUtilities.invokeLater(() -> {
+                        setCursor(Cursor.getDefaultCursor());
+                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                            File selectedDir = chooser.getSelectedFile();
+                            targetField.setText(selectedDir.getAbsolutePath());
+                            prefs.put(PREF_LAST_DIR, selectedDir.getAbsolutePath());
+                        }
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                    ex.printStackTrace();
+                }
+            }).start();
         });
         return button;
     }
 
     private JPanel createPythonBrowseButton() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        panel.setOpaque(false);
 
         JButton browse = new JButton("Browse");
         styleButton(browse);
         browse.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\" : "/usr/bin";
-            String lastDir = prefs.get(PREF_LAST_DIR, defaultDir);
-            chooser.setCurrentDirectory(new File(lastDir));
-            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            chooser.setDialogTitle("Select Python Executable");
-            if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Executable Files", "exe"));
-            }
-            if (chooser.showOpenDialog(CarafeGUI.this) == JFileChooser.APPROVE_OPTION) {
-                File selectedFile = chooser.getSelectedFile();
-                String path = selectedFile.getAbsolutePath();
-
-                boolean found = false;
-                for (int i = 0; i < pythonPathCombo.getItemCount(); i++) {
-                    if (pythonPathCombo.getItemAt(i).equals(path)) {
-                        found = true;
-                        break;
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            new Thread(() -> {
+                try {
+                    JFileChooser chooser = new JFileChooser();
+                    String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\" : "/usr/bin";
+                    String lastDir = prefs.get(PREF_LAST_DIR, defaultDir);
+                    chooser.setCurrentDirectory(new File(lastDir));
+                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+                    chooser.setDialogTitle("Select Python Executable");
+                    if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+                        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Executable Files", "exe"));
                     }
-                }
-                if (!found) {
-                    pythonPathCombo.addItem(path);
-                }
-                pythonPathCombo.setSelectedItem(path);
+                    SwingUtilities.invokeLater(() -> {
+                        setCursor(Cursor.getDefaultCursor());
+                        if (chooser.showOpenDialog(CarafeGUI.this) == JFileChooser.APPROVE_OPTION) {
+                            File selectedFile = chooser.getSelectedFile();
+                            String path = selectedFile.getAbsolutePath();
 
-                prefs.put(PREF_PYTHON_PATH, path);
-                prefs.put(PREF_LAST_DIR, selectedFile.getParent());
-            }
+                            boolean found = false;
+                            for (int i = 0; i < pythonPathCombo.getItemCount(); i++) {
+                                if (pythonPathCombo.getItemAt(i).equals(path)) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (!found) {
+                                pythonPathCombo.addItem(path);
+                            }
+                            pythonPathCombo.setSelectedItem(path);
+
+                            prefs.put(PREF_PYTHON_PATH, path);
+                            prefs.put(PREF_LAST_DIR, selectedFile.getParent());
+                        }
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                    ex.printStackTrace();
+                }
+            }).start();
         });
 
         JButton install = new JButton("Install");
@@ -2440,33 +2496,44 @@ public class CarafeGUI extends JFrame {
         JButton button = new JButton("Browse");
         styleButton(button);
         button.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\" : "/usr/bin";
-            String lastDir = prefs.get(PREF_LAST_DIR, defaultDir);
-            chooser.setCurrentDirectory(new File(lastDir));
-            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            chooser.setDialogTitle("Select DIA-NN Executable");
-            if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Executable Files", "exe"));
-            }
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File selectedFile = chooser.getSelectedFile();
-                String path = selectedFile.getAbsolutePath();
-
-                boolean found = false;
-                for (int i = 0; i < diannPathCombo.getItemCount(); i++) {
-                    if (diannPathCombo.getItemAt(i).equals(path)) {
-                        found = true;
-                        break;
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            new Thread(() -> {
+                try {
+                    JFileChooser chooser = new JFileChooser();
+                    String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\" : "/usr/bin";
+                    String lastDir = prefs.get(PREF_LAST_DIR, defaultDir);
+                    chooser.setCurrentDirectory(new File(lastDir));
+                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+                    chooser.setDialogTitle("Select DIA-NN Executable");
+                    if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+                        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Executable Files", "exe"));
                     }
+                    SwingUtilities.invokeLater(() -> {
+                         setCursor(Cursor.getDefaultCursor());
+                         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                            File selectedFile = chooser.getSelectedFile();
+                            String path = selectedFile.getAbsolutePath();
+            
+                            boolean found = false;
+                            for (int i = 0; i < diannPathCombo.getItemCount(); i++) {
+                                if (diannPathCombo.getItemAt(i).equals(path)) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (!found) {
+                                diannPathCombo.addItem(path);
+                            }
+                            diannPathCombo.setSelectedItem(path);
+                            prefs.put(PREF_DIANN_PATH, path);
+                            prefs.put(PREF_LAST_DIR, selectedFile.getParent());
+                         }
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                    ex.printStackTrace();
                 }
-                if (!found) {
-                    diannPathCombo.addItem(path);
-                }
-                diannPathCombo.setSelectedItem(path);
-                prefs.put(PREF_DIANN_PATH, path);
-                prefs.put(PREF_LAST_DIR, selectedFile.getParent());
-            }
+            }).start();
         });
         return button;
     }
@@ -2732,31 +2799,42 @@ public class CarafeGUI extends JFrame {
         JButton button = new JButton("Browse");
         styleButton(button);
         button.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            String lastDir = prefs.get(PREF_LAST_DIR, "C:\\");
-            chooser.setCurrentDirectory(new File(lastDir));
-            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            chooser.setDialogTitle("Select MSConvert Executable");
-            chooser.setFileFilter(new FileNameExtensionFilter("Executable Files", "exe"));
-
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File f = chooser.getSelectedFile();
-                String path = f.getAbsolutePath();
-
-                boolean found = false;
-                for (int i = 0; i < msConvertPathCombo.getItemCount(); i++) {
-                    if (msConvertPathCombo.getItemAt(i).equals(path)) {
-                        found = true;
-                        break;
-                    }
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            new Thread(() -> {
+                try {
+                    JFileChooser chooser = new JFileChooser();
+                    String lastDir = prefs.get(PREF_LAST_DIR, "C:\\");
+                    chooser.setCurrentDirectory(new File(lastDir));
+                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+                    chooser.setDialogTitle("Select MSConvert Executable");
+                    chooser.setFileFilter(new FileNameExtensionFilter("Executable Files", "exe"));
+        
+                    SwingUtilities.invokeLater(() -> {
+                        setCursor(Cursor.getDefaultCursor());
+                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                            File f = chooser.getSelectedFile();
+                            String path = f.getAbsolutePath();
+            
+                            boolean found = false;
+                            for (int i = 0; i < msConvertPathCombo.getItemCount(); i++) {
+                                if (msConvertPathCombo.getItemAt(i).equals(path)) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (!found) {
+                                msConvertPathCombo.addItem(path);
+                            }
+                            msConvertPathCombo.setSelectedItem(path);
+                            prefs.put(PREF_MSCONVERT_PATH, path);
+                            prefs.put(PREF_LAST_DIR, f.getParent());
+                        }
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                    ex.printStackTrace();
                 }
-                if (!found) {
-                    msConvertPathCombo.addItem(path);
-                }
-                msConvertPathCombo.setSelectedItem(path);
-                prefs.put(PREF_MSCONVERT_PATH, path);
-                prefs.put(PREF_LAST_DIR, f.getParent());
-            }
+            }).start();
         });
         return button;
     }
