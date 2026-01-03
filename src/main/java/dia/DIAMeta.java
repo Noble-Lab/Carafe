@@ -234,8 +234,18 @@ public class DIAMeta {
 
         System.out.println("Total MS/MS spectra:"+total_spectra);
         this.rt_max = this.rt_max + 0.1;
-        for(String isoWin: this.isolationWindowMap.keySet()){
-            System.out.println("Valid isolation window: "+isoWin + " -> "+isolationWindowMap.get(isoWin).mz_lower+" - "+isolationWindowMap.get(isoWin).mz_upper);
+        // print isolation windows - sort by mz_lower
+
+        List<String> isoWinList = new ArrayList<>(this.isolationWindowMap.keySet());
+        isoWinList.sort(new Comparator<String>() {
+            @Override
+            public int compare(String o1, String o2) {
+                return Double.compare(isolationWindowMap.get(o1).mz_lower, isolationWindowMap.get(o2).mz_lower);
+            }
+        });
+        for(String isoWin: isoWinList){
+            // 4 decimal places
+            System.out.println("Valid isolation window: "+isoWin + " -> "+String.format("%.4f", isolationWindowMap.get(isoWin).mz_lower)+" - "+String.format("%.4f", isolationWindowMap.get(isoWin).mz_upper));
         }
         if(this.ms_level == 2) {
             System.out.println("Fragment ion m/z range: " + this.fragment_ion_mz_min + "-" + this.fragment_ion_mz_max);

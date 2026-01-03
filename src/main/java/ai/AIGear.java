@@ -3491,7 +3491,7 @@ public class AIGear {
                         index2peptideMatch.get(row_i).ion_matrix_map.put("peptide_centric", new int[peptide.length() - 1][n_ion_types]);
                     }
 
-                    if(spectrum==null){
+                    if(spectrum==null || spectrum.getNPeaks()==0){
                         if(!un_recognized_PSMs.containsKey(line)){
                             un_recognized_PSMs.put(line,0);
                         }

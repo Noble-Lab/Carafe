@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
+import javax.swing.*;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -335,275 +336,240 @@ public class CarafeGUI extends JFrame {
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         scrollPane.getHorizontalScrollBar().setUnitIncrement(16);
+        stripScrollPaneBorder(scrollPane);
         return scrollPane;
     }
 
-    private JPanel createHeader_v1() {
-        headerPanel = new JPanel(new BorderLayout());
-        headerPanel.setBorder(BorderFactory.createEmptyBorder(20, 25, 20, 25));
-
-        // Logo and title
-        headerTitlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
-
-        headerIconLabel = new JLabel("C");
-        headerIconLabel.setFont(new Font("Segoe UI", Font.BOLD, 42));
-
-        headerTextPanel = new JPanel();
-        headerTextPanel.setLayout(new BoxLayout(headerTextPanel, BoxLayout.Y_AXIS));
-
-        headerTitleLabel = new JLabel("Carafe");
-        headerTitleLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
-
-        headerSubtitleLabel = new JLabel("AI-Powered Spectral Library Generator for DIA Proteomics");
-        headerSubtitleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-
-        headerTextPanel.add(headerTitleLabel);
-        headerTextPanel.add(Box.createVerticalStrut(3));
-        headerTextPanel.add(headerSubtitleLabel);
-
-        headerTitlePanel.add(headerIconLabel);
-        headerTitlePanel.add(headerTextPanel);
-
-        headerPanel.add(headerTitlePanel, BorderLayout.WEST);
-
-        // Right panel with version and dark mode toggle
-        headerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
-
-        darkModeToggle = new JToggleButton();
-        darkModeToggle.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        darkModeToggle.setFocusPainted(false);
-        darkModeToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        darkModeToggle.addActionListener(e -> toggleDarkMode(darkModeToggle.isSelected()));
-        headerRightPanel.add(darkModeToggle);
-
-        headerVersionLabel = new JLabel(CParameter.getVersion());
-        headerVersionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        headerRightPanel.add(headerVersionLabel);
-
-        headerPanel.add(headerRightPanel, BorderLayout.EAST);
-
-        // Initialize header appearance based on current theme
-        boolean isDark = FlatLaf.isLafDark();
-        darkModeToggle.setSelected(isDark);
-
-        return headerPanel;
+    /**
+     * Helper to robustly remove borders from ScrollPanes to ensure clean UI.
+     * Can accept either the ScrollPane itself or a specific inner component.
+     */
+    private void stripScrollPaneBorder(JComponent c) {
+        if (c == null) return;
+        
+        // 1. If component is itself a JScrollPane
+        if (c instanceof JScrollPane sp) {
+            sp.setBorder(BorderFactory.createEmptyBorder());
+            sp.setViewportBorder(BorderFactory.createEmptyBorder());
+        }
+        
+        // 2. Traversal check (Nuclear option for updates)
+        SwingUtilities.invokeLater(() -> {
+             JScrollPane sp = (c instanceof JScrollPane) ? (JScrollPane)c : 
+                              (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, c);
+             if (sp != null) {
+                 sp.setBorder(BorderFactory.createEmptyBorder());
+                 sp.setViewportBorder(BorderFactory.createEmptyBorder());
+             }
+        });
     }
 
-    private JPanel createHeader_v2() {
-        headerPanel = new JPanel(new BorderLayout()) {
-
+    // Generic helper for header toggle buttons
+    private JToggleButton createHeaderToggleButton(String initialText, boolean initialSelected, java.awt.event.ActionListener action) {
+        JToggleButton btn = new JToggleButton(initialText) {
             @Override
             protected void paintComponent(Graphics g) {
-                int w = getWidth();
-                int h = getHeight();
-                if (w <= 0 || h <= 0) {
-                    super.paintComponent(g);
-                    return;
-                }
-
-                boolean dark = com.formdev.flatlaf.FlatLaf.isLafDark();
-
-                Color base = UIManager.getColor("Carafe.headerBase");
-                if (base == null)
-                    base = new Color(0x2F82B7);
-
-                Color top = dark ? adjust(base, -35) : adjust(base, +70);
-                Color mid = dark ? adjust(base, -18) : adjust(base, +45);
-                Color bottom = dark ? adjust(base, -8) : adjust(base, +25);
-
                 Graphics2D g2 = (Graphics2D) g.create();
-                // Paints header background with gradient and highlight
                 try {
-                    g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-                    LinearGradientPaint paint = new LinearGradientPaint(
-                            0f, 0f, 0f, (float) h,
-                            new float[] { 0f, 0.55f, 1f },
-                            new Color[] { top, mid, bottom });
-                    g2.setPaint(paint);
-                    g2.fillRect(0, 0, w, h);
+                    boolean dark = FlatLaf.isLafDark();
+                    Color bg = dark ? new Color(0, 0, 0, 60) : new Color(255, 255, 255, 60);
+                    if (getModel().isRollover())
+                        bg = withAlpha(bg, 100);
 
-                    int highlightH = (int) (h * 0.55f);
-                    Color hiTop = new Color(255, 255, 255, dark ? 18 : 28);
-                    Color hiBot = new Color(255, 255, 255, 0);
-                    g2.setPaint(new GradientPaint(0, 0, hiTop, 0, highlightH, hiBot));
-                    g2.fillRect(0, 0, w, highlightH);
+                    g2.setColor(bg);
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
 
+                    g2.setColor(withAlpha(getForeground(), 80));
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 15, 15);
                 } finally {
                     g2.dispose();
                 }
-
                 super.paintComponent(g);
             }
-
-            @Override
-            public void updateUI() {
-                super.updateUI();
-
-                // Updates UI components based on dark mode setting
-                SwingUtilities.invokeLater(() -> {
-                    boolean dark = com.formdev.flatlaf.FlatLaf.isLafDark();
-
-                    Color base = UIManager.getColor("Carafe.headerBase");
-                    if (base == null)
-                        base = new Color(0x2F82B7);
-
-                    Color top = dark ? adjust(base, -35) : adjust(base, +70);
-                    Color mid = dark ? adjust(base, -18) : adjust(base, +45);
-                    Color bottom = dark ? adjust(base, -8) : adjust(base, +25);
-
-                    Color bgSample = mid;
-
-                    Color fgPrimary = pickOnColor(bgSample);
-                    Color fgSecondary = withAlpha(fgPrimary, 215);
-                    Color fgTertiary = withAlpha(fgPrimary, 190);
-
-                    if (headerIconLabel != null)
-                        headerIconLabel.setForeground(fgPrimary);
-                    if (headerTitleLabel != null)
-                        headerTitleLabel.setForeground(fgPrimary);
-                    if (headerSubtitleLabel != null)
-                        headerSubtitleLabel.setForeground(fgSecondary);
-                    if (headerVersionLabel != null)
-                        headerVersionLabel.setForeground(fgTertiary);
-
-                    if (darkModeToggle != null) {
-                        darkModeToggle.setText(dark ? "Light Mode" : "Dark Mode");
-                        darkModeToggle.setForeground(fgPrimary);
-
-                        String bg = (fgPrimary.equals(Color.WHITE))
-                                ? "rgba(255,255,255,30)"
-                                : "rgba(0,0,0,18)";
-                        String bd = (fgPrimary.equals(Color.WHITE))
-                                ? "rgba(255,255,255,55)"
-                                : "rgba(0,0,0,45)";
-                        darkModeToggle.putClientProperty(
-                                FlatClientProperties.BUTTON_TYPE,
-                                FlatClientProperties.BUTTON_TYPE_ROUND_RECT);
-                        darkModeToggle.putClientProperty(
-                                FlatClientProperties.COMPONENT_ROUND_RECT,
-                                Boolean.TRUE);
-                        darkModeToggle.setMargin(new Insets(6, 16, 6, 16));
-                        darkModeToggle.setFocusPainted(false);
-                    }
-
-                    repaint();
-                });
-            }
         };
-
-        headerPanel.setOpaque(false);
-        headerPanel.setBorder(BorderFactory.createEmptyBorder(20, 25, 20, 25));
-
-        // Logo and title
-        headerTitlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
-        headerTitlePanel.setOpaque(false);
-
-        headerIconLabel = new JLabel("C");
-        headerIconLabel.setFont(new Font("Segoe UI", Font.BOLD, 42));
-
-        headerTextPanel = new JPanel();
-        headerTextPanel.setOpaque(false);
-        headerTextPanel.setLayout(new BoxLayout(headerTextPanel, BoxLayout.Y_AXIS));
-
-        headerTitleLabel = new JLabel("Carafe");
-        headerTitleLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
-
-        headerSubtitleLabel = new JLabel("AI-Powered Spectral Library Generator for DIA Proteomics");
-        headerSubtitleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-
-        headerTextPanel.add(headerTitleLabel);
-        headerTextPanel.add(Box.createVerticalStrut(3));
-        headerTextPanel.add(headerSubtitleLabel);
-
-        headerTitlePanel.add(headerIconLabel);
-        headerTitlePanel.add(headerTextPanel);
-
-        headerPanel.add(headerTitlePanel, BorderLayout.WEST);
-
-        // Right panel with version and dark mode toggle
-        headerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
-        headerRightPanel.setOpaque(false);
-
-        darkModeToggle = new JToggleButton();
-        darkModeToggle.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        darkModeToggle.setFocusPainted(false);
-        darkModeToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        darkModeToggle.putClientProperty(
-                FlatClientProperties.BUTTON_TYPE,
-                FlatClientProperties.BUTTON_TYPE_ROUND_RECT);
-        darkModeToggle.putClientProperty(
-                FlatClientProperties.COMPONENT_ROUND_RECT,
-                Boolean.TRUE);
-        darkModeToggle.addActionListener(e -> toggleDarkMode(darkModeToggle.isSelected()));
-        headerRightPanel.add(darkModeToggle);
-
-        headerVersionLabel = new JLabel(CParameter.getVersion());
-        headerVersionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        headerRightPanel.add(headerVersionLabel);
-
-        headerPanel.add(headerRightPanel, BorderLayout.EAST);
-
-        boolean isDark = com.formdev.flatlaf.FlatLaf.isLafDark();
-        darkModeToggle.setSelected(isDark);
-        darkModeToggle.setText(isDark ? "Light Mode" : "Dark Mode");
-
-        headerPanel.updateUI();
-        return headerPanel;
+        btn.setSelected(initialSelected);
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setOpaque(false);
+        btn.setFocusPainted(false);
+        btn.setMargin(new Insets(6, 16, 6, 16));
+        btn.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.setPreferredSize(new Dimension(100, 30));
+        btn.addActionListener(action);
+        return btn;
     }
+
+    // Dynamic Header Panel Class
+    private class DynamicHeaderPanel extends JPanel {
+        private final java.util.List<Particle> particles = new java.util.ArrayList<>();
+        private final javax.swing.Timer timer;
+        private static final int INITIAL_PARTICLE_COUNT = 80;
+        private static final double CONNECTION_THRESHOLD = 130.0;
+        private boolean animationEnabled = true;
+
+        DynamicHeaderPanel() {
+            super(new BorderLayout());
+            // Initialize particles
+            for (int i = 0; i < INITIAL_PARTICLE_COUNT; i++) {
+                particles.add(new Particle());
+            }
+
+            // Animation loop
+            timer = new javax.swing.Timer(16, e -> {
+                if (!animationEnabled) return;
+                int w = getStyleableWidth();
+                int h = getStyleableHeight();
+                for (Particle p : particles) {
+                    p.update(w, h);
+                }
+                repaint();
+            });
+            timer.start();
+        }
+
+        void setAnimationEnabled(boolean enabled) {
+            this.animationEnabled = enabled;
+            if (enabled) {
+                timer.start();
+            } else {
+                timer.stop();
+            }
+            repaint();
+        }
+
+        private int getStyleableWidth() { return getWidth() > 0 ? getWidth() : 800; }
+        private int getStyleableHeight() { return getHeight() > 0 ? getHeight() : 150; }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            
+            int w = getWidth();
+            int h = getHeight();
+            
+            if (w <= 0 || h <= 0) return;
+
+            boolean dark = FlatLaf.isLafDark();
+            Color base = lafColor("Carafe.headerBase", new Color(0x2F82B7));
+
+            Color top = dark ? adjust(base, -40) : adjust(base, 60);
+            Color mid = dark ? adjust(base, -20) : adjust(base, 35);
+            Color bottom = dark ? adjust(base, -10) : adjust(base, 15);
+
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                LinearGradientPaint paint = new LinearGradientPaint(
+                        0f, 0f, 0f, (float) h,
+                        new float[] { 0f, 0.5f, 1f },
+                        new Color[] { top, mid, bottom });
+                g2.setPaint(paint);
+                g2.fillRect(0, 0, w, h);
+
+                if (animationEnabled) {
+                    drawParticles(g2, w, h);
+                }
+
+                int highlightH = (int) (h * 0.5f);
+                Color hiTop = new Color(255, 255, 255, dark ? 15 : 30);
+                Color hiBot = new Color(255, 255, 255, 0);
+                g2.setPaint(new GradientPaint(0, 0, hiTop, 0, highlightH, hiBot));
+                g2.fillRect(0, 0, w, highlightH);
+            } finally {
+                g2.dispose();
+            }
+        }
+
+        private void drawParticles(Graphics2D g2, int w, int h) {
+            double thresholdSq = CONNECTION_THRESHOLD * CONNECTION_THRESHOLD;
+
+            g2.setStroke(new BasicStroke(1.0f));
+            for (int i = 0; i < particles.size(); i++) {
+                Particle p1 = particles.get(i);
+                for (int j = i + 1; j < particles.size(); j++) {
+                    Particle p2 = particles.get(j);
+                    double distSq = p1.distanceSq(p2);
+                    if (distSq < thresholdSq) {
+                        double dist = Math.sqrt(distSq);
+                        int alpha = (int) ((1.0 - (dist / CONNECTION_THRESHOLD)) * 80); 
+                        g2.setColor(new Color(255, 255, 255, alpha));
+                        g2.drawLine((int)p1.x, (int)p1.y, (int)p2.x, (int)p2.y);
+                    }
+                }
+            }
+
+            for (Particle p : particles) {
+               g2.setColor(new Color(255, 255, 255, (int)(p.alpha * 255)));
+               int size = (int) p.size;
+               g2.fillOval((int) (p.x - size/2), (int) (p.y - size/2), size, size);
+            }
+        }
+
+        class Particle {
+            double x, y;
+            double vx, vy;
+            double size;
+            double alpha;
+
+            Particle() {
+                reset(true);
+            }
+
+            void reset(boolean randomizePos) {
+                if (randomizePos) {
+                    x = Math.random() * getStyleableWidth();
+                    y = Math.random() * getStyleableHeight();
+                } else {
+                     x = Math.random() * getStyleableWidth();
+                     y = Math.random() * getStyleableHeight();
+                }
+                double speed = 0.35 + Math.random() * 0.55;
+                double angle = Math.random() * 2 * Math.PI;
+                vx = Math.cos(angle) * speed;
+                vy = Math.sin(angle) * speed;
+                
+                size = 2.0 + Math.random() * 2.5;
+                alpha = 0.2 + Math.random() * 0.4;
+            }
+
+            double distanceSq(Particle other) {
+                double dx = x - other.x;
+                double dy = y - other.y;
+                return dx*dx + dy*dy;
+            }
+
+            void update(int w, int h) {
+                x += vx;
+                y += vy;
+                if (x < 0 || x > w) vx *= -1;
+                if (y < 0 || y > h) vy *= -1;
+                
+                if (x < -50) x = w + 50;
+                if (x > w + 50) x = -50;
+                if (y < -50) y = h + 50;
+                if (y > h + 50) y = -50;
+            }
+        }
+        
+    	@Override
+        public void updateUI() {
+            super.updateUI();
+            updateHeaderForegrounds();
+        }
+    }
+    
+    // Toggle buttons
+    private JToggleButton particleToggle;
 
     private JPanel createHeader() {
-        // Create the panel with custom painting logic
-        headerPanel = new JPanel(new BorderLayout()) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                int w = getWidth();
-                int h = getHeight();
-                if (w <= 0 || h <= 0) {
-                    super.paintComponent(g);
-                    return;
-                }
-
-                boolean dark = FlatLaf.isLafDark();
-                Color base = lafColor("Carafe.headerBase", new Color(0x2F82B7));
-
-                // 1. Calculate adaptive gradient colors
-                Color top = dark ? adjust(base, -40) : adjust(base, 60);
-                Color mid = dark ? adjust(base, -20) : adjust(base, 35);
-                Color bottom = dark ? adjust(base, -10) : adjust(base, 15);
-
-                Graphics2D g2 = (Graphics2D) g.create();
-                try {
-                    g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                    // 2. Main Gradient Background
-                    LinearGradientPaint paint = new LinearGradientPaint(
-                            0f, 0f, 0f, (float) h,
-                            new float[] { 0f, 0.5f, 1f },
-                            new Color[] { top, mid, bottom });
-                    g2.setPaint(paint);
-                    g2.fillRect(0, 0, w, h);
-
-                    // 3. Subtle Gloss Highlight
-                    int highlightH = (int) (h * 0.5f);
-                    Color hiTop = new Color(255, 255, 255, dark ? 15 : 30);
-                    Color hiBot = new Color(255, 255, 255, 0);
-                    g2.setPaint(new GradientPaint(0, 0, hiTop, 0, highlightH, hiBot));
-                    g2.fillRect(0, 0, w, highlightH);
-                } finally {
-                    g2.dispose();
-                }
-                super.paintComponent(g);
-            }
-
-            @Override
-            public void updateUI() {
-                super.updateUI();
-                updateHeaderForegrounds();
-            }
-        };
+        // Use the new inner class
+        DynamicHeaderPanel dhPanel = new DynamicHeaderPanel(); 
+        headerPanel = dhPanel; // Assign to the field (which is JPanel type)
 
         headerPanel.setOpaque(false);
         headerPanel.setBorder(BorderFactory.createEmptyBorder(20, 25, 20, 25));
@@ -612,7 +578,8 @@ public class CarafeGUI extends JFrame {
         headerTitlePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 0));
         headerTitlePanel.setOpaque(false);
 
-        headerIconLabel = new JLabel("C");
+        // TODO: Add icon
+        headerIconLabel = new JLabel("");
         headerIconLabel.setFont(new Font("Segoe UI", Font.BOLD, 42));
 
         headerTextPanel = new JPanel();
@@ -636,47 +603,21 @@ public class CarafeGUI extends JFrame {
         headerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
         headerRightPanel.setOpaque(false);
 
-        // We create the toggle with a custom paintComponent to ENSURE it is rounded and
-        // transparent
-        darkModeToggle = new JToggleButton() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                try {
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        // Reuse the generic creation method
+        darkModeToggle = createHeaderToggleButton("Light Mode", false, e -> toggleDarkMode(darkModeToggle.isSelected()));
+        
+        // New Particle Toggle
+        particleToggle = createHeaderToggleButton("Effects On", true, e -> {
+            boolean selected = particleToggle.isSelected();
+            particleToggle.setText(selected ? "Effects On" : "Effects Off");
+            dhPanel.setAnimationEnabled(selected);
+        });
 
-                    boolean dark = FlatLaf.isLafDark();
-                    // Semi-transparent background (Darker in dark mode, lighter in light mode)
-                    Color bg = dark ? new Color(0, 0, 0, 60) : new Color(255, 255, 255, 60);
-                    if (getModel().isRollover())
-                        bg = withAlpha(bg, 100);
-
-                    g2.setColor(bg);
-                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
-
-                    // Subtle border
-                    g2.setColor(withAlpha(getForeground(), 80));
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 15, 15);
-                } finally {
-                    g2.dispose();
-                }
-                super.paintComponent(g);
-            }
-        };
-
-        darkModeToggle.setContentAreaFilled(false);
-        darkModeToggle.setBorderPainted(false);
-        darkModeToggle.setOpaque(false);
-        darkModeToggle.setFocusPainted(false);
-        darkModeToggle.setMargin(new Insets(6, 16, 6, 16));
-        darkModeToggle.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        darkModeToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        darkModeToggle.addActionListener(e -> toggleDarkMode(darkModeToggle.isSelected()));
-
+        headerRightPanel.add(particleToggle);
+        headerRightPanel.add(darkModeToggle);
+        
         headerVersionLabel = new JLabel(CParameter.getVersion());
         headerVersionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-
-        headerRightPanel.add(darkModeToggle);
         headerRightPanel.add(headerVersionLabel);
 
         headerPanel.add(headerTitlePanel, BorderLayout.WEST);
@@ -684,6 +625,9 @@ public class CarafeGUI extends JFrame {
 
         // Sync initial state
         updateHeaderForegrounds();
+        
+        // Ensure buttons have correct label color initially
+        updateHeaderForegrounds(); 
 
         return headerPanel;
     }
@@ -716,6 +660,11 @@ public class CarafeGUI extends JFrame {
             // light backgrounds
             darkModeToggle.setForeground(fgPrimary);
         }
+        
+        if (particleToggle != null) {
+             particleToggle.setText(particleToggle.isSelected() ? "Effects On" : "Effects Off");
+             particleToggle.setForeground(fgPrimary);
+        }
 
         if (headerPanel != null)
             headerPanel.repaint();
@@ -747,39 +696,6 @@ public class CarafeGUI extends JFrame {
         double L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
         return (L > 0.70) ? new Color(20, 20, 20) : Color.WHITE;
-    }
-
-    /**
-     * C) Correct dark mode switching (robust version):
-     * 1) setup() new LaF
-     * 2) re-apply UI defaults (A)
-     * 3) update UI delegates
-     * 4) IMPORTANT: refresh custom components that you manually styled
-     * (colors/borders)
-     */
-    private void toggleDarkMode_v1(boolean isDark) {
-        try {
-            if (isDark) {
-                FlatDarkLaf.setup();
-            } else {
-                FlatLightLaf.setup();
-            }
-
-            customizeUIDefaults();
-
-            // This is the recommended FlatLaf way to refresh whole UI
-            FlatLaf.updateUI();
-
-            // Persist preference
-            prefs.putBoolean(PREF_DARK_MODE, isDark);
-
-            // Update any custom-painted / manually styled components
-            applyThemeToCustomComponents();
-
-            repaint();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
     private void toggleDarkMode(boolean isDark) {
@@ -879,31 +795,6 @@ public class CarafeGUI extends JFrame {
             } else if (c instanceof java.awt.Container child) {
                 restyleButtonsRecursively(child);
             }
-        }
-    }
-
-    private void updateInfoCardTheme_v1(InfoCardRef ref) {
-        if (ref == null)
-            return;
-        boolean dark = FlatLaf.isLafDark();
-
-        Color bg = dark ? new Color(45, 55, 65) : new Color(232, 245, 253);
-        Color bd = dark ? new Color(90, 100, 110) : new Color(41, 128, 185, 100);
-
-        ref.card.setBackground(bg);
-        ref.card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(bd),
-                BorderFactory.createEmptyBorder(15, 15, 15, 15)));
-
-        if (ref.titleLabel != null) {
-            ref.titleLabel.setForeground(dark ? lafColor("Label.foreground", Color.WHITE) : PRIMARY_COLOR);
-        }
-
-        if (ref.contentArea != null) {
-            ref.contentArea.setBackground(bg);
-            ref.contentArea.setForeground(
-                    lafColor("Label.foreground", dark ? new Color(220, 220, 220) : new Color(40, 40, 40)));
-            ref.contentArea.setCaretColor(ref.contentArea.getForeground());
         }
     }
 
@@ -1262,12 +1153,18 @@ public class CarafeGUI extends JFrame {
     }
 
     private void showFileListDialog(JTextField field, java.util.List<String> fileList) {
-        javax.swing.JDialog d = new javax.swing.JDialog(this, "Edit File List", true);
+        String title = isRunning ? "View File List" : "Edit File List";
+        javax.swing.JDialog d = new javax.swing.JDialog(this, title, true);
         d.setSize(600, 400);
         d.setLocationRelativeTo(this);
         d.setLayout(new BorderLayout());
 
         JTextArea textArea = new JTextArea();
+        // If running, make read-only
+        if (isRunning) {
+            textArea.setEditable(false);
+        }
+        
         if (fileList.isEmpty() && !field.getText().trim().isEmpty() && !field.getText().startsWith("(")) {
             // Populate with single/folder path from text field if list is empty
             textArea.setText(field.getText().trim());
@@ -1281,7 +1178,15 @@ public class CarafeGUI extends JFrame {
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton okBtn = new JButton("OK");
+        okBtn.setEnabled(!isRunning); // Disable OK button if running
+        
         okBtn.addActionListener(ev -> {
+            if (isRunning) {
+                // Double safety
+                d.dispose();
+                return;
+            }
+            
             // Validate lines
             String[] lines = textArea.getText().split("\\n");
             java.util.List<String> newPaths = new java.util.ArrayList<>();
@@ -1311,13 +1216,13 @@ public class CarafeGUI extends JFrame {
             d.dispose();
         });
 
-        JButton cancelBtn = new JButton("Cancel");
+        JButton cancelBtn = new JButton(isRunning ? "Close" : "Cancel");
         cancelBtn.addActionListener(ev -> d.dispose());
         
         btnPanel.add(okBtn);
         btnPanel.add(cancelBtn);
         d.add(btnPanel, BorderLayout.SOUTH);
-        d.setVisible(true);
+        d.setVisible(true); // Modal, so execution blocks here
     }
 
 
@@ -1366,6 +1271,8 @@ public class CarafeGUI extends JFrame {
             }
         }
 
+        stripScrollPaneBorder(inputFieldsPanel);
+        inputFieldsPanel.setBorder(BorderFactory.createEmptyBorder());
         inputFieldsPanel.revalidate();
         inputFieldsPanel.repaint();
     }
@@ -1882,9 +1789,8 @@ public class CarafeGUI extends JFrame {
     private JPanel createConsolePanel() {
         JPanel panel = new JPanel(new BorderLayout());
         Color border = lafColor("Component.borderColor", lafColor("Separator.foreground", new Color(128, 128, 128)));
-        panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(border),
-                BorderFactory.createEmptyBorder(10, 10, 10, 10)));
+        // Remove outer line border, keep padding
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         // 1. Create a header wrapper for the title and the copy button
         JPanel headerWrapper = new JPanel(new BorderLayout());
@@ -1915,10 +1821,11 @@ public class CarafeGUI extends JFrame {
 
         consoleArea = new JTextArea();
         consoleArea.setEditable(false);
-        consoleArea.setLineWrap(true);
-        consoleArea.setWrapStyleWord(true);
+        consoleArea.setLineWrap(false); // OPTIMIZATION: process copious output much faster
+        consoleArea.setWrapStyleWord(false);
 
         consoleScrollPane = new JScrollPane(consoleArea);
+        // Restore inner border for the console output box
         consoleScrollPane.setBorder(BorderFactory.createLineBorder(border));
         consoleScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         panel.add(consoleScrollPane, BorderLayout.CENTER);
@@ -2940,17 +2847,6 @@ public class CarafeGUI extends JFrame {
         return paths;
     }
 
-    private void styleButton_v1(JButton button) {
-        button.putClientProperty("carafe.role", "generic");
-        button.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        Color border = lafColor("Component.borderColor", lafColor("Separator.foreground", new Color(128, 128, 128)));
-        button.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(border),
-                BorderFactory.createEmptyBorder(6, 12, 6, 12)));
-        button.setFocusPainted(false);
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-    }
-
     private void styleButton(JButton button) {
         button.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         button.setFocusPainted(false);
@@ -2974,19 +2870,6 @@ public class CarafeGUI extends JFrame {
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     }
 
-    private JButton createPrimaryButton_v1(String text, Color color) {
-        JButton button = new JButton(text);
-        button.putClientProperty("carafe.role", "primary");
-        button.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        button.setBackground(color);
-        button.setForeground(Color.WHITE);
-        button.setBorder(BorderFactory.createEmptyBorder(12, 30, 12, 30));
-        button.setFocusPainted(false);
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        button.setOpaque(true);
-        return button;
-    }
-
     private JButton createPrimaryButton(String text, Color color) {
         JButton button = new JButton(text);
         button.setFont(new Font("Segoe UI", Font.BOLD, 14));
@@ -2995,18 +2878,9 @@ public class CarafeGUI extends JFrame {
         button.setMargin(new Insets(12, 30, 12, 30));
 
         button.putClientProperty("JButton.buttonType", "roundRect");
-
-        // FlatLaf 推荐：用 client property 设置颜色（不会破坏 painter）
         button.putClientProperty("JButton.background", color);
         button.putClientProperty("JButton.foreground", Color.WHITE);
 
-        // 不要 setOpaque(true) / setBorder(...) / setContentAreaFilled(false) 这些
-        return button;
-    }
-
-    private JButton createSecondaryButton_v1(String text) {
-        JButton button = new JButton(text);
-        styleSecondaryButton(button);
         return button;
     }
 
@@ -3051,34 +2925,6 @@ public class CarafeGUI extends JFrame {
         JCheckBox checkbox = new JCheckBox(text, selected);
         checkbox.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         return checkbox;
-    }
-
-    private JPanel createInfoCard_v1(String title, String content) {
-        JPanel card = new JPanel(new BorderLayout());
-
-        JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
-        card.add(titleLabel, BorderLayout.NORTH);
-
-        JTextArea contentArea = new JTextArea(content) {
-            @Override
-            public Dimension getPreferredSize() {
-                Dimension d = super.getPreferredSize();
-                return new Dimension(100, d.height);
-            }
-        };
-        contentArea.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        contentArea.setEditable(false);
-        contentArea.setLineWrap(true);
-        contentArea.setWrapStyleWord(true);
-        card.add(contentArea, BorderLayout.CENTER);
-
-        InfoCardRef ref = new InfoCardRef(card, titleLabel, contentArea);
-        infoCards.add(ref);
-        updateInfoCardTheme(ref);
-
-        return card;
     }
 
     private JPanel createInfoCard(String title, String content) {
@@ -3532,12 +3378,15 @@ public class CarafeGUI extends JFrame {
 
         int workflow = workflowCombo.getSelectedIndex();
 
-        String outDir = outputDirField.getText().trim();
-        if (outDir.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please specify an output directory!", "Warning",
-                    JOptionPane.WARNING_MESSAGE);
+        if (!validateInputs(workflow)) {
             return;
         }
+
+        setInputsFrozen(true);
+        
+        String outDir = outputDirField.getText().trim();
+        // Validation handled by validateInputs
+
 
         // Initialize log writer
         try {
@@ -3559,24 +3408,11 @@ public class CarafeGUI extends JFrame {
         switch (workflow) {
             case 0 -> {
                 String trainMsFile = trainMsFileField.getText().trim();
-                if (trainMsFile.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please specify a training MS/MS file!", "Warning",
-                            JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
                 String trainDb = trainDbFileField.getText().trim();
-                if (trainDb.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please provide a training protein database file.",
-                            "Input Required", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-                String libraryDb = libraryDbFileField.getText().trim();
-                if (libraryDb.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please provide a library protein database file.",
-                            "Input Required", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
+                // Validations handled by validateInputs
+               
                 String diann_train_dir = outDir + File.separator + "diann_train";
+
                 File diannTrainDirFile = new File(diann_train_dir);
                 if (!diannTrainDirFile.exists()) {
                     diannTrainDirFile.mkdirs();
@@ -3686,7 +3522,7 @@ public class CarafeGUI extends JFrame {
                 } else {
                     diann_report_file = diann_train_dir + File.separator + "report.tsv";
                 }
-                System.out.println("DIANN report file: " + diann_report_file);
+                // System.out.println("DIANN report file: " + diann_report_file);
 
                 if (tabbedPane != null) {
                     SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
@@ -3705,7 +3541,7 @@ public class CarafeGUI extends JFrame {
                     try {
                         SwingUtilities.invokeAndWait(() -> {
                             diannReportFileField.setText(diann_report_file);
-                            System.out.println("DIANN report file: " + diann_report_file);
+                            // System.out.println("DIANN report file: " + diann_report_file);
                             CmdTask carafe_task = buildCarafeCommand(finalEffectiveMsFile);
                             if (carafe_task != null) {
                                 carafe_task.task_description = "Run Carafe to generate fine-tuned library";
@@ -3719,12 +3555,6 @@ public class CarafeGUI extends JFrame {
                 });
             }
             case 1 -> {
-                String libraryDb = libraryDbFileField.getText().trim();
-                if (libraryDb.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please provide a library protein database file.",
-                            "Input Required", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
                 // Check for RAW conversion logic even for Workflow 1 if trainMsFile is
                 // populated and RAW
                 String trainMsFile = trainMsFileField.getText().trim();
@@ -3796,9 +3626,7 @@ public class CarafeGUI extends JFrame {
                 }
 
                 if (effectiveTrainFiles.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please specify a training MS/MS file!", "Warning",
-                            JOptionPane.WARNING_MESSAGE);
-                    return;
+                   // Handled by validateInputs
                 }
 
                 // Collect Project MS Files
@@ -3810,23 +3638,12 @@ public class CarafeGUI extends JFrame {
                 }
 
                 if (effectiveProjectFiles.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please specify a project MS/MS file!", "Warning",
-                            JOptionPane.WARNING_MESSAGE);
-                    return;
+                   // Optional in some contexts, but validateInputs handles strictness
                 }
 
                 String trainDb = trainDbFileField.getText().trim();
-                if (trainDb.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please provide a training protein database file.",
-                            "Input Required", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
                 String libraryDb = libraryDbFileField.getText().trim();
-                if (libraryDb.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "Please provide a library protein database file.",
-                            "Input Required", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
+                
                 String diann_train_dir = outDir + File.separator + "diann_train";
                 File diannTrainDirFile = new File(diann_train_dir);
                 if (!diannTrainDirFile.exists()) {
@@ -4195,10 +4012,7 @@ public class CarafeGUI extends JFrame {
             final String dbgMsg = String.format(
                     "[DEBUG] DIANN env: OMP_NUM_THREADS=%s, MKL_NUM_THREADS=%s, KMP_AFFINITY=%s", dbgOmp, dbgMkl,
                     dbgKmp);
-            SwingUtilities.invokeLater(() -> {
-                logToConsole(dbgMsg + "\n");
-                consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
-            });
+            logToConsole(dbgMsg + "\n");
         }
 
         currentProcess = pb.start();
@@ -4215,10 +4029,7 @@ public class CarafeGUI extends JFrame {
                 }
             }
             final String output = line;
-            SwingUtilities.invokeLater(() -> {
-                logToConsole(output + "\n");
-                consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
-            });
+            logToConsole(output + "\n");
         }
 
         int exitCode = currentProcess.waitFor();
@@ -4769,6 +4580,9 @@ public class CarafeGUI extends JFrame {
 
     private void finishExecution() {
         isRunning = false;
+        
+        setInputsFrozen(false);
+        
         runButton.setEnabled(true);
         stopButton.setEnabled(false);
         progressBar.setIndeterminate(false);
@@ -4783,6 +4597,235 @@ public class CarafeGUI extends JFrame {
                 e.printStackTrace();
             }
             logWriter = null;
+        }
+    }
+
+    private boolean validateInputs(int workflowIndex) {
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        // Helper to check executables
+        java.util.function.Consumer<String> checkPython = (label) -> {
+             Object py = pythonPathCombo.getSelectedItem();
+             String path = (py != null) ? py.toString().trim() : "";
+             if (path.isEmpty()) errors.add("- Python executable is not specified.");
+             else if (!new File(path).exists()) errors.add("- Python executable not found.");
+        };
+
+        java.util.function.Consumer<String> checkDiann = (label) -> {
+             Object d = diannPathCombo.getSelectedItem();
+             String path = (d != null) ? d.toString().trim() : "";
+             if (path.isEmpty()) errors.add("- DIA-NN executable is not specified.");
+             else if (!new File(path).exists()) errors.add("- DIA-NN executable not found.");
+        };
+
+        java.util.function.Consumer<String> checkMsConvert = (label) -> {
+            // MSConvert must be specified
+             String path = "";
+             if (msConvertPathCombo != null) {
+                 Object s = msConvertPathCombo.getSelectedItem();
+                 if (s != null && !s.toString().trim().isEmpty()) path = s.toString().trim();
+             }
+             if (path.isEmpty()) {
+                 errors.add("- MSConvert executable is not specified.");
+             } else if (!new File(path).exists()) {
+                 errors.add("- MSConvert executable not found: " + path);
+             }
+        };
+
+        java.util.function.Consumer<String> checkOutDir = (label) -> {
+            String outDir = outputDirField.getText().trim();
+            if (outDir.isEmpty()) errors.add("- Output directory is not specified.");
+            else {
+                File outDirFile = new File(outDir);
+                if (outDirFile.exists()) {
+                    if (!outDirFile.isDirectory()) errors.add("- Output path exists but is not a directory.");
+                    else if (!outDirFile.canWrite()) errors.add("- Output directory is not writable.");
+                } else {
+                    File parent = outDirFile.getParentFile();
+                    if (parent != null && !parent.canWrite()) errors.add("- Cannot create output directory (parent not writable).");
+                }
+            }
+        };
+
+        // Gather effective inputs
+        java.util.List<String> effectiveTrainFiles = new ArrayList<>();
+        if (!trainMsFiles.isEmpty()) effectiveTrainFiles.addAll(trainMsFiles);
+        else if (!trainMsFileField.getText().trim().isEmpty()) effectiveTrainFiles.add(trainMsFileField.getText().trim());
+
+        java.util.List<String> effectiveProjectFiles = new ArrayList<>();
+        if (!projectMsFiles.isEmpty()) effectiveProjectFiles.addAll(projectMsFiles);
+        else if (!projectMsFileField.getText().trim().isEmpty()) effectiveProjectFiles.add(projectMsFileField.getText().trim());
+
+        boolean hasRaw = false;
+        // Check for raw files in training entries
+        for (String p : effectiveTrainFiles) {
+            String low = p.toLowerCase();
+            if (low.endsWith(".raw")) { hasRaw = true; break; }
+            File f = new File(p);
+            if (f.isDirectory()) {
+                 File[] raws = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
+                 if (raws != null && raws.length > 0) { hasRaw = true; break; }
+            }
+        }
+        // Check for raw files in project entries if applicable to workflow
+        if (workflowIndex == 2 && !hasRaw) {
+              for (String p : effectiveProjectFiles) {
+                String low = p.toLowerCase();
+                 if (low.endsWith(".raw")) { hasRaw = true; break; }
+                 File f = new File(p);
+                 if (f.isDirectory()) {
+                     File[] raws = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
+                     if (raws != null && raws.length > 0) { hasRaw = true; break; }
+                 }
+            }
+        }
+
+        switch (workflowIndex) {
+            case 0: // Library Generation using FASTA
+                // 1. Train MS File
+                if (effectiveTrainFiles.isEmpty()) errors.add("- No Training MS data files selected.");
+                else for(String p : effectiveTrainFiles) if(!new File(p).exists()) { errors.add("- Training MS file not found: " + p); break; }
+                
+                // 2. Train Protein DB
+                String trainDb = trainDbFileField.getText().trim();
+                if (trainDb.isEmpty()) errors.add("- Training protein database (FASTA) is not specified.");
+                else if (!new File(trainDb).exists()) errors.add("- Training protein database file not found.");
+
+                // 3. Library Protein DB
+                String libDb = libraryDbFileField.getText().trim();
+                if (libDb.isEmpty()) errors.add("- Library protein database (FASTA) is not specified.");
+                else if (!new File(libDb).exists()) errors.add("- Library protein database file not found.");
+
+                // 4. Output Directory
+                checkOutDir.accept(null);
+
+                // 5. Python Executable
+                checkPython.accept(null);
+
+                // 6. DIA-NN Executable
+                checkDiann.accept(null);
+
+                // 7. MSConvert (if raw)
+                if (hasRaw) checkMsConvert.accept(null);
+                break;
+
+            case 1: // Library Refinement
+
+                // 1. Train MS Files (for refinement usage)
+                if (effectiveTrainFiles.isEmpty()) errors.add("- No MS data files selected for refinement.");
+                else for(String p : effectiveTrainFiles) if(!new File(p).exists()) { errors.add("- Train MS File(s) not found: " + p); break; }
+                 
+                // 2. DIA-NN Report
+                String report = diannReportFileField.getText().trim();
+                if (report.isEmpty()) errors.add("- DIA-NN report file is not specified.");
+                else if (!new File(report).exists()) errors.add("- DIA-NN report file not found.");
+
+                // 3. Library Protein DB
+                String libDbRef = libraryDbFileField.getText().trim();
+                if (libDbRef.isEmpty()) errors.add("- Library protein database (FASTA) is not specified.");
+                 else if (!new File(libDbRef).exists()) errors.add("- Library protein database file not found.");
+
+                // 4. Output Directory
+                checkOutDir.accept(null);
+
+                // 5. Python
+                checkPython.accept(null);
+                 
+                // 6. DIA-NN (Not required per user req, but double check if logic changed? 
+                // User said "workflow 1 does not need DIA-NN", so skipping checkDiann)
+                 
+                // 7. MSConvert (if raw)
+                if (hasRaw) checkMsConvert.accept(null);
+                break;
+
+            case 2: // Whole Workflow
+                // 1. Train MS Files
+                if (effectiveTrainFiles.isEmpty()) errors.add("- No Training MS data files selected.");
+                else for(String p : effectiveTrainFiles) if(!new File(p).exists()) { errors.add("- Training MS File(s) not found: " + p); break; }
+
+                // 2. Train Protein DB
+                String trainDb2 = trainDbFileField.getText().trim();
+                if (trainDb2.isEmpty()) errors.add("- Training protein database (FASTA) is not specified.");
+                else if (!new File(trainDb2).exists()) errors.add("- Training protein database file not found.");
+
+                // 3. Project MS Files
+                if (effectiveProjectFiles.isEmpty()) errors.add("- No Project MS data files selected.");
+                else for(String p: effectiveProjectFiles) if(!new File(p).exists()) { errors.add("- Project MS File(s) not found: " + p); break; }
+
+                // 4. Library Protein DB
+                String libDb2 = libraryDbFileField.getText().trim();
+                if (libDb2.isEmpty()) errors.add("- Library protein database (FASTA) is not specified.");
+                else if (!new File(libDb2).exists()) errors.add("- Library protein database file not found.");
+
+                // 5. Output Directory
+                checkOutDir.accept(null);
+
+                // 6. Python
+                checkPython.accept(null);
+
+                // 7. DIA-NN
+                checkDiann.accept(null);
+
+                // 8. MSConvert (if raw)
+                if (hasRaw) checkMsConvert.accept(null);
+                break;
+        }
+
+        if (!errors.isEmpty()) {
+            StringBuilder msg = new StringBuilder("Please fix the following errors before processing:\n");
+            for (String err : errors) {
+                msg.append(err).append("\n");
+            }
+            JOptionPane.showMessageDialog(this, msg.toString(), "Input Validation Failed", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void setInputsFrozen(boolean frozen) {
+        // We only want to freeze the input/settings tabs.
+        // Tabs index:
+        // 0: Workflow
+        // 1: Training Data Generation
+        // 2: Model Training
+        // 3: Library Generation
+        // 4: Console (Do not freeze)
+        
+        // Safety check on tab count
+        if (tabbedPane != null) {
+            int tabCount = tabbedPane.getTabCount();
+            
+            // Freeze/Unfreeze first 4 tabs
+            for (int i = 0; i < Math.min(tabCount, 4); i++) {
+                Component tabComp = tabbedPane.getComponentAt(i);
+                if (tabComp instanceof Container) {
+                     enableComponents((Container) tabComp, !frozen);
+                }
+            }
+        }
+        
+        // Also ensure the run button is toggled (handled in finishExecution/runCarafe but good for safety)
+        if (runButton != null) runButton.setEnabled(!frozen);
+    }
+
+    private void enableComponents(Container container, boolean enable) {
+        Component[] components = container.getComponents();
+        for (Component component : components) {
+            // Do not disable scroll panes, viewports, or scrollbars so scrolling remains possible
+            if (component instanceof JScrollPane || component instanceof JViewport || component instanceof JScrollBar) {
+                // However, we still need to recurse into them (e.g. into the viewport's view)
+                if (component instanceof Container) {
+                    enableComponents((Container) component, enable);
+                }
+                continue;
+            }
+            
+            component.setEnabled(enable);
+            
+            if (component instanceof Container) {
+                enableComponents((Container) component, enable);
+            }
         }
     }
 
@@ -4919,6 +4962,8 @@ public class CarafeGUI extends JFrame {
 
         return cmd.toString();
     }
+
+
 
     public static void main(String[] args) {
         System.setProperty("awt.useSystemAAFontSettings", "on");
