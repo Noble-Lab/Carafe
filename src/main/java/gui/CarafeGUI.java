@@ -3943,24 +3943,26 @@ public class CarafeGUI extends JFrame {
                 
                 String carafeMsInput = null;
                 if(!finalTrainMzMLFiles.isEmpty()) {
-                     File first = new File(finalTrainMzMLFiles.get(0));
-                     // If we converted, they are in subDir.
-                     if (conversionTask != null) {
-                         carafeMsInput = first.getParent();
+                     if (finalTrainMzMLFiles.size() == 1) {
+                         carafeMsInput = finalTrainMzMLFiles.get(0);
                      } else {
+                         File first = new File(finalTrainMzMLFiles.get(0));
                          carafeMsInput = first.getParent();
-                         // need to check if all files are in the same directory
-                         for (String file : finalTrainMzMLFiles) {
-                             if (!new File(file).getParent().equals(carafeMsInput)) {
-                                 carafeMsInput = "";
-                                 break;
+                         // If we converted, they are in subDir, so no need to check.
+                         if (conversionTask == null) {
+                             // need to check if all files are in the same directory
+                             for (String file : finalTrainMzMLFiles) {
+                                 if (!new File(file).getParent().equals(carafeMsInput)) {
+                                     carafeMsInput = "";
+                                     break;
+                                 }
                              }
-                         }
-                         if (carafeMsInput.isEmpty()) {
-                             JOptionPane.showMessageDialog(this,
-                                     "All files must be in the same directory.",
-                                     "Input Required", JOptionPane.WARNING_MESSAGE);
-                             return;
+                             if (carafeMsInput.isEmpty()) {
+                                 JOptionPane.showMessageDialog(this,
+                                         "All files must be in the same directory.",
+                                         "Input Required", JOptionPane.WARNING_MESSAGE);
+                                 return;
+                             }
                          }
                      }
                 } else {
