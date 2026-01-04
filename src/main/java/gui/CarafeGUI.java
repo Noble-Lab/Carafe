@@ -214,6 +214,23 @@ public class CarafeGUI extends JFrame {
         setPreferredSize(new Dimension(DEFAULT_WIDTH, DEFAULT_HEIGHT));
         setResizable(true);
 
+        // Hide icon in title bar (requires FlatLaf window decorations)
+        getRootPane().putClientProperty("JRootPane.titleBarShowIcon", false);
+
+        // Load Application Icon (for Taskbar)
+        try {
+            java.net.URL iconUrl = getClass().getResource("/carafe-icon.png");
+            if (iconUrl != null) {
+                ImageIcon icon = new ImageIcon(iconUrl);
+                setIconImage(icon.getImage());
+                if (java.awt.Taskbar.isTaskbarSupported() && java.awt.Taskbar.getTaskbar().isSupported(java.awt.Taskbar.Feature.ICON_IMAGE)) {
+                    java.awt.Taskbar.getTaskbar().setIconImage(icon.getImage());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load application icon: " + e.getMessage());
+        }
+
         // Load persisted theme preference
         boolean dark = prefs.getBoolean(PREF_DARK_MODE, false);
 
@@ -628,7 +645,44 @@ public class CarafeGUI extends JFrame {
         headerTitlePanel.setOpaque(false);
 
         // TODO: Add icon
+        // Icon
         headerIconLabel = new JLabel("");
+        try {
+            java.net.URL iconUrl = getClass().getResource("/carafe-icon.png");
+            if (iconUrl != null) {
+                ImageIcon originalIcon = new ImageIcon(iconUrl);
+                // Scale to a high-but-reasonable resolution (128x128) to support HiDPI up to ~250% 
+                // without keeping the massive original in memory for every paint
+                Image highResImage = originalIcon.getImage().getScaledInstance(128, 128, Image.SCALE_SMOOTH);
+                
+                headerIconLabel.setIcon(new javax.swing.Icon() {
+                    @Override
+                    public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+                        java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                        g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                        g2.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+                        g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+
+                        // Clip to rounded rectangle
+                        java.awt.geom.RoundRectangle2D rounded = new java.awt.geom.RoundRectangle2D.Float(
+                                x, y, 48, 48, 16, 16);
+                        g2.setClip(rounded);
+
+                        // Draw the 128x128 image into the 48x48 layout space
+                        g2.drawImage(highResImage, x, y, 48, 48, null);
+                        g2.dispose();
+                    }
+
+                    @Override
+                    public int getIconWidth() { return 48; }
+
+                    @Override
+                    public int getIconHeight() { return 48; }
+                });
+            }
+        } catch (Exception e) {
+            // failed to load icon
+        }
         headerIconLabel.setFont(new Font("Segoe UI", Font.BOLD, 42));
 
         headerTextPanel = new JPanel();
@@ -3740,11 +3794,36 @@ public class CarafeGUI extends JFrame {
                 if (!projectMsFiles.isEmpty()) {
                     effectiveProjectFiles.addAll(projectMsFiles);
                 } else if (!projectMsFileField.getText().trim().isEmpty()) {
-                    effectiveProjectFiles.add(projectMsFileField.getText().trim());
+                    String projectPath = projectMsFileField.getText().trim();
+                    File projectFile = new File(projectPath);
+                    if (projectFile.isDirectory()) {
+                        // Expand folder to individual files (RAW or mzML)
+                        // check if there are mzML files in the folder first
+                        File[] mzMLFiles = projectFile.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
+                        if (mzMLFiles != null && mzMLFiles.length > 0) {
+                            for (File f : mzMLFiles) {
+                                effectiveProjectFiles.add(f.getAbsolutePath());
+                            }
+                        } else {
+                            // check if there are raw files in the folder
+                            File[] rawFiles = projectFile.listFiles((dir, name) -> name.toLowerCase().endsWith(".raw"));
+                            if (rawFiles != null) {
+                                for (File f : rawFiles) {
+                                    effectiveProjectFiles.add(f.getAbsolutePath());
+                                }
+                            }
+                        }
+                    } else {
+                        effectiveProjectFiles.add(projectPath);
+                    }
                 }
 
                 if (effectiveProjectFiles.isEmpty()) {
-                    // Optional in some contexts, but validateInputs handles strictness
+                    JOptionPane.showMessageDialog(this, 
+                            "No project MS files found.",
+                            "No Project MS Files", JOptionPane.WARNING_MESSAGE);
+                    setInputsFrozen(false);
+                    return;
                 }
 
                 String trainDb = trainDbFileField.getText().trim();
@@ -5092,9 +5171,17 @@ public class CarafeGUI extends JFrame {
     private String buildMsConvertCommand(String raw_file, String out_dir) {
         // msconvert.exe --filter "peakPicking true 1-2" --mzML raw_file --outdir
         // out_dir
-        String msConvertExec = prefs.get(PREF_MSCONVERT_PATH, "");
+        // First try to get from UI combo box
+        String msConvertExec = "";
+        if (msConvertPathCombo != null && msConvertPathCombo.getSelectedItem() != null) {
+            msConvertExec = msConvertPathCombo.getSelectedItem().toString().trim();
+        }
+        // Fall back to preferences
         if (msConvertExec.isEmpty()) {
-            // Fallback to "msconvert" in path or similar if not set
+            msConvertExec = prefs.get(PREF_MSCONVERT_PATH, "");
+        }
+        // Final fallback to "msconvert" in PATH
+        if (msConvertExec.isEmpty()) {
             msConvertExec = "msconvert";
         }
         if (msConvertExec.contains(" "))
@@ -5165,6 +5252,10 @@ public class CarafeGUI extends JFrame {
                 FlatDarkLaf.setup();
             else
                 FlatLightLaf.setup();
+
+            // Enable custom window decorations for FlatLaf to allow hiding the title bar icon
+            javax.swing.JFrame.setDefaultLookAndFeelDecorated(true);
+            javax.swing.JDialog.setDefaultLookAndFeelDecorated(true);
 
             // Call defaults directly without creating a dummy window
             customizeUIDefaults();
