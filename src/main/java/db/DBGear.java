@@ -71,6 +71,9 @@ public class DBGear {
                 el.setLineLength(1);
                 i++;
                 String proSeq = el.getSequence();
+                // remove * at the start or end of the sequence
+                proSeq = proSeq.replaceAll("^\\*", "");
+                proSeq = proSeq.replaceAll("\\*$", "");
                 proteins.add(proSeq);
             }
         } catch (IOException e) {
@@ -206,6 +209,9 @@ public class DBGear {
                         String headLine[] = el.getHeader().split("\\s+");
                         String proID = headLine[0];
                         String proSeq = el.getSequence();
+                        // remove * at the start or end of the sequence
+                        proSeq = proSeq.replaceAll("^\\*", "");
+                        proSeq = proSeq.replaceAll("\\*$", "");
                         proteins.put(proID, proSeq);
                     }
                 } catch (IOException e) {
