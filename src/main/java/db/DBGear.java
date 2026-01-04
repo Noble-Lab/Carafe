@@ -117,6 +117,7 @@ public class DBGear {
 
     public HashSet<String> digest_protein(Enzyme enzyme, String proteinSequence){
         proteinSequence = proteinSequence.toUpperCase();
+        proteinSequence = proteinSequence.replaceAll("^\\*", "");
         proteinSequence = proteinSequence.replaceAll("\\*$", "");
         if(this.I2L) {
             proteinSequence = proteinSequence.replaceAll("I", "L");
