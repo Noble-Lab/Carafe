@@ -3159,8 +3159,21 @@ public class CarafeGUI extends JFrame {
             // commandArgs.add("\"" + diannReport + "\"");
         }
 
-        // Use override if provided, otherwise read from field
-        String trainMsFile = (trainMsFileOverride != null) ? trainMsFileOverride : trainMsFileField.getText().trim();
+        // Use override if provided, otherwise check trainMsFiles list, then text field
+        String trainMsFile;
+        if (trainMsFileOverride != null) {
+            trainMsFile = trainMsFileOverride;
+        } else if (trainMsFiles != null && !trainMsFiles.isEmpty()) {
+            // Multi-file selection: use the parent folder of the first file
+            if(trainMsFiles.size() >= 2){
+                trainMsFile = new File(trainMsFiles.getFirst()).getParent();
+            }else{
+                trainMsFile = trainMsFiles.getFirst();
+            }
+        } else {
+            // Single file or folder path from text field
+            trainMsFile = trainMsFileField.getText().trim();
+        }
         if (!trainMsFile.isEmpty()) {
             // cmd.append("-ms \"").append(trainMsFile).append("\" ");
             commandArgs.add("-ms");
@@ -3667,64 +3680,47 @@ public class CarafeGUI extends JFrame {
             case 1 -> {
                 // Check for RAW conversion logic even for Workflow 1 if trainMsFile is
                 // populated and RAW
-                String trainMsFile = trainMsFileField.getText().trim();
+                // Resolve trainMsFile: check list first, then text field
+                String trainMsFile;
+                if (!trainMsFiles.isEmpty()) {
+                    // Multi-file selection: use the parent folder of the first file
+                    if(trainMsFiles.size() >= 2){
+                        trainMsFile = new File(trainMsFiles.getFirst()).getParent();
+                    }else{
+                        trainMsFile = trainMsFiles.getFirst();
+                    }
+                } else {
+                    trainMsFile = trainMsFileField.getText().trim();
+                }
 
-                CmdTask conversionTask = null;
-                String effectiveMsFile = null;
-
-                if (trainMsFile.toLowerCase().endsWith(".raw") || new File(trainMsFile).isDirectory()) { // Handle
-                                                                                                         // directory or
-                                                                                                         // raw file
+                // Check for RAW files - not supported for Workflow 2
+                boolean hasRawFiles = false;
+                if (trainMsFile.toLowerCase().endsWith(".raw")) {
+                    hasRawFiles = true;
+                } else if (new File(trainMsFile).isDirectory()) {
                     File trainFileObj = new File(trainMsFile);
-                    if (trainFileObj.isDirectory()) {
-                        boolean hasMzML = false;
-                        File[] mzMLs = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
-                        if (mzMLs != null && mzMLs.length > 0)
-                            hasMzML = true;
-
-                        if (!hasMzML) {
-                            File[] rawFiles = trainFileObj
-                                    .listFiles((dir, name) -> name.toLowerCase().endsWith(".raw"));
-                            if (rawFiles != null && rawFiles.length > 0) {
-                                String subDir = outDir + File.separator + "train_mzML";
-                                File subDirFile = new File(subDir);
-                                if (!subDirFile.exists())
-                                    subDirFile.mkdirs();
-
-                                String wildcardPath = trainMsFile + File.separator + "*.raw";
-                                String convCmd = buildMsConvertCommand(wildcardPath, subDir);
-                                conversionTask = new CmdTask(convCmd, "MSConvert",
-                                        "Convert RAW files in directory to mzML");
-                                effectiveMsFile = subDir;
-                            }
-                        }
-                    } else if (!trainMsFile.isEmpty() && trainMsFile.toLowerCase().endsWith(".raw")) {
-                        if (outDir.isEmpty()) {
-                            JOptionPane.showMessageDialog(this, "Please specify an output directory for conversion!",
-                                    "Warning", JOptionPane.WARNING_MESSAGE);
-                            return;
-                        }
-                        String rawName = new File(trainMsFile).getName();
-                        String baseName = rawName.contains(".") ? rawName.substring(0, rawName.lastIndexOf('.'))
-                                : rawName;
-                        String mzmlPath = new File(outDir, baseName + ".mzML").getAbsolutePath();
-
-                        String convCmd = buildMsConvertCommand(trainMsFile, outDir);
-                        conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW to mzML");
-                        effectiveMsFile = mzmlPath;
+                    File[] rawFiles = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".raw"));
+                    File[] mzMLFiles = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
+                    if (rawFiles != null && rawFiles.length > 0 && (mzMLFiles == null || mzMLFiles.length == 0)) {
+                        hasRawFiles = true;
                     }
                 }
 
-                CmdTask carafeTask = buildCarafeCommand(effectiveMsFile);
+                if (hasRawFiles) {
+                    JOptionPane.showMessageDialog(this, 
+                            "RAW files are not supported for Workflow 2.\n" +
+                            "The train MS file(s) must be mzML format, and\n" +
+                            "the DIA-NN report file must be generated using the same mzML files(s).",
+                            "RAW Files Not Supported", JOptionPane.WARNING_MESSAGE);
+                    setInputsFrozen(false);
+                    return;
+                }
+
+                CmdTask carafeTask = buildCarafeCommand(null);
                 if (carafeTask != null) {
                     carafeTask.task_description = "Run Carafe to generate spectral library";
                 }
-
-                if (conversionTask != null) {
-                    executeChainedCommands(new CmdTask[] { conversionTask }, () -> new CmdTask[] { carafeTask });
-                } else {
-                    executeCommand(carafeTask);
-                }
+                executeCommand(carafeTask);
             }
             case 2 -> {
                 // Collect Train MS Files
