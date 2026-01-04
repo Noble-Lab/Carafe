@@ -180,6 +180,9 @@ public class CarafeGUI extends JFrame {
     // Track created info cards so we can re-theme them on toggle
     private final java.util.List<InfoCardRef> infoCards = new java.util.ArrayList<>();
 
+    // Debounce timer for MSConvert visibility updates
+    private javax.swing.Timer msConvertVisibilityDebounceTimer;
+
     // Execution
     private ExecutorService executor;
     private Process currentProcess;
@@ -438,6 +441,29 @@ public class CarafeGUI extends JFrame {
                 repaint();
             });
             timer.start();
+
+            // Pause animation when not visible to save CPU
+            addComponentListener(new java.awt.event.ComponentAdapter() {
+                @Override
+                public void componentShown(java.awt.event.ComponentEvent e) {
+                    if (animationEnabled) timer.start();
+                }
+                @Override
+                public void componentHidden(java.awt.event.ComponentEvent e) {
+                    timer.stop();
+                }
+            });
+
+            // Pause when window is minimized
+            addHierarchyListener(e -> {
+                if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0) {
+                    if (isShowing() && animationEnabled) {
+                        timer.start();
+                    } else {
+                        timer.stop();
+                    }
+                }
+            });
         }
 
         void setAnimationEnabled(boolean enabled) {
@@ -888,20 +914,26 @@ public class CarafeGUI extends JFrame {
                 trainMsFileField = createTextField("Path to mzML/raw file or folder for training"),
                 createMsButtonsPanel(trainMsFileField));
 
+        // Initialize debounce timer (300ms delay)
+        if (msConvertVisibilityDebounceTimer == null) {
+            msConvertVisibilityDebounceTimer = new javax.swing.Timer(300, e -> updateMsConvertVisibility());
+            msConvertVisibilityDebounceTimer.setRepeats(false);
+        }
+
         trainMsFileField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                updateMsConvertVisibility();
+                msConvertVisibilityDebounceTimer.restart();
             }
 
             @Override
             public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                updateMsConvertVisibility();
+                msConvertVisibilityDebounceTimer.restart();
             }
 
             @Override
             public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                updateMsConvertVisibility();
+                msConvertVisibilityDebounceTimer.restart();
             }
         });
 
