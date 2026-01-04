@@ -410,6 +410,13 @@ public class CarafeGUI extends JFrame {
         private final javax.swing.Timer timer;
         private static final int INITIAL_PARTICLE_COUNT = 80;
         private static final double CONNECTION_THRESHOLD = 130.0;
+        // Pre-computed Color lookup table to avoid object churn in animation loop
+        private static final Color[] WHITE_ALPHA = new Color[256];
+        static {
+            for (int i = 0; i < 256; i++) {
+                WHITE_ALPHA[i] = new Color(255, 255, 255, i);
+            }
+        }
         private boolean animationEnabled = true;
 
         DynamicHeaderPanel() {
@@ -420,7 +427,7 @@ public class CarafeGUI extends JFrame {
             }
 
             // Animation loop
-            timer = new javax.swing.Timer(16, e -> {
+            timer = new javax.swing.Timer(33, e -> {
                 if (!animationEnabled)
                     return;
                 int w = getStyleableWidth();
@@ -506,14 +513,15 @@ public class CarafeGUI extends JFrame {
                     if (distSq < thresholdSq) {
                         double dist = Math.sqrt(distSq);
                         int alpha = (int) ((1.0 - (dist / CONNECTION_THRESHOLD)) * 80);
-                        g2.setColor(new Color(255, 255, 255, alpha));
+                        g2.setColor(WHITE_ALPHA[Math.min(255, Math.max(0, alpha))]);
                         g2.drawLine((int) p1.x, (int) p1.y, (int) p2.x, (int) p2.y);
                     }
                 }
             }
 
             for (Particle p : particles) {
-                g2.setColor(new Color(255, 255, 255, (int) (p.alpha * 255)));
+                int alphaInt = (int) (p.alpha * 255);
+                g2.setColor(WHITE_ALPHA[Math.min(255, Math.max(0, alphaInt))]);
                 int size = (int) p.size;
                 g2.fillOval((int) (p.x - size / 2.0), (int) (p.y - size / 2.0), size, size);
             }
