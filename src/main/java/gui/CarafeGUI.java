@@ -48,7 +48,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import main.java.input.CModification;
 import org.apache.commons.lang3.StringUtils;
 
-import com.formdev.flatlaf.FlatClientProperties;
+
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
@@ -345,27 +345,29 @@ public class CarafeGUI extends JFrame {
      * Can accept either the ScrollPane itself or a specific inner component.
      */
     private void stripScrollPaneBorder(JComponent c) {
-        if (c == null) return;
-        
+        if (c == null)
+            return;
+
         // 1. If component is itself a JScrollPane
         if (c instanceof JScrollPane sp) {
             sp.setBorder(BorderFactory.createEmptyBorder());
             sp.setViewportBorder(BorderFactory.createEmptyBorder());
         }
-        
+
         // 2. Traversal check (Nuclear option for updates)
         SwingUtilities.invokeLater(() -> {
-             JScrollPane sp = (c instanceof JScrollPane) ? (JScrollPane)c : 
-                              (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, c);
-             if (sp != null) {
-                 sp.setBorder(BorderFactory.createEmptyBorder());
-                 sp.setViewportBorder(BorderFactory.createEmptyBorder());
-             }
+            JScrollPane sp = (c instanceof JScrollPane) ? (JScrollPane) c
+                    : (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, c);
+            if (sp != null) {
+                sp.setBorder(BorderFactory.createEmptyBorder());
+                sp.setViewportBorder(BorderFactory.createEmptyBorder());
+            }
         });
     }
 
     // Generic helper for header toggle buttons
-    private JToggleButton createHeaderToggleButton(String initialText, boolean initialSelected, java.awt.event.ActionListener action) {
+    private JToggleButton createHeaderToggleButton(String initialText, boolean initialSelected,
+            java.awt.event.ActionListener action) {
         JToggleButton btn = new JToggleButton(initialText) {
             @Override
             protected void paintComponent(Graphics g) {
@@ -419,7 +421,8 @@ public class CarafeGUI extends JFrame {
 
             // Animation loop
             timer = new javax.swing.Timer(16, e -> {
-                if (!animationEnabled) return;
+                if (!animationEnabled)
+                    return;
                 int w = getStyleableWidth();
                 int h = getStyleableHeight();
                 for (Particle p : particles) {
@@ -440,17 +443,23 @@ public class CarafeGUI extends JFrame {
             repaint();
         }
 
-        private int getStyleableWidth() { return getWidth() > 0 ? getWidth() : 800; }
-        private int getStyleableHeight() { return getHeight() > 0 ? getHeight() : 150; }
+        private int getStyleableWidth() {
+            return getWidth() > 0 ? getWidth() : 800;
+        }
+
+        private int getStyleableHeight() {
+            return getHeight() > 0 ? getHeight() : 150;
+        }
 
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
-            
+
             int w = getWidth();
             int h = getHeight();
-            
-            if (w <= 0 || h <= 0) return;
+
+            if (w <= 0 || h <= 0)
+                return;
 
             boolean dark = FlatLaf.isLafDark();
             Color base = lafColor("Carafe.headerBase", new Color(0x2F82B7));
@@ -496,17 +505,17 @@ public class CarafeGUI extends JFrame {
                     double distSq = p1.distanceSq(p2);
                     if (distSq < thresholdSq) {
                         double dist = Math.sqrt(distSq);
-                        int alpha = (int) ((1.0 - (dist / CONNECTION_THRESHOLD)) * 80); 
+                        int alpha = (int) ((1.0 - (dist / CONNECTION_THRESHOLD)) * 80);
                         g2.setColor(new Color(255, 255, 255, alpha));
-                        g2.drawLine((int)p1.x, (int)p1.y, (int)p2.x, (int)p2.y);
+                        g2.drawLine((int) p1.x, (int) p1.y, (int) p2.x, (int) p2.y);
                     }
                 }
             }
 
             for (Particle p : particles) {
-               g2.setColor(new Color(255, 255, 255, (int)(p.alpha * 255)));
-               int size = (int) p.size;
-               g2.fillOval((int) (p.x - size/2), (int) (p.y - size/2), size, size);
+                g2.setColor(new Color(255, 255, 255, (int) (p.alpha * 255)));
+                int size = (int) p.size;
+                g2.fillOval((int) (p.x - size / 2.0), (int) (p.y - size / 2.0), size, size);
             }
         }
 
@@ -525,14 +534,14 @@ public class CarafeGUI extends JFrame {
                     x = Math.random() * getStyleableWidth();
                     y = Math.random() * getStyleableHeight();
                 } else {
-                     x = Math.random() * getStyleableWidth();
-                     y = Math.random() * getStyleableHeight();
+                    x = Math.random() * getStyleableWidth();
+                    y = Math.random() * getStyleableHeight();
                 }
                 double speed = 0.35 + Math.random() * 0.55;
                 double angle = Math.random() * 2 * Math.PI;
                 vx = Math.cos(angle) * speed;
                 vy = Math.sin(angle) * speed;
-                
+
                 size = 2.0 + Math.random() * 2.5;
                 alpha = 0.2 + Math.random() * 0.4;
             }
@@ -540,35 +549,41 @@ public class CarafeGUI extends JFrame {
             double distanceSq(Particle other) {
                 double dx = x - other.x;
                 double dy = y - other.y;
-                return dx*dx + dy*dy;
+                return dx * dx + dy * dy;
             }
 
             void update(int w, int h) {
                 x += vx;
                 y += vy;
-                if (x < 0 || x > w) vx *= -1;
-                if (y < 0 || y > h) vy *= -1;
-                
-                if (x < -50) x = w + 50;
-                if (x > w + 50) x = -50;
-                if (y < -50) y = h + 50;
-                if (y > h + 50) y = -50;
+                if (x < 0 || x > w)
+                    vx *= -1;
+                if (y < 0 || y > h)
+                    vy *= -1;
+
+                if (x < -50)
+                    x = w + 50;
+                if (x > w + 50)
+                    x = -50;
+                if (y < -50)
+                    y = h + 50;
+                if (y > h + 50)
+                    y = -50;
             }
         }
-        
-    	@Override
+
+        @Override
         public void updateUI() {
             super.updateUI();
             updateHeaderForegrounds();
         }
     }
-    
+
     // Toggle buttons
     private JToggleButton particleToggle;
 
     private JPanel createHeader() {
         // Use the new inner class
-        DynamicHeaderPanel dhPanel = new DynamicHeaderPanel(); 
+        DynamicHeaderPanel dhPanel = new DynamicHeaderPanel();
         headerPanel = dhPanel; // Assign to the field (which is JPanel type)
 
         headerPanel.setOpaque(false);
@@ -604,8 +619,9 @@ public class CarafeGUI extends JFrame {
         headerRightPanel.setOpaque(false);
 
         // Reuse the generic creation method
-        darkModeToggle = createHeaderToggleButton("Light Mode", false, e -> toggleDarkMode(darkModeToggle.isSelected()));
-        
+        darkModeToggle = createHeaderToggleButton("Light Mode", false,
+                e -> toggleDarkMode(darkModeToggle.isSelected()));
+
         // New Particle Toggle
         particleToggle = createHeaderToggleButton("Effects On", true, e -> {
             boolean selected = particleToggle.isSelected();
@@ -615,7 +631,7 @@ public class CarafeGUI extends JFrame {
 
         headerRightPanel.add(particleToggle);
         headerRightPanel.add(darkModeToggle);
-        
+
         headerVersionLabel = new JLabel(CParameter.getVersion());
         headerVersionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         headerRightPanel.add(headerVersionLabel);
@@ -625,9 +641,9 @@ public class CarafeGUI extends JFrame {
 
         // Sync initial state
         updateHeaderForegrounds();
-        
+
         // Ensure buttons have correct label color initially
-        updateHeaderForegrounds(); 
+        updateHeaderForegrounds();
 
         return headerPanel;
     }
@@ -660,10 +676,10 @@ public class CarafeGUI extends JFrame {
             // light backgrounds
             darkModeToggle.setForeground(fgPrimary);
         }
-        
+
         if (particleToggle != null) {
-             particleToggle.setText(particleToggle.isSelected() ? "Effects On" : "Effects Off");
-             particleToggle.setForeground(fgPrimary);
+            particleToggle.setText(particleToggle.isSelected() ? "Effects On" : "Effects Off");
+            particleToggle.setForeground(fgPrimary);
         }
 
         if (headerPanel != null)
@@ -707,7 +723,7 @@ public class CarafeGUI extends JFrame {
                 FlatLightLaf.setup();
             }
             customizeUIDefaults();
-            
+
             // Persist preference FIRST so components reading it see the new state
             prefs.putBoolean(PREF_DARK_MODE, isDark);
 
@@ -763,15 +779,15 @@ public class CarafeGUI extends JFrame {
                 updateInfoCardTheme(ref);
             }
         }
-        
+
         // Refresh styles for file input fields (hyperlinks)
         if (trainMsFileField != null && trainMsFiles != null) {
-             updateFileFieldState(trainMsFileField, trainMsFiles);
+            updateFileFieldState(trainMsFileField, trainMsFiles);
         }
         if (projectMsFileField != null && projectMsFiles != null) {
-             updateFileFieldState(projectMsFileField, projectMsFiles);
+            updateFileFieldState(projectMsFileField, projectMsFiles);
         }
-        
+
         refreshStatusLabel();
     }
 
@@ -988,25 +1004,27 @@ public class CarafeGUI extends JFrame {
 
     private JPanel createMsButtonsPanel(JTextField targetField) {
         JPanel msButtonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        
+
         JButton browse;
         final java.util.List<String> associatedList;
-        
+
         if (targetField == trainMsFileField) {
             associatedList = trainMsFiles;
-            browse = createMultiFileBrowseButton(targetField, "mzML/raw Files", new String[]{"mzML", "raw"}, associatedList);
+            browse = createMultiFileBrowseButton(targetField, "mzML/raw Files", new String[] { "mzML", "raw" },
+                    associatedList);
             setupMultiFileFieldInteraction(targetField, associatedList);
         } else if (targetField == projectMsFileField) {
             associatedList = projectMsFiles;
-            browse = createMultiFileBrowseButton(targetField, "mzML/raw Files", new String[]{"mzML", "raw"}, associatedList);
+            browse = createMultiFileBrowseButton(targetField, "mzML/raw Files", new String[] { "mzML", "raw" },
+                    associatedList);
             setupMultiFileFieldInteraction(targetField, associatedList);
         } else {
             associatedList = null;
             browse = createBrowseButton(targetField, "mzML/raw Files", new String[] { "mzML", "raw" });
         }
-        
+
         msButtonsPanel.add(browse);
-        
+
         // Custom Folder Button logic to ensure list is cleared
         JButton folderBtn = new JButton("Folder");
         styleButton(folderBtn);
@@ -1024,11 +1042,13 @@ public class CarafeGUI extends JFrame {
                             File selectedDir = chooser.getSelectedFile();
                             if (associatedList != null) {
                                 associatedList.clear();
-                                updateFileFieldState(targetField, associatedList); 
-                                // updateFileFieldState with empty list sets text to empty usually but we want to set it to folder path.
+                                updateFileFieldState(targetField, associatedList);
+                                // updateFileFieldState with empty list sets text to empty usually but we want
+                                // to set it to folder path.
                                 // So we must manually set text.
                                 targetField.setText(selectedDir.getAbsolutePath());
-                                // Force state to "Single File/Folder" mode manually since updateFileFieldState sees empty list
+                                // Force state to "Single File/Folder" mode manually since updateFileFieldState
+                                // sees empty list
                                 targetField.setForeground(UIManager.getColor("TextField.foreground"));
                                 targetField.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
                                 targetField.setEditable(true);
@@ -1044,72 +1064,53 @@ public class CarafeGUI extends JFrame {
                 }
             }).start();
         });
-        
+
         msButtonsPanel.add(folderBtn);
         return msButtonsPanel;
     }
 
-    private JButton createMultiFileBrowseButton(JTextField targetField, String description, String[] extensions, java.util.List<String> fileList) {
+    private JButton createMultiFileBrowseButton(JTextField targetField, String description, String[] extensions,
+            java.util.List<String> fileList) {
         JButton button = new JButton("Browse");
         styleButton(button);
         button.addActionListener(e -> {
-            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-            new Thread(() -> {
-                try {
-                    JFileChooser chooser = new JFileChooser();
-                    String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
-                    chooser.setCurrentDirectory(new File(lastDir));
-                    chooser.setMultiSelectionEnabled(true);
-                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                    if (extensions != null && extensions.length > 0) {
-                        FileNameExtensionFilter filter = new FileNameExtensionFilter(description, extensions);
-                        chooser.setFileFilter(filter);
-                    }
-                    SwingUtilities.invokeLater(() -> {
-                        setCursor(Cursor.getDefaultCursor());
-                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                            File[] selectedFiles = chooser.getSelectedFiles();
-                            if (selectedFiles.length > 0) {
-                                // Validation: Check for mixed extensions
-                                boolean hasMzML = false;
-                                boolean hasRaw = false;
-                                for (File f : selectedFiles) {
-                                    String name = f.getName().toLowerCase();
-                                    if (name.endsWith(".mzml")) hasMzML = true;
-                                    if (name.endsWith(".raw")) hasRaw = true;
-                                }
-                                if (hasMzML && hasRaw) {
-                                    JOptionPane.showMessageDialog(this,
-                                            "Please select only mzML files OR only RAW files, not both.",
-                                            "Invalid Selection",
-                                            JOptionPane.WARNING_MESSAGE);
-                                    return;
-                                }
-    
-                                fileList.clear();
-                                for (File f : selectedFiles) {
-                                    fileList.add(f.getAbsolutePath());
-                                }
-                                updateFileFieldState(targetField, fileList);
-                                prefs.put(PREF_LAST_DIR, selectedFiles[0].getParent());
-                            }
-                        }
-                    });
-                } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
-                    ex.printStackTrace();
+            chooseFiles("Select Files", extensions, description, files -> {
+                // Validation: Check for mixed extensions
+                boolean hasMzML = false;
+                boolean hasRaw = false;
+                for (File f : files) {
+                    String name = f.getName().toLowerCase();
+                    if (name.endsWith(".mzml"))
+                        hasMzML = true;
+                    if (name.endsWith(".raw"))
+                        hasRaw = true;
                 }
-            }).start();
+                if (hasMzML && hasRaw) {
+                    JOptionPane.showMessageDialog(this,
+                            "Please select only mzML files OR only RAW files, not both.",
+                            "Invalid Selection",
+                            JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                fileList.clear();
+                for (File f : files) {
+                    fileList.add(f.getAbsolutePath());
+                }
+                updateFileFieldState(targetField, fileList);
+                prefs.put(PREF_LAST_DIR, files[0].getParent());
+            });
         });
         return button;
     }
 
     private void updateFileFieldState(JTextField field, java.util.List<String> files) {
-        java.util.Map<java.awt.font.TextAttribute, Object> attributes = new java.util.HashMap<>(field.getFont().getAttributes());
+        java.util.Map<java.awt.font.TextAttribute, Object> attributes = new java.util.HashMap<>(
+                field.getFont().getAttributes());
         if (files != null && files.size() > 1) {
             field.setEditable(false);
             field.setText("(" + files.size() + " files selected)");
-            
+
             // Theme-aware hyperlink color
             boolean isDark = prefs.getBoolean(PREF_DARK_MODE, false);
             if (isDark) {
@@ -1117,30 +1118,31 @@ public class CarafeGUI extends JFrame {
             } else {
                 field.setForeground(Color.BLUE);
             }
-            
+
             field.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             attributes.put(java.awt.font.TextAttribute.UNDERLINE, java.awt.font.TextAttribute.UNDERLINE_ON);
         } else {
-             field.setForeground(UIManager.getColor("TextField.foreground"));
-             field.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
-             field.setEditable(true);
-             attributes.put(java.awt.font.TextAttribute.UNDERLINE, -1);
-             if (files != null && files.size() == 1) {
-                 field.setText(files.get(0));
-             }
-             // Do NOT clear text if list is empty, to preserve manual input
+            field.setForeground(UIManager.getColor("TextField.foreground"));
+            field.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
+            field.setEditable(true);
+            attributes.put(java.awt.font.TextAttribute.UNDERLINE, -1);
+            if (files != null && files.size() == 1) {
+                field.setText(files.get(0));
+            }
+            // Do NOT clear text if list is empty, to preserve manual input
         }
         field.setFont(field.getFont().deriveFont(attributes));
     }
 
     private void setupMultiFileFieldInteraction(JTextField field, java.util.List<String> fileList) {
         // Remove existing listeners if any? No easy way, assuming called once.
-        
+
         field.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             private void update() {
                 if (field.isEditable()) {
                     // If user is editing text manually, and it doesn't match the known single file,
-                    // or if list has multiple files (which shouldn't happen if editable, but safety check),
+                    // or if list has multiple files (which shouldn't happen if editable, but safety
+                    // check),
                     // we clear the list to rely on text field content.
                     if (!fileList.isEmpty()) {
                         String text = field.getText();
@@ -1156,19 +1158,31 @@ public class CarafeGUI extends JFrame {
                     }
                 }
             }
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
+
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                update();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                update();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                update();
+            }
         });
 
         field.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
                 if (!field.isEditable()) {
-                     // Summary Mode: Single Click opens dialog
-                     if (e.getClickCount() == 1) {
-                         showFileListDialog(field, fileList);
-                     }
+                    // Summary Mode: Single Click opens dialog
+                    if (e.getClickCount() == 1) {
+                        showFileListDialog(field, fileList);
+                    }
                 }
             }
         });
@@ -1186,7 +1200,7 @@ public class CarafeGUI extends JFrame {
         if (isRunning) {
             textArea.setEditable(false);
         }
-        
+
         if (fileList.isEmpty() && !field.getText().trim().isEmpty() && !field.getText().startsWith("(")) {
             // Populate with single/folder path from text field if list is empty
             textArea.setText(field.getText().trim());
@@ -1195,20 +1209,20 @@ public class CarafeGUI extends JFrame {
                 textArea.append(path + "\n");
             }
         }
-        
+
         d.add(new JScrollPane(textArea), BorderLayout.CENTER);
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton okBtn = new JButton("OK");
         okBtn.setEnabled(!isRunning); // Disable OK button if running
-        
+
         okBtn.addActionListener(ev -> {
             if (isRunning) {
                 // Double safety
                 d.dispose();
                 return;
             }
-            
+
             // Validate lines
             String[] lines = textArea.getText().split("\\n");
             java.util.List<String> newPaths = new java.util.ArrayList<>();
@@ -1219,19 +1233,21 @@ public class CarafeGUI extends JFrame {
                 String path = line.trim();
                 if (!path.isEmpty()) {
                     newPaths.add(path);
-                    if (path.toLowerCase().endsWith(".mzml")) hasMzML = true;
-                    if (path.toLowerCase().endsWith(".raw")) hasRaw = true;
+                    if (path.toLowerCase().endsWith(".mzml"))
+                        hasMzML = true;
+                    if (path.toLowerCase().endsWith(".raw"))
+                        hasRaw = true;
                 }
             }
-            
+
             if (hasMzML && hasRaw) {
-                 JOptionPane.showMessageDialog(d,
-                                "Please select only mzML files OR only RAW files, not both.",
-                                "Invalid Selection",
-                                JOptionPane.WARNING_MESSAGE);
-                 return;
+                JOptionPane.showMessageDialog(d,
+                        "Please select only mzML files OR only RAW files, not both.",
+                        "Invalid Selection",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
             }
-            
+
             fileList.clear();
             fileList.addAll(newPaths);
             updateFileFieldState(field, fileList);
@@ -1240,14 +1256,12 @@ public class CarafeGUI extends JFrame {
 
         JButton cancelBtn = new JButton(isRunning ? "Close" : "Cancel");
         cancelBtn.addActionListener(ev -> d.dispose());
-        
+
         btnPanel.add(okBtn);
         btnPanel.add(cancelBtn);
         d.add(btnPanel, BorderLayout.SOUTH);
         d.setVisible(true); // Modal, so execution blocks here
     }
-
-
 
     private void setVisible(java.util.List<JComponent> components, boolean visible) {
         if (components != null) {
@@ -2027,30 +2041,14 @@ public class CarafeGUI extends JFrame {
         JButton button = new JButton("Browse");
         styleButton(button);
         button.addActionListener(e -> {
-            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-            new Thread(() -> {
-                try {
-                    JFileChooser chooser = new JFileChooser();
-                    String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
-                    chooser.setCurrentDirectory(new File(lastDir));
-                    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                    if (extensions != null && extensions.length > 0) {
-                        FileNameExtensionFilter filter = new FileNameExtensionFilter(description, extensions);
-                        chooser.setFileFilter(filter);
-                    }
-                    SwingUtilities.invokeLater(() -> {
-                        setCursor(Cursor.getDefaultCursor());
-                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                            File selectedFile = chooser.getSelectedFile();
-                            targetField.setText(selectedFile.getAbsolutePath());
-                            prefs.put(PREF_LAST_DIR, selectedFile.getParent());
-                        }
-                    });
-                } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
-                    ex.printStackTrace();
-                }
-            }).start();
+            FileNameExtensionFilter filter = null;
+            if (extensions != null && extensions.length > 0) {
+                filter = new FileNameExtensionFilter(description, extensions);
+            }
+            chooseFile("Select File", JFileChooser.FILES_ONLY, filter, f -> {
+                targetField.setText(f.getAbsolutePath());
+                prefs.put(PREF_LAST_DIR, f.getParent());
+            });
         });
         return button;
     }
@@ -2059,26 +2057,10 @@ public class CarafeGUI extends JFrame {
         JButton button = new JButton("Folder");
         styleButton(button);
         button.addActionListener(e -> {
-            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-            new Thread(() -> {
-                try {
-                    JFileChooser chooser = new JFileChooser();
-                    String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
-                    chooser.setCurrentDirectory(new File(lastDir));
-                    chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-                    SwingUtilities.invokeLater(() -> {
-                        setCursor(Cursor.getDefaultCursor());
-                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                            File selectedDir = chooser.getSelectedFile();
-                            targetField.setText(selectedDir.getAbsolutePath());
-                            prefs.put(PREF_LAST_DIR, selectedDir.getAbsolutePath());
-                        }
-                    });
-                } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
-                    ex.printStackTrace();
-                }
-            }).start();
+            chooseFile("Select Folder", JFileChooser.DIRECTORIES_ONLY, null, f -> {
+                targetField.setText(f.getAbsolutePath());
+                prefs.put(PREF_LAST_DIR, f.getAbsolutePath());
+            });
         });
         return button;
     }
@@ -2094,13 +2076,15 @@ public class CarafeGUI extends JFrame {
             new Thread(() -> {
                 try {
                     JFileChooser chooser = new JFileChooser();
-                    String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\" : "/usr/bin";
+                    String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\"
+                            : "/usr/bin";
                     String lastDir = prefs.get(PREF_LAST_DIR, defaultDir);
                     chooser.setCurrentDirectory(new File(lastDir));
                     chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
                     chooser.setDialogTitle("Select Python Executable");
                     if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Executable Files", "exe"));
+                        chooser.setFileFilter(
+                                new javax.swing.filechooser.FileNameExtensionFilter("Executable Files", "exe"));
                     }
                     SwingUtilities.invokeLater(() -> {
                         setCursor(Cursor.getDefaultCursor());
@@ -2500,20 +2484,22 @@ public class CarafeGUI extends JFrame {
             new Thread(() -> {
                 try {
                     JFileChooser chooser = new JFileChooser();
-                    String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\" : "/usr/bin";
+                    String defaultDir = System.getProperty("os.name").toLowerCase().contains("windows") ? "C:\\"
+                            : "/usr/bin";
                     String lastDir = prefs.get(PREF_LAST_DIR, defaultDir);
                     chooser.setCurrentDirectory(new File(lastDir));
                     chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
                     chooser.setDialogTitle("Select DIA-NN Executable");
                     if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Executable Files", "exe"));
+                        chooser.setFileFilter(
+                                new javax.swing.filechooser.FileNameExtensionFilter("Executable Files", "exe"));
                     }
                     SwingUtilities.invokeLater(() -> {
-                         setCursor(Cursor.getDefaultCursor());
-                         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                        setCursor(Cursor.getDefaultCursor());
+                        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                             File selectedFile = chooser.getSelectedFile();
                             String path = selectedFile.getAbsolutePath();
-            
+
                             boolean found = false;
                             for (int i = 0; i < diannPathCombo.getItemCount(); i++) {
                                 if (diannPathCombo.getItemAt(i).equals(path)) {
@@ -2527,7 +2513,7 @@ public class CarafeGUI extends JFrame {
                             diannPathCombo.setSelectedItem(path);
                             prefs.put(PREF_DIANN_PATH, path);
                             prefs.put(PREF_LAST_DIR, selectedFile.getParent());
-                         }
+                        }
                     });
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
@@ -2719,16 +2705,16 @@ public class CarafeGUI extends JFrame {
             return;
 
         boolean show = false;
-        
+
         // 1. Check Multi-Select List
         if (trainMsFiles != null && !trainMsFiles.isEmpty()) {
-             for (String f : trainMsFiles) {
-                 if (f.toLowerCase().endsWith(".raw")) {
-                     show = true;
-                     break;
-                 }
-             }
-        } 
+            for (String f : trainMsFiles) {
+                if (f.toLowerCase().endsWith(".raw")) {
+                    show = true;
+                    break;
+                }
+            }
+        }
         // 2. Check Single File / Folder Text
         else if (trainMsFileField != null && trainMsFileField.isVisible()) {
             String text = trainMsFileField.getText().trim();
@@ -2808,13 +2794,13 @@ public class CarafeGUI extends JFrame {
                     chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
                     chooser.setDialogTitle("Select MSConvert Executable");
                     chooser.setFileFilter(new FileNameExtensionFilter("Executable Files", "exe"));
-        
+
                     SwingUtilities.invokeLater(() -> {
                         setCursor(Cursor.getDefaultCursor());
                         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                             File f = chooser.getSelectedFile();
                             String path = f.getAbsolutePath();
-            
+
                             boolean found = false;
                             for (int i = 0; i < msConvertPathCombo.getItemCount(); i++) {
                                 if (msConvertPathCombo.getItemAt(i).equals(path)) {
@@ -2838,6 +2824,8 @@ public class CarafeGUI extends JFrame {
         });
         return button;
     }
+
+
 
     private java.util.List<String> detectMsConvertInstallations() {
         java.util.List<String> paths = new java.util.ArrayList<>();
@@ -3461,10 +3449,9 @@ public class CarafeGUI extends JFrame {
         }
 
         setInputsFrozen(true);
-        
+
         String outDir = outputDirField.getText().trim();
         // Validation handled by validateInputs
-
 
         // Initialize log writer
         try {
@@ -3488,7 +3475,7 @@ public class CarafeGUI extends JFrame {
                 String trainMsFile = trainMsFileField.getText().trim();
                 String trainDb = trainDbFileField.getText().trim();
                 // Validations handled by validateInputs
-               
+
                 String diann_train_dir = outDir + File.separator + "diann_train";
 
                 File diannTrainDirFile = new File(diann_train_dir);
@@ -3516,8 +3503,10 @@ public class CarafeGUI extends JFrame {
                 // Resolve inputs
                 if (!trainMsFiles.isEmpty()) {
                     for (String path : trainMsFiles) {
-                        if (path.toLowerCase().endsWith(".raw")) rawFilesToConvert.add(path);
-                        else finalMsFiles.add(path);
+                        if (path.toLowerCase().endsWith(".raw"))
+                            rawFilesToConvert.add(path);
+                        else
+                            finalMsFiles.add(path);
                     }
                 } else if (!trainMsFile.isEmpty()) {
                     File trainFileObj = new File(trainMsFile);
@@ -3526,13 +3515,16 @@ public class CarafeGUI extends JFrame {
                         File[] mzMLs = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
                         if (mzMLs != null && mzMLs.length > 0) {
                             hasMzML = true;
-                            for (File f : mzMLs) finalMsFiles.add(f.getAbsolutePath());
+                            for (File f : mzMLs)
+                                finalMsFiles.add(f.getAbsolutePath());
                         }
 
                         if (!hasMzML) {
-                            File[] rawFiles = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".raw"));
+                            File[] rawFiles = trainFileObj
+                                    .listFiles((dir, name) -> name.toLowerCase().endsWith(".raw"));
                             if (rawFiles != null) {
-                                for (File f : rawFiles) rawFilesToConvert.add(f.getAbsolutePath());
+                                for (File f : rawFiles)
+                                    rawFilesToConvert.add(f.getAbsolutePath());
                             }
                         }
                     } else if (trainMsFile.toLowerCase().endsWith(".raw")) {
@@ -3576,22 +3568,22 @@ public class CarafeGUI extends JFrame {
                 String effectiveMsFile = "";
                 if (!finalMsFiles.isEmpty()) {
                     if (finalMsFiles.size() == 1) {
-                         effectiveMsFile = finalMsFiles.getFirst();
+                        effectiveMsFile = finalMsFiles.getFirst();
                     } else {
-                         effectiveMsFile = new File(finalMsFiles.getFirst()).getParent();
-                         // need to check if all files are in the same directory
-                         for (String file : finalMsFiles) {
-                             if (!new File(file).getParent().equals(effectiveMsFile)) {
-                                 effectiveMsFile = "";
-                                 break;
-                             }
-                         }
-                         if (effectiveMsFile.isEmpty()) {
-                             JOptionPane.showMessageDialog(this,
-                                     "All files must be in the same directory.",
-                                     "Input Required", JOptionPane.WARNING_MESSAGE);
-                             return;
-                         }
+                        effectiveMsFile = new File(finalMsFiles.getFirst()).getParent();
+                        // need to check if all files are in the same directory
+                        for (String file : finalMsFiles) {
+                            if (!new File(file).getParent().equals(effectiveMsFile)) {
+                                effectiveMsFile = "";
+                                break;
+                            }
+                        }
+                        if (effectiveMsFile.isEmpty()) {
+                            JOptionPane.showMessageDialog(this,
+                                    "All files must be in the same directory.",
+                                    "Input Required", JOptionPane.WARNING_MESSAGE);
+                            return;
+                        }
                     }
                 }
                 String diann_report_file;
@@ -3704,7 +3696,7 @@ public class CarafeGUI extends JFrame {
                 }
 
                 if (effectiveTrainFiles.isEmpty()) {
-                   // Handled by validateInputs
+                    // Handled by validateInputs
                 }
 
                 // Collect Project MS Files
@@ -3716,12 +3708,12 @@ public class CarafeGUI extends JFrame {
                 }
 
                 if (effectiveProjectFiles.isEmpty()) {
-                   // Optional in some contexts, but validateInputs handles strictness
+                    // Optional in some contexts, but validateInputs handles strictness
                 }
 
                 String trainDb = trainDbFileField.getText().trim();
                 String libraryDb = libraryDbFileField.getText().trim();
-                
+
                 String diann_train_dir = outDir + File.separator + "diann_train";
                 File diannTrainDirFile = new File(diann_train_dir);
                 if (!diannTrainDirFile.exists()) {
@@ -3731,11 +3723,14 @@ public class CarafeGUI extends JFrame {
                 // Check for RAW conversion logic
                 CmdTask conversionTask = null;
                 List<String> finalTrainMzMLFiles = new ArrayList<>();
-                String singleEffectiveMsFile = null; // Used only if we have a single file/folder path string logic for compatibility
+                String singleEffectiveMsFile = null; // Used only if we have a single file/folder path string logic for
+                                                     // compatibility
 
-                // Logic: 
-                // 1. If effectiveTrainFiles contains files (from List or single file from text), process them.
-                // 2. If it is a single entry that is a DIRECTORY, fall back to directory scanning logic.
+                // Logic:
+                // 1. If effectiveTrainFiles contains files (from List or single file from
+                // text), process them.
+                // 2. If it is a single entry that is a DIRECTORY, fall back to directory
+                // scanning logic.
 
                 boolean isDirectory = false;
                 if (effectiveTrainFiles.size() == 1) {
@@ -3780,21 +3775,23 @@ public class CarafeGUI extends JFrame {
                 } else {
                     // File List Logic (Single or Multiple)
                     boolean isRaw = effectiveTrainFiles.stream().anyMatch(f -> f.toLowerCase().endsWith(".raw"));
-                    
+
                     if (isRaw) {
                         // Convert all RAW files
-                         String subDir = outDir + File.separator + "train_mzML";
-                         File subDirFile = new File(subDir);
-                         if (!subDirFile.exists()) subDirFile.mkdirs();
+                        String subDir = outDir + File.separator + "train_mzML";
+                        File subDirFile = new File(subDir);
+                        if (!subDirFile.exists())
+                            subDirFile.mkdirs();
 
-                         String convCmd = buildMsConvertCommand(effectiveTrainFiles, subDir);
-                         conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW files to mzML");
-                         
-                         for(String f : effectiveTrainFiles) {
-                             String rawName = new File(f).getName();
-                             String baseName = rawName.contains(".") ? rawName.substring(0, rawName.lastIndexOf('.')) : rawName;
-                             finalTrainMzMLFiles.add(subDir + File.separator + baseName + ".mzML");
-                         }
+                        String convCmd = buildMsConvertCommand(effectiveTrainFiles, subDir);
+                        conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW files to mzML");
+
+                        for (String f : effectiveTrainFiles) {
+                            String rawName = new File(f).getName();
+                            String baseName = rawName.contains(".") ? rawName.substring(0, rawName.lastIndexOf('.'))
+                                    : rawName;
+                            finalTrainMzMLFiles.add(subDir + File.separator + baseName + ".mzML");
+                        }
                     } else {
                         finalTrainMzMLFiles.addAll(effectiveTrainFiles);
                     }
@@ -3804,9 +3801,10 @@ public class CarafeGUI extends JFrame {
                 if (!finalTrainMzMLFiles.isEmpty()) {
                     diannTask = buildDIANNCommand(finalTrainMzMLFiles, "", trainDb, diann_train_dir);
                 } else {
-                    diannTask = buildDIANNCommand(singleEffectiveMsFile, "", trainDb, diann_train_dir, conversionTask != null);
+                    diannTask = buildDIANNCommand(singleEffectiveMsFile, "", trainDb, diann_train_dir,
+                            conversionTask != null);
                 }
-                
+
                 if (diannTask != null) {
                     diannTask.task_description = "Run DIA-NN search on the training MS data";
                 }
@@ -3835,35 +3833,35 @@ public class CarafeGUI extends JFrame {
                 } else {
                     initialTasks = new CmdTask[] { diannTask };
                 }
-                
+
                 String carafeMsInput = null;
-                if(!finalTrainMzMLFiles.isEmpty()) {
-                     if (finalTrainMzMLFiles.size() == 1) {
-                         carafeMsInput = finalTrainMzMLFiles.get(0);
-                     } else {
-                         File first = new File(finalTrainMzMLFiles.get(0));
-                         carafeMsInput = first.getParent();
-                         // If we converted, they are in subDir, so no need to check.
-                         if (conversionTask == null) {
-                             // need to check if all files are in the same directory
-                             for (String file : finalTrainMzMLFiles) {
-                                 if (!new File(file).getParent().equals(carafeMsInput)) {
-                                     carafeMsInput = "";
-                                     break;
-                                 }
-                             }
-                             if (carafeMsInput.isEmpty()) {
-                                 JOptionPane.showMessageDialog(this,
-                                         "All files must be in the same directory.",
-                                         "Input Required", JOptionPane.WARNING_MESSAGE);
-                                 return;
-                             }
-                         }
-                     }
+                if (!finalTrainMzMLFiles.isEmpty()) {
+                    if (finalTrainMzMLFiles.size() == 1) {
+                        carafeMsInput = finalTrainMzMLFiles.getFirst();
+                    } else {
+                        File first = new File(finalTrainMzMLFiles.getFirst());
+                        carafeMsInput = first.getParent();
+                        // If we converted, they are in subDir, so no need to check.
+                        if (conversionTask == null) {
+                            // need to check if all files are in the same directory
+                            for (String file : finalTrainMzMLFiles) {
+                                if (!new File(file).getParent().equals(carafeMsInput)) {
+                                    carafeMsInput = "";
+                                    break;
+                                }
+                            }
+                            if (carafeMsInput.isEmpty()) {
+                                JOptionPane.showMessageDialog(this,
+                                        "All files must be in the same directory.",
+                                        "Input Required", JOptionPane.WARNING_MESSAGE);
+                                return;
+                            }
+                        }
+                    }
                 } else {
                     carafeMsInput = singleEffectiveMsFile;
                 }
-                
+
                 final String finalCarafeMsInput = carafeMsInput;
 
                 executeChainedCommands(initialTasks, () -> {
@@ -3876,16 +3874,17 @@ public class CarafeGUI extends JFrame {
                                 carafe_task.task_description = "Run Carafe to generate fine-tuned library";
                             }
                             commands[0] = carafe_task;
-                            
+
                             // For the project search step, we also need to handle multiple project files!
                             // New buildDIANNCommand supports List<String>
-                            if(!effectiveProjectFiles.isEmpty()) {
-                                commands[1] = buildDIANNCommand(effectiveProjectFiles, carafeLibraryPath, libraryDb, diann_project_dir);
+                            if (!effectiveProjectFiles.isEmpty()) {
+                                commands[1] = buildDIANNCommand(effectiveProjectFiles, carafeLibraryPath, libraryDb,
+                                        diann_project_dir);
                             } else {
                                 // Fallback?? Should verify handled earlier.
-                                commands[1] = null; 
+                                commands[1] = null;
                             }
-                            
+
                             if (commands[1] != null) {
                                 commands[1].task_description = "DIA-NN search for project data using fine-tuned library";
                             }
@@ -4099,7 +4098,7 @@ public class CarafeGUI extends JFrame {
         BufferedReader reader = new BufferedReader(new InputStreamReader(currentProcess.getInputStream()));
         String line;
         while ((line = reader.readLine()) != null) {
-            if(is_a_diann_task){
+            if (is_a_diann_task) {
                 // currently only perform this check for DIANN tasks
                 String trimmed = line.trim();
                 if (trimmed.startsWith("ERROR:") || trimmed.startsWith("Error:")) {
@@ -4236,16 +4235,21 @@ public class CarafeGUI extends JFrame {
             diannArgs.add("--verbose");
             if (additionalOptionList.contains("--verbose")) {
                 int index = additionalOptionList.indexOf("--verbose");
-                String verboseValue = additionalOptionList.get(index + 1);
-                // check if this is a number
-                try {
-                    Integer.parseInt(verboseValue);
-                    diannArgs.add(verboseValue);
-                } catch (NumberFormatException nfe) {
+                if (index < additionalOptionList.size() - 1) {
+                    String verboseValue = additionalOptionList.get(index + 1);
+                    // check if this is a number
+                    try {
+                        Integer.parseInt(verboseValue);
+                        diannArgs.add(verboseValue);
+                    } catch (NumberFormatException nfe) {
+                        diannArgs.add("1");
+                    }
+                    additionalOptionInGuiList.add(index);
+                    additionalOptionInGuiList.add(index + 1);
+                } else {
                     diannArgs.add("1");
+                    additionalOptionInGuiList.add(index);
                 }
-                additionalOptionInGuiList.add(index);
-                additionalOptionInGuiList.add(index + 1);
             } else {
                 diannArgs.add("1");
             }
@@ -4271,16 +4275,16 @@ public class CarafeGUI extends JFrame {
             String varModSelected = varModSelectedField.getText().trim();
             if (varModSelected.equalsIgnoreCase("2")) {
                 diannArgs.add("--var-mods");
-                if((int)maxVarSpinner.getValue() >= 1) {
+                if ((int) maxVarSpinner.getValue() >= 1) {
                     diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
-                }else{
+                } else {
                     // show warning message
                     JOptionPane.showMessageDialog(this,
                             "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
                             "Warning", JOptionPane.WARNING_MESSAGE);
                     return null;
                 }
-                diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+
                 diannArgs.add("--var-mod");
                 diannArgs.add("UniMod:35,15.994915,M");
             } else if (varModSelected.equalsIgnoreCase("0")) {
@@ -4409,16 +4413,21 @@ public class CarafeGUI extends JFrame {
             // check if --qvalue is present in the additional options
             if (additionalOptionList.contains("--qvalue")) {
                 int index = additionalOptionList.indexOf("--qvalue");
-                String qvalueValue = additionalOptionList.get(index + 1);
-                // check if this is a number
-                try {
-                    Double.parseDouble(qvalueValue);
-                    diannArgs.add(qvalueValue);
-                } catch (NumberFormatException nfe) {
+                if (index < additionalOptionList.size() - 1) {
+                    String qvalueValue = additionalOptionList.get(index + 1);
+                    // check if this is a number
+                    try {
+                        Double.parseDouble(qvalueValue);
+                        diannArgs.add(qvalueValue);
+                    } catch (NumberFormatException nfe) {
+                        diannArgs.add("0.01");
+                    }
+                    additionalOptionInGuiList.add(index);
+                    additionalOptionInGuiList.add(index + 1);
+                } else {
                     diannArgs.add("0.01");
+                    additionalOptionInGuiList.add(index);
                 }
-                additionalOptionInGuiList.add(index);
-                additionalOptionInGuiList.add(index + 1);
             } else {
                 diannArgs.add("0.01");
             }
@@ -4658,9 +4667,9 @@ public class CarafeGUI extends JFrame {
 
     private void finishExecution() {
         isRunning = false;
-        
+
         setInputsFrozen(false);
-        
+
         runButton.setEnabled(true);
         stopButton.setEnabled(false);
         progressBar.setIndeterminate(false);
@@ -4683,96 +4692,131 @@ public class CarafeGUI extends JFrame {
 
         // Helper to check executables
         java.util.function.Consumer<String> checkPython = (label) -> {
-             Object py = pythonPathCombo.getSelectedItem();
-             String path = (py != null) ? py.toString().trim() : "";
-             if (path.isEmpty()) errors.add("- Python executable is not specified.");
-             else if (!new File(path).exists()) errors.add("- Python executable not found.");
+            Object py = pythonPathCombo.getSelectedItem();
+            String path = (py != null) ? py.toString().trim() : "";
+            if (path.isEmpty())
+                errors.add("- Python executable is not specified.");
+            else if (!new File(path).exists())
+                errors.add("- Python executable not found.");
         };
 
         java.util.function.Consumer<String> checkDiann = (label) -> {
-             Object d = diannPathCombo.getSelectedItem();
-             String path = (d != null) ? d.toString().trim() : "";
-             if (path.isEmpty()) errors.add("- DIA-NN executable is not specified.");
-             else if (!new File(path).exists()) errors.add("- DIA-NN executable not found.");
+            Object d = diannPathCombo.getSelectedItem();
+            String path = (d != null) ? d.toString().trim() : "";
+            if (path.isEmpty())
+                errors.add("- DIA-NN executable is not specified.");
+            else if (!new File(path).exists())
+                errors.add("- DIA-NN executable not found.");
         };
 
         java.util.function.Consumer<String> checkMsConvert = (label) -> {
             // MSConvert must be specified
-             String path = "";
-             if (msConvertPathCombo != null) {
-                 Object s = msConvertPathCombo.getSelectedItem();
-                 if (s != null && !s.toString().trim().isEmpty()) path = s.toString().trim();
-             }
-             if (path.isEmpty()) {
-                 errors.add("- MSConvert executable is not specified.");
-             } else if (!new File(path).exists()) {
-                 errors.add("- MSConvert executable not found: " + path);
-             }
+            String path = "";
+            if (msConvertPathCombo != null) {
+                Object s = msConvertPathCombo.getSelectedItem();
+                if (s != null && !s.toString().trim().isEmpty())
+                    path = s.toString().trim();
+            }
+            if (path.isEmpty()) {
+                errors.add("- MSConvert executable is not specified.");
+            } else if (!new File(path).exists()) {
+                errors.add("- MSConvert executable not found: " + path);
+            }
         };
 
         java.util.function.Consumer<String> checkOutDir = (label) -> {
             String outDir = outputDirField.getText().trim();
-            if (outDir.isEmpty()) errors.add("- Output directory is not specified.");
+            if (outDir.isEmpty())
+                errors.add("- Output directory is not specified.");
             else {
                 File outDirFile = new File(outDir);
                 if (outDirFile.exists()) {
-                    if (!outDirFile.isDirectory()) errors.add("- Output path exists but is not a directory.");
-                    else if (!outDirFile.canWrite()) errors.add("- Output directory is not writable.");
+                    if (!outDirFile.isDirectory())
+                        errors.add("- Output path exists but is not a directory.");
+                    else if (!outDirFile.canWrite())
+                        errors.add("- Output directory is not writable.");
                 } else {
                     File parent = outDirFile.getParentFile();
-                    if (parent != null && !parent.canWrite()) errors.add("- Cannot create output directory (parent not writable).");
+                    if (parent != null && !parent.canWrite())
+                        errors.add("- Cannot create output directory (parent not writable).");
                 }
             }
         };
 
         // Gather effective inputs
         java.util.List<String> effectiveTrainFiles = new ArrayList<>();
-        if (!trainMsFiles.isEmpty()) effectiveTrainFiles.addAll(trainMsFiles);
-        else if (!trainMsFileField.getText().trim().isEmpty()) effectiveTrainFiles.add(trainMsFileField.getText().trim());
+        if (!trainMsFiles.isEmpty())
+            effectiveTrainFiles.addAll(trainMsFiles);
+        else if (!trainMsFileField.getText().trim().isEmpty())
+            effectiveTrainFiles.add(trainMsFileField.getText().trim());
 
         java.util.List<String> effectiveProjectFiles = new ArrayList<>();
-        if (!projectMsFiles.isEmpty()) effectiveProjectFiles.addAll(projectMsFiles);
-        else if (!projectMsFileField.getText().trim().isEmpty()) effectiveProjectFiles.add(projectMsFileField.getText().trim());
+        if (!projectMsFiles.isEmpty())
+            effectiveProjectFiles.addAll(projectMsFiles);
+        else if (!projectMsFileField.getText().trim().isEmpty())
+            effectiveProjectFiles.add(projectMsFileField.getText().trim());
 
         boolean hasRaw = false;
         // Check for raw files in training entries
         for (String p : effectiveTrainFiles) {
             String low = p.toLowerCase();
-            if (low.endsWith(".raw")) { hasRaw = true; break; }
+            if (low.endsWith(".raw")) {
+                hasRaw = true;
+                break;
+            }
             File f = new File(p);
             if (f.isDirectory()) {
-                 File[] raws = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
-                 if (raws != null && raws.length > 0) { hasRaw = true; break; }
+                File[] raws = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
+                if (raws != null && raws.length > 0) {
+                    hasRaw = true;
+                    break;
+                }
             }
         }
         // Check for raw files in project entries if applicable to workflow
         if (workflowIndex == 2 && !hasRaw) {
-              for (String p : effectiveProjectFiles) {
+            for (String p : effectiveProjectFiles) {
                 String low = p.toLowerCase();
-                 if (low.endsWith(".raw")) { hasRaw = true; break; }
-                 File f = new File(p);
-                 if (f.isDirectory()) {
-                     File[] raws = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
-                     if (raws != null && raws.length > 0) { hasRaw = true; break; }
-                 }
+                if (low.endsWith(".raw")) {
+                    hasRaw = true;
+                    break;
+                }
+                File f = new File(p);
+                if (f.isDirectory()) {
+                    File[] raws = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
+                    if (raws != null && raws.length > 0) {
+                        hasRaw = true;
+                        break;
+                    }
+                }
             }
         }
 
         switch (workflowIndex) {
             case 0: // Library Generation using FASTA
                 // 1. Train MS File
-                if (effectiveTrainFiles.isEmpty()) errors.add("- No Training MS data files selected.");
-                else for(String p : effectiveTrainFiles) if(!new File(p).exists()) { errors.add("- Training MS file not found: " + p); break; }
-                
+                if (effectiveTrainFiles.isEmpty())
+                    errors.add("- No Training MS data files selected.");
+                else
+                    for (String p : effectiveTrainFiles)
+                        if (!new File(p).exists()) {
+                            errors.add("- Training MS file not found: " + p);
+                            break;
+                        }
+
                 // 2. Train Protein DB
                 String trainDb = trainDbFileField.getText().trim();
-                if (trainDb.isEmpty()) errors.add("- Training protein database (FASTA) is not specified.");
-                else if (!new File(trainDb).exists()) errors.add("- Training protein database file not found.");
+                if (trainDb.isEmpty())
+                    errors.add("- Training protein database (FASTA) is not specified.");
+                else if (!new File(trainDb).exists())
+                    errors.add("- Training protein database file not found.");
 
                 // 3. Library Protein DB
                 String libDb = libraryDbFileField.getText().trim();
-                if (libDb.isEmpty()) errors.add("- Library protein database (FASTA) is not specified.");
-                else if (!new File(libDb).exists()) errors.add("- Library protein database file not found.");
+                if (libDb.isEmpty())
+                    errors.add("- Library protein database (FASTA) is not specified.");
+                else if (!new File(libDb).exists())
+                    errors.add("- Library protein database file not found.");
 
                 // 4. Output Directory
                 checkOutDir.accept(null);
@@ -4784,56 +4828,84 @@ public class CarafeGUI extends JFrame {
                 checkDiann.accept(null);
 
                 // 7. MSConvert (if raw)
-                if (hasRaw) checkMsConvert.accept(null);
+                if (hasRaw)
+                    checkMsConvert.accept(null);
                 break;
 
             case 1: // Library Refinement
 
                 // 1. Train MS Files (for refinement usage)
-                if (effectiveTrainFiles.isEmpty()) errors.add("- No MS data files selected for refinement.");
-                else for(String p : effectiveTrainFiles) if(!new File(p).exists()) { errors.add("- Train MS File(s) not found: " + p); break; }
-                 
+                if (effectiveTrainFiles.isEmpty())
+                    errors.add("- No MS data files selected for refinement.");
+                else
+                    for (String p : effectiveTrainFiles)
+                        if (!new File(p).exists()) {
+                            errors.add("- Train MS File(s) not found: " + p);
+                            break;
+                        }
+
                 // 2. DIA-NN Report
                 String report = diannReportFileField.getText().trim();
-                if (report.isEmpty()) errors.add("- DIA-NN report file is not specified.");
-                else if (!new File(report).exists()) errors.add("- DIA-NN report file not found.");
+                if (report.isEmpty())
+                    errors.add("- DIA-NN report file is not specified.");
+                else if (!new File(report).exists())
+                    errors.add("- DIA-NN report file not found.");
 
                 // 3. Library Protein DB
                 String libDbRef = libraryDbFileField.getText().trim();
-                if (libDbRef.isEmpty()) errors.add("- Library protein database (FASTA) is not specified.");
-                 else if (!new File(libDbRef).exists()) errors.add("- Library protein database file not found.");
+                if (libDbRef.isEmpty())
+                    errors.add("- Library protein database (FASTA) is not specified.");
+                else if (!new File(libDbRef).exists())
+                    errors.add("- Library protein database file not found.");
 
                 // 4. Output Directory
                 checkOutDir.accept(null);
 
                 // 5. Python
                 checkPython.accept(null);
-                 
-                // 6. DIA-NN (Not required per user req, but double check if logic changed? 
+
+                // 6. DIA-NN (Not required per user req, but double check if logic changed?
                 // User said "workflow 1 does not need DIA-NN", so skipping checkDiann)
-                 
+
                 // 7. MSConvert (if raw)
-                if (hasRaw) checkMsConvert.accept(null);
+                if (hasRaw)
+                    checkMsConvert.accept(null);
                 break;
 
             case 2: // Whole Workflow
                 // 1. Train MS Files
-                if (effectiveTrainFiles.isEmpty()) errors.add("- No Training MS data files selected.");
-                else for(String p : effectiveTrainFiles) if(!new File(p).exists()) { errors.add("- Training MS File(s) not found: " + p); break; }
+                if (effectiveTrainFiles.isEmpty())
+                    errors.add("- No Training MS data files selected.");
+                else
+                    for (String p : effectiveTrainFiles)
+                        if (!new File(p).exists()) {
+                            errors.add("- Training MS File(s) not found: " + p);
+                            break;
+                        }
 
                 // 2. Train Protein DB
                 String trainDb2 = trainDbFileField.getText().trim();
-                if (trainDb2.isEmpty()) errors.add("- Training protein database (FASTA) is not specified.");
-                else if (!new File(trainDb2).exists()) errors.add("- Training protein database file not found.");
+                if (trainDb2.isEmpty())
+                    errors.add("- Training protein database (FASTA) is not specified.");
+                else if (!new File(trainDb2).exists())
+                    errors.add("- Training protein database file not found.");
 
                 // 3. Project MS Files
-                if (effectiveProjectFiles.isEmpty()) errors.add("- No Project MS data files selected.");
-                else for(String p: effectiveProjectFiles) if(!new File(p).exists()) { errors.add("- Project MS File(s) not found: " + p); break; }
+                if (effectiveProjectFiles.isEmpty())
+                    errors.add("- No Project MS data files selected.");
+                else
+                    for (String p : effectiveProjectFiles)
+                        if (!new File(p).exists()) {
+                            errors.add("- Project MS File(s) not found: " + p);
+                            break;
+                        }
 
                 // 4. Library Protein DB
                 String libDb2 = libraryDbFileField.getText().trim();
-                if (libDb2.isEmpty()) errors.add("- Library protein database (FASTA) is not specified.");
-                else if (!new File(libDb2).exists()) errors.add("- Library protein database file not found.");
+                if (libDb2.isEmpty())
+                    errors.add("- Library protein database (FASTA) is not specified.");
+                else if (!new File(libDb2).exists())
+                    errors.add("- Library protein database file not found.");
 
                 // 5. Output Directory
                 checkOutDir.accept(null);
@@ -4845,7 +4917,8 @@ public class CarafeGUI extends JFrame {
                 checkDiann.accept(null);
 
                 // 8. MSConvert (if raw)
-                if (hasRaw) checkMsConvert.accept(null);
+                if (hasRaw)
+                    checkMsConvert.accept(null);
                 break;
         }
 
@@ -4869,28 +4942,31 @@ public class CarafeGUI extends JFrame {
         // 2: Model Training
         // 3: Library Generation
         // 4: Console (Do not freeze)
-        
+
         // Safety check on tab count
         if (tabbedPane != null) {
             int tabCount = tabbedPane.getTabCount();
-            
+
             // Freeze/Unfreeze first 4 tabs
             for (int i = 0; i < Math.min(tabCount, 4); i++) {
                 Component tabComp = tabbedPane.getComponentAt(i);
                 if (tabComp instanceof Container) {
-                     enableComponents((Container) tabComp, !frozen);
+                    enableComponents((Container) tabComp, !frozen);
                 }
             }
         }
-        
-        // Also ensure the run button is toggled (handled in finishExecution/runCarafe but good for safety)
-        if (runButton != null) runButton.setEnabled(!frozen);
+
+        // Also ensure the run button is toggled (handled in finishExecution/runCarafe
+        // but good for safety)
+        if (runButton != null)
+            runButton.setEnabled(!frozen);
     }
 
     private void enableComponents(Container container, boolean enable) {
         Component[] components = container.getComponents();
         for (Component component : components) {
-            // Do not disable scroll panes, viewports, or scrollbars so scrolling remains possible
+            // Do not disable scroll panes, viewports, or scrollbars so scrolling remains
+            // possible
             if (component instanceof JScrollPane || component instanceof JViewport || component instanceof JScrollBar) {
                 // However, we still need to recurse into them (e.g. into the viewport's view)
                 if (component instanceof Container) {
@@ -4898,9 +4974,9 @@ public class CarafeGUI extends JFrame {
                 }
                 continue;
             }
-            
+
             component.setEnabled(enable);
-            
+
             if (component instanceof Container) {
                 enableComponents((Container) component, enable);
             }
@@ -5005,25 +5081,27 @@ public class CarafeGUI extends JFrame {
                 msConvertExec = selected.toString().trim();
             }
         }
-        
+
         // If combo was empty/default, try prefs fallback if it differs from default
         if (msConvertExec.equals("msconvert")) {
-             String pref = prefs.get(PREF_MSCONVERT_PATH, "");
-             if (!pref.isEmpty()) msConvertExec = pref;
+            String pref = prefs.get(PREF_MSCONVERT_PATH, "");
+            if (!pref.isEmpty())
+                msConvertExec = pref;
         }
 
         System.out.println("DEBUG: Using MSConvert executable: " + msConvertExec);
-        
+
         if (msConvertExec.equalsIgnoreCase("msconvert")) {
-             // TODO
+            // TODO
         } else {
-             // If explicit path, verify existence
-             if (!new File(msConvertExec).exists()) {
-                 JOptionPane.showMessageDialog(this, 
-                     "The specified MSConvert executable does not exist:\n" + msConvertExec + "\nUsing default 'msconvert' command instead.",
-                     "Configuration Warning", JOptionPane.WARNING_MESSAGE);
-                 msConvertExec = "msconvert";
-             }
+            // If explicit path, verify existence
+            if (!new File(msConvertExec).exists()) {
+                JOptionPane.showMessageDialog(this,
+                        "The specified MSConvert executable does not exist:\n" + msConvertExec
+                                + "\nUsing default 'msconvert' command instead.",
+                        "Configuration Warning", JOptionPane.WARNING_MESSAGE);
+                msConvertExec = "msconvert";
+            }
         }
         if (msConvertExec.contains(" "))
             msConvertExec = "\"" + msConvertExec + "\"";
@@ -5040,8 +5118,6 @@ public class CarafeGUI extends JFrame {
 
         return cmd.toString();
     }
-
-
 
     public static void main(String[] args) {
         System.setProperty("awt.useSystemAAFontSettings", "on");
@@ -5064,5 +5140,67 @@ public class CarafeGUI extends JFrame {
             CarafeGUI gui = new CarafeGUI();
             gui.setVisible(true);
         });
+    }
+
+    private void chooseFile(String title, int selectionMode, javax.swing.filechooser.FileFilter filter,
+            java.util.function.Consumer<File> onFileSelected) {
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        new Thread(() -> {
+            try {
+                JFileChooser chooser = new JFileChooser();
+                String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
+                chooser.setCurrentDirectory(new File(lastDir));
+                chooser.setFileSelectionMode(selectionMode);
+                if (title != null) {
+                    chooser.setDialogTitle(title);
+                }
+                if (filter != null) {
+                    chooser.setFileFilter(filter);
+                }
+                SwingUtilities.invokeLater(() -> {
+                    setCursor(Cursor.getDefaultCursor());
+                    if (chooser.showOpenDialog(CarafeGUI.this) == JFileChooser.APPROVE_OPTION) {
+                        File f = chooser.getSelectedFile();
+                        if (f != null) {
+                            onFileSelected.accept(f);
+                        }
+                    }
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                ex.printStackTrace();
+            }
+        }).start();
+    }
+    private void chooseFiles(String title, String[] extensions, String description, java.util.function.Consumer<File[]> onFilesSelected) {
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        new Thread(() -> {
+            try {
+                JFileChooser chooser = new JFileChooser();
+                String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
+                chooser.setCurrentDirectory(new File(lastDir));
+                chooser.setMultiSelectionEnabled(true);
+                chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+                if (title != null) {
+                    chooser.setDialogTitle(title);
+                }
+                if (extensions != null && extensions.length > 0) {
+                    javax.swing.filechooser.FileNameExtensionFilter filter = new javax.swing.filechooser.FileNameExtensionFilter(description, extensions);
+                    chooser.setFileFilter(filter);
+                }
+                SwingUtilities.invokeLater(() -> {
+                    setCursor(Cursor.getDefaultCursor());
+                    if (chooser.showOpenDialog(CarafeGUI.this) == JFileChooser.APPROVE_OPTION) {
+                        File[] files = chooser.getSelectedFiles();
+                        if (files != null && files.length > 0) {
+                             onFilesSelected.accept(files);
+                        }
+                    }
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
+                ex.printStackTrace();
+            }
+        }).start();
     }
 }
