@@ -291,6 +291,7 @@ public class CarafeGUI extends JFrame {
         UIManager.put("Component.focusWidth", 1);
         UIManager.put("Component.innerFocusWidth", 0);
         UIManager.put("Component.hideMnemonics", true);
+        ToolTipManager.sharedInstance().setDismissDelay(30000);
     }
 
     private static Color lafColor(String key, Color fallback) {
@@ -965,6 +966,11 @@ public class CarafeGUI extends JFrame {
         int gridy = 0;
 
         trainMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train MS File:",
+                "MS/MS data for model training.\n" + 
+                "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n"+
+                "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"+
+                "Thermo raw files are only supported when starting with DIA-NN search or performing end-to-end DIA search.\n"+
+                "When the format is Thermo raw, MSConvert (ProteoWizard) needs to be installed (convert raw to mzML for Carafe).\n",
                 trainMsFileField = createTextField("Path to mzML/raw file or folder for training"),
                 createMsButtonsPanel(trainMsFileField));
 
@@ -992,43 +998,64 @@ public class CarafeGUI extends JFrame {
         });
 
         diannReportRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DIA-NN Report:",
+                "A peptide detection file used for model training.\n" +
+                "The main report file from DIA-NN (from v1.8.1 to v2.x.x) is supported.\n" +
+                "Supported formats: tsv, parquet. (e.g. report.tsv or report.parquet)\n" +
+                "This file must be directly generated using the same input train MS file(s).",
                 diannReportFileField = createTextField("Path to DIA-NN report.tsv or report.parquet"),
                 createBrowseButton(diannReportFileField, "DIA-NN Report", new String[] { "tsv", "parquet" }));
 
         trainDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train Protein Database:",
+                "Protein database used for peptide detection on the train MS file(s).\n" +
+                "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)\n",
                 trainDbFileField = createTextField("Path to protein FASTA for training"),
                 createBrowseButton(trainDbFileField, "FASTA Files", new String[] { "fasta", "fa" }));
 
+        // This is the MS/MS data for peptide detection using the fine-tuned spectral library
         projectMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Project MS File:",
+                "MS/MS data for peptide detection using the fine-tuned spectral library using DIA-NN.\n" +
+                "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n"+
+                "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"+
+                "When the format is Thermo raw, users need to make sure DIA-NN is configured to use Thermo raw format.",
                 projectMsFileField = createTextField("Path to mzML/raw file or folder for project"),
                 createMsButtonsPanel(projectMsFileField));
 
         libraryDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Library Protein Database:",
+                "Protein database used for fine-tuned spectral library generation.\n" +
+                "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)\n",
                 libraryDbFileField = createTextField("Path to protein FASTA for library generation"),
                 createBrowseButton(libraryDbFileField, "FASTA Files", new String[] { "fasta", "fa" }));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Output Directory:",
+                "Output directory for the analysis.\n",
                 outputDirField = createTextField("Path to output directory"),
                 createFolderButton(outputDirField));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Python Executable:",
+                "Python path (the path of python.exe (Windows) or python (Linux/Mac)) for Carafe model fine-tuning.\n"+
+                "Carafe requires a customized AlphaPeptDeep python package for model fine-tuning.\n"+
+                "Users can install all the dependent python packages by clicking the 'Install' button.\n",
                 pythonPathCombo = createPythonComboBox(),
                 createPythonBrowseButton());
 
         diannExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DIA-NN Executable:",
+                "DIA-NN path (the path of diann.exe (NOT DIA-NN.exe) (Windows) or diann (Linux/Mac)).\n",
                 diannPathCombo = createDiannComboBox(),
                 createDiannBrowseButton());
 
         msConvertExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "MSConvert Executable:",
+                "MSConvert path (the path of msconvert.exe (NOT MSConvertGUI.exe) (Windows).\n",
                 msConvertPathCombo = createMsConvertComboBox(),
                 createMsConvertBrowseButton());
 
         diannAdditionalOptionsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++,
                 "DIA-NN additional options:",
+                "Additional command line options for DIA-NN.\n",
                 diannAdditionalOptionsField = createTextField("DIA-NN additional options"),
                 null);
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Carafe additional options:",
+                "Additional command line options for Carafe.\n",
                 carafeAdditionalOptionsField = createTextField("Carafe additional options"),
                 null);
 
@@ -1062,7 +1089,7 @@ public class CarafeGUI extends JFrame {
         return panel;
     }
 
-    private java.util.List<JComponent> addInputRowToPanel(JPanel container, int gridy, String labelText,
+    private java.util.List<JComponent> addInputRowToPanel(JPanel container, int gridy, String labelText, String toolTipText,
             JComponent inputField, JComponent buttonComponent) {
         java.util.List<JComponent> rowComponents = new java.util.ArrayList<>();
         GridBagConstraints gbc = new GridBagConstraints();
@@ -1073,7 +1100,7 @@ public class CarafeGUI extends JFrame {
 
         gbc.gridx = 0;
         gbc.weightx = 0;
-        JLabel label = createLabel(labelText);
+        JLabel label = createLabel(labelText, toolTipText);
         container.add(label, gbc);
         rowComponents.add(label);
 
@@ -1419,7 +1446,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.weightx = 0;
-        panel.add(createLabel("False Discovery Rate:"), gbc);
+        panel.add(createLabel("False Discovery Rate:", "The false discovery rate threshold (or q-value) for peptide precursor filtering."), gbc);
 
         fdrSpinner = createDoubleSpinner(0.01, 0.001, 0.1, 0.005);
         gbc.gridx = 1;
@@ -1429,7 +1456,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.weightx = 0;
-        panel.add(createLabel("PTM Site Probability:"), gbc);
+        panel.add(createLabel("PTM Site Probability:", "The site probability threshold for PTM peptideform detection filtering.\n"+
+                                                    "This is used when fine-tuning models for PTM dataset such as phosphoproteomics data."), gbc);
 
         ptmSiteProbSpinner = createDoubleSpinner(0.75, 0.0, 1.0, 0.05);
         gbc.gridx = 1;
@@ -1439,7 +1467,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 2;
         gbc.weightx = 0;
-        panel.add(createLabel("PTM Site Q-value:"), gbc);
+        panel.add(createLabel("PTM Site Q-value:", "The q-value threshold for PTM peptideform detection filtering.\n"+
+                                                   "This is used when fine-tuning models for PTM dataset such as phosphoproteomics data."), gbc);
 
         ptmSiteQvalueSpinner = createDoubleSpinner(0.01, 0.001, 0.1, 0.005);
         gbc.gridx = 1;
@@ -1449,7 +1478,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 3;
         gbc.weightx = 0;
-        panel.add(createLabel("Fragment Ion Mass Tolerance:"), gbc);
+        panel.add(createLabel("Fragment Ion Mass Tolerance:", "The mass tolerance for fragment ion mass tolerance used\n"+
+                                                              "during fragment ion intensity annotation and XIC extraction."), gbc);
 
         fragTolSpinner = createSpinner(20, 1, 100, 1);
         gbc.gridx = 1;
@@ -1459,7 +1489,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 4;
         gbc.weightx = 0;
-        panel.add(createLabel("Fragment Ion Mass Tolerance Units:"), gbc);
+        panel.add(createLabel("Fragment Ion Mass Tolerance Units:", "The mass tolerance unit for fragment ion mass tolerance."), gbc);
 
         String[] tolUnits = { "ppm", "Da" };
         fragTolUnitCombo = new JComboBox<>(tolUnits);
@@ -1471,7 +1501,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 5;
         gbc.weightx = 0;
-        panel.add(createLabel("Refine Peak Boundaries:"), gbc);
+        panel.add(createLabel("Refine Peak Boundaries:", "Refine the peak boundaries for peptide-centric shared fragment ion detection.\n"+
+                                                         "If uncheck, the peak boundaries will be set based on the input peptide detection file."), gbc);
 
         refineBoundaryCheckbox = createCheckBox("", true);
         gbc.gridx = 1;
@@ -1481,7 +1512,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 6;
         gbc.weightx = 0;
-        panel.add(createLabel("Peak refinement RT Window:", "RT window for refine peak boundary in minute"), gbc);
+        panel.add(createLabel("Peak refinement RT Window:", "RT window for refine peak boundary in minute.\n"+
+                                                            "This is used to refine the peak boundaries for\n"+
+                                                            "peptide-centric shared fragment ion detection.\n"+
+                                                            "Set to 'auto' to set it based on LC gradient length."), gbc);
 
         rtPeakWindowField = createTextField("auto");
         rtPeakWindowField.setText("auto");
@@ -1492,7 +1526,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 7;
         gbc.weightx = 0;
-        panel.add(createLabel("XIC Correlation:"), gbc);
+        panel.add(createLabel("XIC Correlation:","The correlation threshold for fragment ion to be considered as valid\n"+
+                                                 "for fragment ion intensity model finetuning."), gbc);
 
         xicCorSpinner = createDoubleSpinner(0.8, 0.0, 1.0, 0.05);
         gbc.gridx = 1;
@@ -1555,7 +1590,9 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.weightx = 0;
-        panel.add(createLabel("Model Type:"), gbc);
+        panel.add(createLabel("Model Type:","The model type to use for model finetuning.\n"+
+                              "For global proteome, use the 'general' model.\n"+
+                              "For phosphoproteome, use the 'phosphorylation' model."), gbc);
 
         String[] modes = { "general", "phosphorylation" };
         modeCombo = new JComboBox<>(modes);
@@ -1567,7 +1604,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.weightx = 0;
-        panel.add(createLabel("Normalized Collision Energy:"), gbc);
+        panel.add(createLabel("Normalized Collision Energy:","The normalized collision energy (NCE) to use for deep learning model training and inference.\n"+
+                              "NCE is one of the inputs to the deep learning model\n"+
+                              "for fragment ion intensity model training and inference.\n"+
+                              "When it is set to 'auto', Carafe will determine the NCE from the training MS/MS data and use it."), gbc);
         nceField = createTextField("e.g., 27 or auto");
         nceField.setText("auto");
         gbc.gridx = 1;
@@ -1577,7 +1617,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 2;
         gbc.weightx = 0;
-        panel.add(createLabel("MS Instrument Type:"), gbc);
+        panel.add(createLabel("MS Instrument Type:","The MS instrument type to use for deep learning model training and inference.\n"+
+                                                    "MS instrument type is one of the inputs to the deep learning model\n"+
+                                                    "for fragment ion intensity model training and inference.\n"+
+                                                    "When it is set to 'auto', Carafe will determine the instrument type from the training MS/MS data and use it."), gbc);
 
         String[] msInstruments = { "auto", "QE", "Lumos", "timsTOF", "SciexTOF", "ThermoTOF" };
         msInstrumentField = new JComboBox<>(msInstruments);
@@ -1592,7 +1635,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 3;
         gbc.weightx = 0;
-        panel.add(createLabel("Computational Device:"), gbc);
+        panel.add(createLabel("Computational Device:","The computational device to use for deep learning model training and inference.\n"+
+        "GPU is recommended for faster training (requires CUDA-compatible GPU)\n"+
+        "If GPU is not available, Carafe will automatically fall back to CPU.\n"+
+        "When it is set to 'auto', Carafe will automatically detect the available device and use it."), gbc);
 
         String[] devices = { "auto", "gpu", "cpu" };
         deviceCombo = new JComboBox<>(devices);
@@ -1635,7 +1681,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.weightx = 0;
-        panel.add(createLabel("Enzyme:"), gbc);
+        panel.add(createLabel("Enzyme:","The enzyme to consider for protein in-silico digestion during library generation."), gbc);
 
         String[] enzymes = {
                 "1: Trypsin (default)",
@@ -1657,7 +1703,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.weightx = 0;
-        panel.add(createLabel("Missed Cleavages:"), gbc);
+        panel.add(createLabel("Missed Cleavages:","The maximum number of missed cleavages to consider\n"+
+                                                  " for protein in-silico digestion during library generation."), gbc);
 
         missCleavageSpinner = createSpinner(1, 0, 5, 1);
         gbc.gridx = 1;
@@ -1667,7 +1714,9 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 2;
         gbc.weightx = 0;
-        panel.add(createLabel("Fixed Modification Available:"), gbc);
+        panel.add(createLabel("Fixed Modification Available:","The available fixed modifications to consider for library generation.\n"+
+                              "Each modification is represented by an integer number.\n"+
+                              "For example, 0 means no modification, 1 means Carbamidomethyl of C, etc."), gbc);
 
         // Populate Fixed Modifications dynamically
         LinkedHashMap<Integer, String> mod_id2name = CModification.getInstance().get_top_mod_list(26);
@@ -1704,7 +1753,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 3;
         gbc.weightx = 0;
-        panel.add(createLabel("Fixed Modifications Selected:"), gbc);
+        panel.add(createLabel("Fixed Modifications Selected:","The selected fixed modifications to consider for library generation.\n"+
+                              "Each modification is represented by an integer number.\n"+
+                              "For example, 0 means no modification, 1 means Carbamidomethyl of C, etc.\n"+
+                              "Multiple modifications can be selected by separating them with commas (e.g., 1,11,12)."), gbc);
 
         fixModSelectedField = createTextField("e.g., 1");
         fixModSelectedField.setText("1");
@@ -1715,7 +1767,9 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 4;
         gbc.weightx = 0;
-        panel.add(createLabel("Variable Modifications Available:"), gbc);
+        panel.add(createLabel("Variable Modifications Available:","The available variable modifications to consider for library generation.\n"+"Each modification is represented by an integer number.\n"+
+                              "For example, 0 means no modification, 2 means Oxidation of M,\n"+
+                              "7 means Phospho of S, \"7,8,9\" means Phospho of S, T and Y, etc."), gbc);
 
         // Populate Variable Modifications with presets + dynamic list
         Vector<String> varModItems = new Vector<>();
@@ -1751,7 +1805,11 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 5;
         gbc.weightx = 0;
-        panel.add(createLabel("Variable Modifications Selected:"), gbc);
+        panel.add(createLabel("Variable Modifications Selected:","The selected variable modifications to consider for library generation.\n"+
+                              "Each modification is represented by an integer number.\n"+
+                              "For example, 0 means no modification, 2 means Oxidation of M,\n"+
+                              "7 means Phospho of S, \"7,8,9\" means Phospho of S, T and Y, etc.\n"+
+                              "Multiple modifications can be selected by separating them with commas (e.g., 2,7,8,9)."), gbc);
 
         varModSelectedField = createTextField("e.g., 0 or 2");
         varModSelectedField.setText("0");
@@ -1762,7 +1820,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 6;
         gbc.weightx = 0;
-        panel.add(createLabel("Maximum Variable Modifications:"), gbc);
+        panel.add(createLabel("Maximum Variable Modifications:","The maximum number of variable modifications to consider for library generation."), gbc);
 
         maxVarSpinner = createSpinner(1, 0, 5, 1);
         gbc.gridx = 1;
@@ -1772,7 +1830,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 7;
         gbc.weightx = 0;
-        panel.add(createLabel("Clip N-Terminal Methionine:"), gbc);
+        panel.add(createLabel("Clip N-Terminal Methionine:","When digesting a protein starting with amino acid M,\n"+
+                              "two copies of the leading peptides (with and without the N-terminal M) are considered if checked."), gbc);
 
         clipNmCheckbox = createCheckBox("", true);
         gbc.gridx = 1;
@@ -1782,7 +1841,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 8;
         gbc.weightx = 0;
-        panel.add(createLabel("Minimum Peptide Length:"), gbc);
+        panel.add(createLabel("Minimum Peptide Length:","The minimum length of peptide to consider for library generation."), gbc);
 
         minLengthSpinner = createSpinner(7, 1, 50, 1);
         gbc.gridx = 1;
@@ -1792,7 +1851,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 9;
         gbc.weightx = 0;
-        panel.add(createLabel("Maximum Peptide Length:"), gbc);
+        panel.add(createLabel("Maximum Peptide Length:","The maximum length of peptide to consider for library generation."), gbc);
 
         maxLengthSpinner = createSpinner(35, 1, 100, 1);
         gbc.gridx = 1;
@@ -1802,7 +1861,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 10;
         gbc.weightx = 0;
-        panel.add(createLabel("Minimum Peptide m/z:"), gbc);
+        panel.add(createLabel("Minimum Peptide m/z:","The minimum m/z of peptide to consider for library generation.\n"+
+                              "This setting will be changed based on the minimum precursor m/z detected in the training MS/MS data."), gbc);
 
         minPepMzSpinner = createSpinner(300, 100, 2000, 50);
         gbc.gridx = 1;
@@ -1812,7 +1872,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 11;
         gbc.weightx = 0;
-        panel.add(createLabel("Maximum Peptide m/z:"), gbc);
+        panel.add(createLabel("Maximum Peptide m/z:","The maximum m/z of peptide to consider for library generation.\n"+
+                              "This setting will be changed based on the maximum precursor m/z detected in the training MS/MS data."), gbc);
 
         maxPepMzSpinner = createSpinner(1800, 100, 3000, 50);
         gbc.gridx = 1;
@@ -1822,7 +1883,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 12;
         gbc.weightx = 0;
-        panel.add(createLabel("Minimum Peptide Charge:"), gbc);
+        panel.add(createLabel("Minimum Peptide Charge:","The minimum charge of peptide to consider for library generation."), gbc);
 
         minPepChargeSpinner = createSpinner(2, 1, 10, 1);
         gbc.gridx = 1;
@@ -1832,7 +1893,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 13;
         gbc.weightx = 0;
-        panel.add(createLabel("Maximum Peptide Charge:"), gbc);
+        panel.add(createLabel("Maximum Peptide Charge:","The maximum charge of peptide to consider for library generation."), gbc);
 
         maxPepChargeSpinner = createSpinner(4, 1, 10, 1);
         gbc.gridx = 1;
