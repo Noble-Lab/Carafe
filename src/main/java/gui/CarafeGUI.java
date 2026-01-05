@@ -1066,7 +1066,7 @@ public class CarafeGUI extends JFrame {
                         "  - Requires: Train MS files, Train database, Library database\n\n" +
                         "Workflow 2: Generate spectral library from existing DIA-NN results\n" +
                         "  - Requires: DIA-NN report file, Train MS files, Library database\n\n" +
-                        "Workflow 3: Complete DIA analysis pipeline\n" +
+                        "Workflow 3: Complete DIA analysis pipeline (Carafe+DIA-NN)\n" +
                         "  - Requires: Train MS, Project MS, both databases"),
                 BorderLayout.CENTER);
 
@@ -5172,15 +5172,10 @@ public class CarafeGUI extends JFrame {
 
                 Quick Start:
                 1. For fine-tuned library generation:
-                   - Provide PSM file (DIA-NN report.tsv or .parquet)
-                   - Provide MS file(s) in mzML format
+                   - Provide a peptide detection file (e.g., DIA-NN report.tsv or report.parquet)
+                   - Provide MS file(s) in mzML format/Thermo raw/Bruker .d format
                    - Provide protein database (FASTA)
                    - Configure settings and click Run
-
-                2. For pretrained model library generation:
-                   - Only provide protein database (FASTA)
-                   - Set NCE and MS instrument in Advanced settings
-                   - Click Run
 
                 For more information, visit:
                 https://github.com/Noble-Lab/Carafe
