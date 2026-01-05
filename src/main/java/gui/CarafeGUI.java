@@ -970,7 +970,7 @@ public class CarafeGUI extends JFrame {
                 "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n"+
                 "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"+
                 "Thermo raw files are only supported when starting with DIA-NN search or performing end-to-end DIA search.\n"+
-                "When the format is Thermo raw, MSConvert (ProteoWizard) needs to be installed (convert raw to mzML for Carafe).\n",
+                "When the format is Thermo raw, MSConvert (ProteoWizard) needs to be installed (convert raw to mzML for Carafe).",
                 trainMsFileField = createTextField("Path to mzML/raw file or folder for training"),
                 createMsButtonsPanel(trainMsFileField));
 
@@ -1007,7 +1007,7 @@ public class CarafeGUI extends JFrame {
 
         trainDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train Protein Database:",
                 "Protein database used for peptide detection on the train MS file(s).\n" +
-                "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)\n",
+                "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
                 trainDbFileField = createTextField("Path to protein FASTA for training"),
                 createBrowseButton(trainDbFileField, "FASTA Files", new String[] { "fasta", "fa" }));
 
@@ -1022,40 +1022,40 @@ public class CarafeGUI extends JFrame {
 
         libraryDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Library Protein Database:",
                 "Protein database used for fine-tuned spectral library generation.\n" +
-                "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)\n",
+                "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
                 libraryDbFileField = createTextField("Path to protein FASTA for library generation"),
                 createBrowseButton(libraryDbFileField, "FASTA Files", new String[] { "fasta", "fa" }));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Output Directory:",
-                "Output directory for the analysis.\n",
+                "Output directory for the analysis.",
                 outputDirField = createTextField("Path to output directory"),
                 createFolderButton(outputDirField));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Python Executable:",
                 "Python path (the path of python.exe (Windows) or python (Linux/Mac)) for Carafe model fine-tuning.\n"+
                 "Carafe requires a customized AlphaPeptDeep python package for model fine-tuning.\n"+
-                "Users can install all the dependent python packages by clicking the 'Install' button.\n",
+                "Users can install all the dependent python packages by clicking the 'Install' button.",
                 pythonPathCombo = createPythonComboBox(),
                 createPythonBrowseButton());
 
         diannExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DIA-NN Executable:",
-                "DIA-NN path (the path of diann.exe (NOT DIA-NN.exe) (Windows) or diann (Linux/Mac)).\n",
+                "DIA-NN path (the path of diann.exe (NOT DIA-NN.exe) (Windows) or diann (Linux/Mac)).",
                 diannPathCombo = createDiannComboBox(),
                 createDiannBrowseButton());
 
         msConvertExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "MSConvert Executable:",
-                "MSConvert path (the path of msconvert.exe (NOT MSConvertGUI.exe) (Windows).\n",
+                "MSConvert path (the path of msconvert.exe (NOT MSConvertGUI.exe) (Windows).",
                 msConvertPathCombo = createMsConvertComboBox(),
                 createMsConvertBrowseButton());
 
         diannAdditionalOptionsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++,
                 "DIA-NN additional options:",
-                "Additional command line options for DIA-NN.\n",
+                "Additional command line options for DIA-NN.",
                 diannAdditionalOptionsField = createTextField("DIA-NN additional options"),
                 null);
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Carafe additional options:",
-                "Additional command line options for Carafe.\n",
+                "Additional command line options for Carafe.",
                 carafeAdditionalOptionsField = createTextField("Carafe additional options"),
                 null);
 
