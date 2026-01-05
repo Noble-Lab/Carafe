@@ -4036,6 +4036,10 @@ public class CarafeGUI extends JFrame {
             prefs.put(PREF_PYTHON_PATH, pythonPath);
         }
 
+        // Automatically save screenshots of parameter panels at the start
+        // Ensure this runs on EDT before background thread starts
+        saveParameterScreenshots();
+
         executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
             try {
@@ -5329,5 +5333,86 @@ public class CarafeGUI extends JFrame {
                 ex.printStackTrace();
             }
         }).start();
+    }
+
+    private void saveParameterScreenshots() {
+        String outDir = outputDirField.getText().trim();
+        if (outDir.isEmpty()) {
+             // Should not happen if workflow ran, but safety check
+            return;
+        }
+        
+        outDir = outDir + File.separator + "parameter_screenshots";
+        File dir = new File(outDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+
+        // We want to capture specific tabs that contain parameters.
+        // Indices: 0=Workflow, 1=Training Data, 2=Model Training, 3=Library Generation
+        String[] tabNames = {"workflow", "training_data", "model_training", "library_generation"};
+
+        logToConsole("\n[INFO] Saving parameter panel screenshots to: " + outDir + "\n");
+
+        // 1. Capture Full Window Screenshot (Current View)
+        try {
+            java.awt.image.BufferedImage fullWindowImage = new java.awt.image.BufferedImage(
+                    this.getWidth(), this.getHeight(), java.awt.image.BufferedImage.TYPE_INT_RGB);
+            Graphics2D g2 = fullWindowImage.createGraphics();
+            this.validate();
+            this.repaint();
+            this.print(g2); 
+            g2.dispose();
+
+            File fullFile = new File(dir, "full_window_capture.png");
+            javax.imageio.ImageIO.write(fullWindowImage, "png", fullFile);
+            logToConsole(" - Saved: " + fullFile.getName() + " (Full Window)\n");
+            
+        } catch (Exception e) {
+             logToConsole(" - Failed to save full window screenshot: " + e.getMessage() + "\n");
+        }
+
+        // 2. Capture Individual Content Panels (Full Scroll Capture)
+        for (int i = 0; i < tabNames.length; i++) {
+            if (i >= tabbedPane.getTabCount()) break;
+
+            Component tabComponent = tabbedPane.getComponentAt(i);
+            
+            // The tabs are JScrollPanes wrapping the actual content panels.
+            // We need the view component to capture the full size (including off-screen).
+            Component view = tabComponent;
+            if (tabComponent instanceof JScrollPane sp) {
+                view = sp.getViewport().getView();
+            }
+
+            if (view != null) {
+                try {
+                    // Layout buffer if needed, though usually valid by now
+                    if (view.getWidth() <= 0 || view.getHeight() <= 0) {
+                        continue; 
+                    }
+                    
+                    java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(
+                            view.getWidth(), view.getHeight(), java.awt.image.BufferedImage.TYPE_INT_RGB);
+                    
+                    Graphics2D g2 = image.createGraphics();
+                    // Fill background explicitly because some panels might be non-opaque or depend on parent background
+                    g2.setColor(view.getBackground());
+                    g2.fillRect(0, 0, image.getWidth(), image.getHeight());
+                    
+                    view.print(g2); // print() is often better than paint() for off-screen full capture
+                    g2.dispose();
+
+                    File file = new File(dir, "settings_" + tabNames[i] + ".png");
+                    javax.imageio.ImageIO.write(image, "png", file);
+                    logToConsole(" - Saved: " + file.getName() + "\n");
+
+                } catch (Exception e) {
+                    logToConsole(" - Failed to save screenshot for " + tabNames[i] + ": " + e.getMessage() + "\n");
+                }
+            }
+        }
+        
+        logToConsole("\n");
     }
 }
