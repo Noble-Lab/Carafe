@@ -19,30 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.prefs.Preferences;
 
-import javax.swing.BorderFactory;
 import javax.swing.*;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
-import javax.swing.JComponent;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JProgressBar;
-import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
-import javax.swing.JTabbedPane;
-import javax.swing.JTextArea;
-import javax.swing.JTextField;
-import javax.swing.JToggleButton;
-import javax.swing.Scrollable;
-import javax.swing.SpinnerNumberModel;
-import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import main.java.input.CModification;
@@ -780,6 +757,9 @@ public class CarafeGUI extends JFrame {
 
         headerPanel.add(headerTitlePanel, BorderLayout.WEST);
         headerPanel.add(headerRightPanel, BorderLayout.EAST);
+
+        // Ensure buttons panel is on top layer for mouse events when subtitle overlaps
+        headerPanel.setComponentZOrder(headerRightPanel, 0);
 
         // Sync initial state
         updateHeaderForegrounds();
@@ -2303,16 +2283,45 @@ public class CarafeGUI extends JFrame {
         return button;
     }
 
-    private JButton createFolderButton(JTextField targetField) {
-        JButton button = new JButton("Folder");
-        styleButton(button);
-        button.addActionListener(e -> {
+    private JPanel createFolderButton(JTextField targetField) {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        panel.setOpaque(false);
+
+        JButton folderButton = new JButton("Folder");
+        styleButton(folderButton);
+        folderButton.addActionListener(e -> {
             chooseFile("Select Folder", JFileChooser.DIRECTORIES_ONLY, null, f -> {
                 targetField.setText(f.getAbsolutePath());
                 prefs.put(PREF_LAST_DIR, f.getAbsolutePath());
             });
         });
-        return button;
+
+        JButton openButton = new JButton("Open");
+        styleButton(openButton);
+        openButton.setToolTipText("Open the output directory in file explorer");
+        openButton.addActionListener(e -> {
+            String path = targetField.getText().trim();
+            if (!path.isEmpty()) {
+                File dir = new File(path);
+                if (dir.exists() && dir.isDirectory()) {
+                    try {
+                        java.awt.Desktop.getDesktop().open(dir);
+                    } catch (IOException ex) {
+                        JOptionPane.showMessageDialog(this,
+                                "Failed to open directory: " + ex.getMessage(),
+                                "Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(this,
+                            "Directory does not exist: " + path,
+                            "Directory Not Found", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        });
+
+        panel.add(folderButton);
+        panel.add(openButton);
+        return panel;
     }
 
     private JPanel createPythonBrowseButton() {
@@ -2367,6 +2376,7 @@ public class CarafeGUI extends JFrame {
 
         JButton install = new JButton("Install");
         styleButton(install);
+        install.setToolTipText("Install Carafe dependent Python and Python packages automatically.");
         install.addActionListener(e -> {
             install.setEnabled(false);
             browse.setEnabled(false);
@@ -2750,6 +2760,19 @@ public class CarafeGUI extends JFrame {
                             File selectedFile = chooser.getSelectedFile();
                             String path = selectedFile.getAbsolutePath();
 
+                            // Auto-correct: if user selected DIA-NN.exe, check for diann.exe
+                            if (System.getProperty("os.name").toLowerCase().contains("windows")
+                                    && selectedFile.getName().equalsIgnoreCase("DIA-NN.exe")) {
+                                File diannExe = new File(selectedFile.getParent(), "diann.exe");
+                                if (diannExe.exists()) {
+                                    path = diannExe.getAbsolutePath();
+                                    JOptionPane.showMessageDialog(this,
+                                            "Auto-corrected to diann.exe (command-line version).\n" +
+                                                    "DIA-NN.exe is the GUI, diann.exe is required for batch processing.",
+                                            "Path Corrected", JOptionPane.INFORMATION_MESSAGE);
+                                }
+                            }
+
                             boolean found = false;
                             for (int i = 0; i < diannPathCombo.getItemCount(); i++) {
                                 if (diannPathCombo.getItemAt(i).equals(path)) {
@@ -2765,6 +2788,7 @@ public class CarafeGUI extends JFrame {
                             prefs.put(PREF_LAST_DIR, selectedFile.getParent());
                         }
                     });
+
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> setCursor(Cursor.getDefaultCursor()));
                     ex.printStackTrace();
@@ -4562,17 +4586,48 @@ public class CarafeGUI extends JFrame {
                 diannArgs.add("UniMod:35,15.994915,M");
             } else if (varModSelected.equalsIgnoreCase("0")) {
                 // no modification
-            } else if(varModSelected.equalsIgnoreCase("7,8,9")){
-                // 1.8.1: diann.exe --lib "" --threads 8 --verbose 1 --out "C:\tools\DIA-NN\1.8.1\report.tsv"        --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --monitor-mod UniMod:21 --reanalyse --relaxed-prot-inf --smart-profiling --peak-center --no-ifs-removal
-                // 1.9.1: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\1.9.1/report.tsv"     --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --relaxed-prot-inf --rt-profiling
-                // 1.9.2: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\1.9.2/report.tsv"     --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --relaxed-prot-inf --rt-profiling
-                // 2.0:   diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.0\report.parquet"   --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
-                // 2.0.2: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.0.2\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
-                // 2.1.0: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.1.0\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
-                // 2.2.0: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.2.0\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
-                // 2.2.1: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.2.1\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
-                // 2.3.0: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.3.0\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
-                // 2.3.1: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.3.1\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
+            } else if (varModSelected.equalsIgnoreCase("7,8,9")) {
+                // 1.8.1: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "C:\tools\DIA-NN\1.8.1\report.tsv" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --monitor-mod UniMod:21
+                // --reanalyse --relaxed-prot-inf --smart-profiling --peak-center
+                // --no-ifs-removal
+                // 1.9.1: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\1.9.1/report.tsv" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms
+                // --relaxed-prot-inf --rt-profiling
+                // 1.9.2: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\1.9.2/report.tsv" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms
+                // --relaxed-prot-inf --rt-profiling
+                // 2.0: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\2.0\report.parquet" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse
+                // --rt-profiling
+                // 2.0.2: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\2.0.2\report.parquet" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse
+                // --rt-profiling
+                // 2.1.0: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\2.1.0\report.parquet" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse
+                // --rt-profiling
+                // 2.2.0: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\2.2.0\report.parquet" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse
+                // --rt-profiling
+                // 2.2.1: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\2.2.1\report.parquet" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse
+                // --rt-profiling
+                // 2.3.0: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\2.3.0\report.parquet" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse
+                // --rt-profiling
+                // 2.3.1: diann.exe --lib "" --threads 8 --verbose 1 --out
+                // "D:\software\DIA-NN\2.3.1\report.parquet" --qvalue 0.01 --matrices --unimod4
+                // --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse
+                // --rt-profiling
                 // --var-mod UniMod:21,79.966331,STY --peptidoforms
                 diannArgs.add("--var-mods");
                 if ((int) maxVarSpinner.getValue() >= 1) {
@@ -4977,10 +5032,40 @@ public class CarafeGUI extends JFrame {
         java.util.function.Consumer<String> checkDiann = (label) -> {
             Object d = diannPathCombo.getSelectedItem();
             String path = (d != null) ? d.toString().trim() : "";
+            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
+
+            if (!path.isEmpty()) {
+                File pathFile = new File(path);
+
+                // Auto-correct: if path is a folder, look for diann executable inside
+                if (pathFile.exists() && pathFile.isDirectory()) {
+                    String exeName = isWindows ? "diann.exe" : "diann";
+                    File diannExe = new File(pathFile, exeName);
+                    if (diannExe.exists()) {
+                        path = diannExe.getAbsolutePath();
+                        diannPathCombo.setSelectedItem(path);
+                        prefs.put(PREF_DIANN_PATH, path);
+                        logToConsole("Auto-corrected folder to " + exeName + "\n");
+                    }
+                }
+                // Auto-correct: DIA-NN.exe to diann.exe on Windows
+                else if (isWindows && pathFile.getName().equalsIgnoreCase("DIA-NN.exe")) {
+                    File diannExe = new File(pathFile.getParent(), "diann.exe");
+                    if (diannExe.exists()) {
+                        path = diannExe.getAbsolutePath();
+                        diannPathCombo.setSelectedItem(path);
+                        prefs.put(PREF_DIANN_PATH, path);
+                        logToConsole("Auto-corrected DIA-NN.exe to diann.exe\n");
+                    }
+                }
+            }
+
             if (path.isEmpty())
                 errors.add("- DIA-NN executable is not specified.");
             else if (!new File(path).exists())
                 errors.add("- DIA-NN executable not found.");
+            else if (new File(path).isDirectory())
+                errors.add("- DIA-NN path is a folder. Please specify the executable file.");
         };
 
         java.util.function.Consumer<String> checkMsConvert = (label) -> {
@@ -5258,35 +5343,58 @@ public class CarafeGUI extends JFrame {
     }
 
     private void showHelp() {
-        String helpText = """
-                Carafe - AI-Powered Spectral Library Generator
+        String helpHtml = """
+                <html>
+                <body style="font-family: Segoe UI, sans-serif; font-size: 12pt; padding: 10px;">
+                <h2 style="margin-top: 0;">Carafe - AI-Powered Spectral Library Generator</h2>
 
-                Carafe generates experiment-specific in silico spectral libraries
-                using deep learning for DIA data analysis.
+                <p>Carafe generates experiment-specific in silico spectral libraries
+                using deep learning for DIA data analysis.</p>
 
-                Quick Start:
-                1. For fine-tuned library generation:
-                   - Provide a peptide detection file (e.g., DIA-NN report.tsv or report.parquet)
-                   - Provide MS file(s) in mzML format/Thermo raw/Bruker .d format
-                   - Provide protein database (FASTA)
-                   - Configure settings and click Run
+                <h3>Quick Start:</h3>
+                <p>For fine-tuned library generation:</p>
+                <ul style="margin-left: 20px; padding-left: 0;">
+                    <li>Provide a peptide detection file (e.g., DIA-NN report.tsv or report.parquet)</li>
+                    <li>Provide MS file(s) in mzML format/Thermo raw/Bruker .d format</li>
+                    <li>Provide protein database (FASTA)</li>
+                    <li>Configure settings and click Run</li>
+                </ul>
 
-                For more information, visit:
-                https://github.com/Noble-Lab/Carafe
 
-                Citation:
-                Wen, B., Hsu, C., Shteynberg, D. et al.
-                Carafe enables high quality in silico spectral library generation
-                for data-independent acquisition proteomics.
-                Nat Commun 16, 9815 (2025).
+
+                <p>For more information, visit:<br/>
+                <a href="https://github.com/Noble-Lab/Carafe">https://github.com/Noble-Lab/Carafe</a></p>
+
+                <h3>Citation:</h3>
+                <p>Bo Wen, Chris Hsu, David Shteynberg, Wen-Feng Zeng, Michael Riffle,<br/>
+                Alexis Chang, Miranda C. Mudge, Brook L. Nunn, Brendan X. MacLean,<br/>
+                Matthew D. Berg, Judit Villén, Michael J. MacCoss &amp; William S. Noble.<br/>
+                <a href="https://www.nature.com/articles/s41467-025-64928-4">Carafe enables high quality in silico spectral library generation
+                for data-independent acquisition proteomics.</a><br/>
+                <i>Nature Communications</i> 16, 9815 (2025).</p>
+                </body>
+                </html>
                 """;
 
-        JTextArea textArea = new JTextArea(helpText);
-        textArea.setEditable(false);
-        textArea.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        JEditorPane editorPane = new JEditorPane("text/html", helpHtml);
+        editorPane.setEditable(false);
+        editorPane.setOpaque(false);
+        editorPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
 
-        JScrollPane scrollPane = new JScrollPane(textArea);
-        scrollPane.setPreferredSize(new Dimension(500, 400));
+        // Make hyperlinks clickable
+        editorPane.addHyperlinkListener(e -> {
+            if (e.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
+                try {
+                    java.awt.Desktop.getDesktop().browse(e.getURL().toURI());
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            }
+        });
+
+        JScrollPane scrollPane = new JScrollPane(editorPane);
+        scrollPane.setPreferredSize(new Dimension(550, 450));
+        scrollPane.setBorder(null);
 
         JOptionPane.showMessageDialog(this, scrollPane, "Carafe Help", JOptionPane.INFORMATION_MESSAGE);
     }
