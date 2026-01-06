@@ -41,6 +41,7 @@ public class UniProtDownloadDialog extends JDialog {
     private JLabel spikeInLabel;
     private JButton spikeInBrowseButton;
     private JTextField downloadDirField;
+    private JButton downloadDirBrowseButton;
     private JButton downloadButton;
     private JButton cancelButton;
     private JProgressBar progressBar;
@@ -175,10 +176,11 @@ public class UniProtDownloadDialog extends JDialog {
         String defaultDir = (outputDirField != null) ? outputDirField.getText().trim() : "";
         downloadDirField.setText(defaultDir);
 
-        JButton browseDirButton = new JButton("Browse");
-        browseDirButton.setToolTipText("When the Output Directory from the main window is set, the download directory here could be empty.\n"+
-            "The database file will be downloaded to the Output Directory.");
-        browseDirButton.addActionListener(e -> {
+        downloadDirBrowseButton = new JButton("Browse");
+        downloadDirBrowseButton.setToolTipText(
+                "When the Output Directory from the main window is set, the download directory here could be empty.\n" +
+                        "The database file will be downloaded to the Output Directory.");
+        downloadDirBrowseButton.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             if (!downloadDirField.getText().isEmpty()) {
@@ -190,7 +192,7 @@ public class UniProtDownloadDialog extends JDialog {
         });
 
         dirPanel.add(downloadDirField, BorderLayout.CENTER);
-        dirPanel.add(browseDirButton, BorderLayout.EAST);
+        dirPanel.add(downloadDirBrowseButton, BorderLayout.EAST);
 
         contentPanel.add(dirPanel, gbc);
 
@@ -484,6 +486,7 @@ public class UniProtDownloadDialog extends JDialog {
         spikeInField.setEnabled(enabled);
         spikeInBrowseButton.setEnabled(enabled);
         downloadDirField.setEnabled(enabled);
+        downloadDirBrowseButton.setEnabled(enabled);
     }
 
     private void onCancel() {
