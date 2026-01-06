@@ -1044,7 +1044,7 @@ public class CarafeGUI extends JFrame {
                 "Protein database used for peptide detection on the train MS file(s).\n" +
                         "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
                 trainDbFileField = createTextField("Path to protein FASTA for training"),
-                createBrowseButton(trainDbFileField, "FASTA Files", new String[] { "fasta", "fa" }));
+                createDbButtonsPanel(trainDbFileField));
 
         // This is the MS/MS data for peptide detection using the fine-tuned spectral
         // library
@@ -1061,7 +1061,7 @@ public class CarafeGUI extends JFrame {
                 "Protein database used for fine-tuned spectral library generation.\n" +
                         "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
                 libraryDbFileField = createTextField("Path to protein FASTA for library generation"),
-                createBrowseButton(libraryDbFileField, "FASTA Files", new String[] { "fasta", "fa" }));
+                createDbButtonsPanel(libraryDbFileField));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Output Directory:",
                 "Output directory for the analysis.",
@@ -1162,7 +1162,7 @@ public class CarafeGUI extends JFrame {
     }
 
     private JPanel createMsButtonsPanel(JTextField targetField) {
-        JPanel msButtonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        JPanel msButtonsPanel = new JPanel(new GridLayout(1, 0, 5, 0));
 
         JButton browse;
         final java.util.List<String> associatedList;
@@ -2283,8 +2283,35 @@ public class CarafeGUI extends JFrame {
         return button;
     }
 
+    private JPanel createDbButtonsPanel(JTextField targetField) {
+        JPanel panel = new JPanel(new GridLayout(1, 0, 5, 0));
+        panel.setOpaque(false);
+
+        JButton browseButton = new JButton("Browse");
+        styleButton(browseButton);
+        browseButton.addActionListener(e -> {
+            chooseFile("FASTA Files", JFileChooser.FILES_ONLY,
+                    new FileNameExtensionFilter("FASTA Files", "fasta", "fa"), f -> {
+                        targetField.setText(f.getAbsolutePath());
+                        prefs.put(PREF_LAST_DIR, f.getParent());
+                    });
+        });
+
+        JButton downloadButton = new JButton("Download");
+        styleButton(downloadButton);
+        downloadButton.setToolTipText("Download protein database from UniProt");
+        downloadButton.addActionListener(e -> {
+            UniProtDownloadDialog dialog = new UniProtDownloadDialog(this, targetField, outputDirField);
+            dialog.showDialog();
+        });
+
+        panel.add(browseButton);
+        panel.add(downloadButton);
+        return panel;
+    }
+
     private JPanel createFolderButton(JTextField targetField) {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        JPanel panel = new JPanel(new GridLayout(1, 0, 5, 0));
         panel.setOpaque(false);
 
         JButton folderButton = new JButton("Folder");
@@ -2325,7 +2352,7 @@ public class CarafeGUI extends JFrame {
     }
 
     private JPanel createPythonBrowseButton() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        JPanel panel = new JPanel(new GridLayout(1, 0, 5, 0));
         panel.setOpaque(false);
 
         JButton browse = new JButton("Browse");
@@ -5514,6 +5541,14 @@ public class CarafeGUI extends JFrame {
                 FlatDarkLaf.setup();
             else
                 FlatLightLaf.setup();
+
+            // Optional: consistent font size across the app
+            UIManager.put("defaultFont", UIManager.getFont("Label.font").deriveFont(13f));
+
+            // Optional: rounder components (FlatLaf supports this)
+            UIManager.put("Component.arc", 12);
+            UIManager.put("Button.arc", 12);
+            UIManager.put("TextComponent.arc", 10);
 
             // Enable custom window decorations for FlatLaf to allow hiding the title bar
             // icon
