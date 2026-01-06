@@ -382,4 +382,12 @@ if __name__ == "__main__":
         fs.finalize_s3()
     except:
         pass
+
+    # Explicit GPU memory cleanup before forced exit
+    import gc
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()  # Wait for all GPU ops to finish
+        torch.cuda.empty_cache()  # Release cached memory back to driver
+
     os._exit(0)

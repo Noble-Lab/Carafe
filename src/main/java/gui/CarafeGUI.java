@@ -48,7 +48,6 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import main.java.input.CModification;
 import org.apache.commons.lang3.StringUtils;
 
-
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
@@ -223,7 +222,8 @@ public class CarafeGUI extends JFrame {
             if (iconUrl != null) {
                 ImageIcon icon = new ImageIcon(iconUrl);
                 setIconImage(icon.getImage());
-                if (java.awt.Taskbar.isTaskbarSupported() && java.awt.Taskbar.getTaskbar().isSupported(java.awt.Taskbar.Feature.ICON_IMAGE)) {
+                if (java.awt.Taskbar.isTaskbarSupported()
+                        && java.awt.Taskbar.getTaskbar().isSupported(java.awt.Taskbar.Feature.ICON_IMAGE)) {
                     java.awt.Taskbar.getTaskbar().setIconImage(icon.getImage());
                 }
             }
@@ -439,6 +439,8 @@ public class CarafeGUI extends JFrame {
             }
         }
         private boolean animationEnabled = true;
+        private int lastWidth = 0;
+        private int lastHeight = 0;
 
         DynamicHeaderPanel() {
             super(new BorderLayout());
@@ -464,8 +466,10 @@ public class CarafeGUI extends JFrame {
             addComponentListener(new java.awt.event.ComponentAdapter() {
                 @Override
                 public void componentShown(java.awt.event.ComponentEvent e) {
-                    if (animationEnabled) timer.start();
+                    if (animationEnabled)
+                        timer.start();
                 }
+
                 @Override
                 public void componentHidden(java.awt.event.ComponentEvent e) {
                     timer.stop();
@@ -511,6 +515,40 @@ public class CarafeGUI extends JFrame {
 
             if (w <= 0 || h <= 0)
                 return;
+
+            // Handle initialization or resize
+            boolean initialized = (lastWidth != 0);
+            boolean resized = (Math.abs(w - lastWidth) > 50 || Math.abs(h - lastHeight) > 50);
+
+            if (!initialized) {
+                // First draw: distribute everything
+                for (Particle p : particles) {
+                    p.reset(true);
+                }
+                lastWidth = w;
+                lastHeight = h;
+            } else if (resized) {
+                // Resize event
+                if (w > lastWidth) {
+                    // Expanded: scatter some particles to fill new space
+                    // Move ~40% of particles to new random locations
+                    for (int i = 0; i < particles.size(); i++) {
+                        if (i % 5 <= 1) { // roughly 40%
+                            particles.get(i).reset(true);
+                        }
+                    }
+                } else {
+                    // Shrunk: bring in outliers immediately
+                    for (Particle p : particles) {
+                        if (p.x > w)
+                            p.x = Math.random() * w;
+                        if (p.y > h)
+                            p.y = Math.random() * h;
+                    }
+                }
+                lastWidth = w;
+                lastHeight = h;
+            }
 
             boolean dark = FlatLaf.isLafDark();
             Color base = lafColor("Carafe.headerBase", new Color(0x2F82B7));
@@ -607,19 +645,26 @@ public class CarafeGUI extends JFrame {
             void update(int w, int h) {
                 x += vx;
                 y += vy;
-                if (x < 0 || x > w)
-                    vx *= -1;
-                if (y < 0 || y > h)
-                    vy *= -1;
 
-                if (x < -50)
-                    x = w + 50;
-                if (x > w + 50)
-                    x = -50;
-                if (y < -50)
-                    y = h + 50;
-                if (y > h + 50)
-                    y = -50;
+                // Bounce off edges with a 10% buffer zone for smoother entry/exit
+                double bufferX = w * 0.10;
+                double bufferY = h * 0.10;
+
+                if (x < -bufferX) {
+                    x = -bufferX;
+                    vx *= -1;
+                } else if (x > w + bufferX) {
+                    x = w + bufferX;
+                    vx *= -1;
+                }
+
+                if (y < -bufferY) {
+                    y = -bufferY;
+                    vy *= -1;
+                } else if (y > h + bufferY) {
+                    y = h + bufferY;
+                    vy *= -1;
+                }
             }
         }
 
@@ -652,17 +697,21 @@ public class CarafeGUI extends JFrame {
             java.net.URL iconUrl = getClass().getResource("/carafe-icon.png");
             if (iconUrl != null) {
                 ImageIcon originalIcon = new ImageIcon(iconUrl);
-                // Scale to a high-but-reasonable resolution (128x128) to support HiDPI up to ~250% 
+                // Scale to a high-but-reasonable resolution (128x128) to support HiDPI up to
+                // ~250%
                 // without keeping the massive original in memory for every paint
                 Image highResImage = originalIcon.getImage().getScaledInstance(128, 128, Image.SCALE_SMOOTH);
-                
+
                 headerIconLabel.setIcon(new javax.swing.Icon() {
                     @Override
                     public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
                         java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-                        g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-                        g2.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
-                        g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                        g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                                java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                        g2.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                                java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+                        g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
 
                         // Clip to rounded rectangle
                         java.awt.geom.RoundRectangle2D rounded = new java.awt.geom.RoundRectangle2D.Float(
@@ -675,10 +724,14 @@ public class CarafeGUI extends JFrame {
                     }
 
                     @Override
-                    public int getIconWidth() { return 48; }
+                    public int getIconWidth() {
+                        return 48;
+                    }
 
                     @Override
-                    public int getIconHeight() { return 48; }
+                    public int getIconHeight() {
+                        return 48;
+                    }
                 });
             }
         } catch (Exception e) {
@@ -966,11 +1019,13 @@ public class CarafeGUI extends JFrame {
         int gridy = 0;
 
         trainMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train MS File:",
-                "MS/MS data for model training.\n" + 
-                "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n"+
-                "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"+
-                "Thermo raw files are only supported when starting with DIA-NN search or performing end-to-end DIA search.\n"+
-                "When the format is Thermo raw, MSConvert (ProteoWizard) needs to be installed (convert raw to mzML for Carafe).",
+                "MS/MS data for model training.\n" +
+                        "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n" +
+                        "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"
+                        +
+                        "Thermo raw files are only supported when starting with DIA-NN search or performing end-to-end DIA search.\n"
+                        +
+                        "When the format is Thermo raw, MSConvert (ProteoWizard) needs to be installed (convert raw to mzML for Carafe).",
                 trainMsFileField = createTextField("Path to mzML/raw file or folder for training"),
                 createMsButtonsPanel(trainMsFileField));
 
@@ -999,30 +1054,32 @@ public class CarafeGUI extends JFrame {
 
         diannReportRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DIA-NN Report:",
                 "A peptide detection file used for model training.\n" +
-                "The main report file from DIA-NN (from v1.8.1 to v2.x.x) is supported.\n" +
-                "Supported formats: tsv, parquet. (e.g. report.tsv or report.parquet)\n" +
-                "This file must be directly generated using the same input train MS file(s).",
+                        "The main report file from DIA-NN (from v1.8.1 to v2.x.x) is supported.\n" +
+                        "Supported formats: tsv, parquet. (e.g. report.tsv or report.parquet)\n" +
+                        "This file must be directly generated using the same input train MS file(s).",
                 diannReportFileField = createTextField("Path to DIA-NN report.tsv or report.parquet"),
                 createBrowseButton(diannReportFileField, "DIA-NN Report", new String[] { "tsv", "parquet" }));
 
         trainDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train Protein Database:",
                 "Protein database used for peptide detection on the train MS file(s).\n" +
-                "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
+                        "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
                 trainDbFileField = createTextField("Path to protein FASTA for training"),
                 createBrowseButton(trainDbFileField, "FASTA Files", new String[] { "fasta", "fa" }));
 
-        // This is the MS/MS data for peptide detection using the fine-tuned spectral library
+        // This is the MS/MS data for peptide detection using the fine-tuned spectral
+        // library
         projectMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Project MS File:",
                 "MS/MS data for peptide detection using the fine-tuned spectral library using DIA-NN.\n" +
-                "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n"+
-                "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"+
-                "When the format is Thermo raw, users need to make sure DIA-NN is configured to use Thermo raw format.",
+                        "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n" +
+                        "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"
+                        +
+                        "When the format is Thermo raw, users need to make sure DIA-NN is configured to use Thermo raw format.",
                 projectMsFileField = createTextField("Path to mzML/raw file or folder for project"),
                 createMsButtonsPanel(projectMsFileField));
 
         libraryDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Library Protein Database:",
                 "Protein database used for fine-tuned spectral library generation.\n" +
-                "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
+                        "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
                 libraryDbFileField = createTextField("Path to protein FASTA for library generation"),
                 createBrowseButton(libraryDbFileField, "FASTA Files", new String[] { "fasta", "fa" }));
 
@@ -1032,9 +1089,9 @@ public class CarafeGUI extends JFrame {
                 createFolderButton(outputDirField));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Python Executable:",
-                "Python path (the path of python.exe (Windows) or python (Linux/Mac)) for Carafe model fine-tuning.\n"+
-                "Carafe requires a customized AlphaPeptDeep python package for model fine-tuning.\n"+
-                "Users can install all the dependent python packages by clicking the 'Install' button.",
+                "Python path (the path of python.exe (Windows) or python (Linux/Mac)) for Carafe model fine-tuning.\n" +
+                        "Carafe requires a customized AlphaPeptDeep python package for model fine-tuning.\n" +
+                        "Users can install all the dependent python packages by clicking the 'Install' button.",
                 pythonPathCombo = createPythonComboBox(),
                 createPythonBrowseButton());
 
@@ -1089,7 +1146,8 @@ public class CarafeGUI extends JFrame {
         return panel;
     }
 
-    private java.util.List<JComponent> addInputRowToPanel(JPanel container, int gridy, String labelText, String toolTipText,
+    private java.util.List<JComponent> addInputRowToPanel(JPanel container, int gridy, String labelText,
+            String toolTipText,
             JComponent inputField, JComponent buttonComponent) {
         java.util.List<JComponent> rowComponents = new java.util.ArrayList<>();
         GridBagConstraints gbc = new GridBagConstraints();
@@ -1446,7 +1504,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.weightx = 0;
-        panel.add(createLabel("False Discovery Rate:", "The false discovery rate threshold (or q-value) for peptide precursor filtering."), gbc);
+        panel.add(createLabel("False Discovery Rate:",
+                "The false discovery rate threshold (or q-value) for peptide precursor filtering."), gbc);
 
         fdrSpinner = createDoubleSpinner(0.01, 0.001, 0.1, 0.005);
         gbc.gridx = 1;
@@ -1456,8 +1515,11 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.weightx = 0;
-        panel.add(createLabel("PTM Site Probability:", "The site probability threshold for PTM peptideform detection filtering.\n"+
-                                                    "This is used when fine-tuning models for PTM dataset such as phosphoproteomics data."), gbc);
+        panel.add(
+                createLabel("PTM Site Probability:",
+                        "The site probability threshold for PTM peptideform detection filtering.\n" +
+                                "This is used when fine-tuning models for PTM dataset such as phosphoproteomics data."),
+                gbc);
 
         ptmSiteProbSpinner = createDoubleSpinner(0.75, 0.0, 1.0, 0.05);
         gbc.gridx = 1;
@@ -1467,8 +1529,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 2;
         gbc.weightx = 0;
-        panel.add(createLabel("PTM Site Q-value:", "The q-value threshold for PTM peptideform detection filtering.\n"+
-                                                   "This is used when fine-tuning models for PTM dataset such as phosphoproteomics data."), gbc);
+        panel.add(createLabel("PTM Site Q-value:", "The q-value threshold for PTM peptideform detection filtering.\n" +
+                "This is used when fine-tuning models for PTM dataset such as phosphoproteomics data."), gbc);
 
         ptmSiteQvalueSpinner = createDoubleSpinner(0.01, 0.001, 0.1, 0.005);
         gbc.gridx = 1;
@@ -1478,8 +1540,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 3;
         gbc.weightx = 0;
-        panel.add(createLabel("Fragment Ion Mass Tolerance:", "The mass tolerance for fragment ion mass tolerance used\n"+
-                                                              "during fragment ion intensity annotation and XIC extraction."), gbc);
+        panel.add(createLabel("Fragment Ion Mass Tolerance:",
+                "The mass tolerance for fragment ion mass tolerance used\n" +
+                        "during fragment ion intensity annotation and XIC extraction."),
+                gbc);
 
         fragTolSpinner = createSpinner(20, 1, 100, 1);
         gbc.gridx = 1;
@@ -1489,7 +1553,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 4;
         gbc.weightx = 0;
-        panel.add(createLabel("Fragment Ion Mass Tolerance Units:", "The mass tolerance unit for fragment ion mass tolerance."), gbc);
+        panel.add(createLabel("Fragment Ion Mass Tolerance Units:",
+                "The mass tolerance unit for fragment ion mass tolerance."), gbc);
 
         String[] tolUnits = { "ppm", "Da" };
         fragTolUnitCombo = new JComboBox<>(tolUnits);
@@ -1501,8 +1566,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 5;
         gbc.weightx = 0;
-        panel.add(createLabel("Refine Peak Boundaries:", "Refine the peak boundaries for peptide-centric shared fragment ion detection.\n"+
-                                                         "If uncheck, the peak boundaries will be set based on the input peptide detection file."), gbc);
+        panel.add(createLabel("Refine Peak Boundaries:",
+                "Refine the peak boundaries for peptide-centric shared fragment ion detection.\n" +
+                        "If uncheck, the peak boundaries will be set based on the input peptide detection file."),
+                gbc);
 
         refineBoundaryCheckbox = createCheckBox("", true);
         gbc.gridx = 1;
@@ -1512,10 +1579,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 6;
         gbc.weightx = 0;
-        panel.add(createLabel("Peak refinement RT Window:", "RT window for refine peak boundary in minute.\n"+
-                                                            "This is used to refine the peak boundaries for\n"+
-                                                            "peptide-centric shared fragment ion detection.\n"+
-                                                            "Set to 'auto' to set it based on LC gradient length."), gbc);
+        panel.add(createLabel("Peak refinement RT Window:", "RT window for refine peak boundary in minute.\n" +
+                "This is used to refine the peak boundaries for\n" +
+                "peptide-centric shared fragment ion detection.\n" +
+                "Set to 'auto' to set it based on LC gradient length."), gbc);
 
         rtPeakWindowField = createTextField("auto");
         rtPeakWindowField.setText("auto");
@@ -1526,8 +1593,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 7;
         gbc.weightx = 0;
-        panel.add(createLabel("XIC Correlation:","The correlation threshold for fragment ion to be considered as valid\n"+
-                                                 "for fragment ion intensity model finetuning."), gbc);
+        panel.add(createLabel("XIC Correlation:",
+                "The correlation threshold for fragment ion to be considered as valid\n" +
+                        "for fragment ion intensity model finetuning."),
+                gbc);
 
         xicCorSpinner = createDoubleSpinner(0.8, 0.0, 1.0, 0.05);
         gbc.gridx = 1;
@@ -1590,9 +1659,9 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.weightx = 0;
-        panel.add(createLabel("Model Type:","The model type to use for model finetuning.\n"+
-                              "For global proteome, use the 'general' model.\n"+
-                              "For phosphoproteome, use the 'phosphorylation' model."), gbc);
+        panel.add(createLabel("Model Type:", "The model type to use for model finetuning.\n" +
+                "For global proteome, use the 'general' model.\n" +
+                "For phosphoproteome, use the 'phosphorylation' model."), gbc);
 
         String[] modes = { "general", "phosphorylation" };
         modeCombo = new JComboBox<>(modes);
@@ -1604,10 +1673,12 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.weightx = 0;
-        panel.add(createLabel("Normalized Collision Energy:","The normalized collision energy (NCE) to use for deep learning model training and inference.\n"+
-                              "NCE is one of the inputs to the deep learning model\n"+
-                              "for fragment ion intensity model training and inference.\n"+
-                              "When it is set to 'auto', Carafe will determine the NCE from the training MS/MS data and use it."), gbc);
+        panel.add(createLabel("Normalized Collision Energy:",
+                "The normalized collision energy (NCE) to use for deep learning model training and inference.\n" +
+                        "NCE is one of the inputs to the deep learning model\n" +
+                        "for fragment ion intensity model training and inference.\n" +
+                        "When it is set to 'auto', Carafe will determine the NCE from the training MS/MS data and use it."),
+                gbc);
         nceField = createTextField("e.g., 27 or auto");
         nceField.setText("auto");
         gbc.gridx = 1;
@@ -1617,10 +1688,12 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 2;
         gbc.weightx = 0;
-        panel.add(createLabel("MS Instrument Type:","The MS instrument type to use for deep learning model training and inference.\n"+
-                                                    "MS instrument type is one of the inputs to the deep learning model\n"+
-                                                    "for fragment ion intensity model training and inference.\n"+
-                                                    "When it is set to 'auto', Carafe will determine the instrument type from the training MS/MS data and use it."), gbc);
+        panel.add(createLabel("MS Instrument Type:",
+                "The MS instrument type to use for deep learning model training and inference.\n" +
+                        "MS instrument type is one of the inputs to the deep learning model\n" +
+                        "for fragment ion intensity model training and inference.\n" +
+                        "When it is set to 'auto', Carafe will determine the instrument type from the training MS/MS data and use it."),
+                gbc);
 
         String[] msInstruments = { "auto", "QE", "Lumos", "timsTOF", "SciexTOF", "ThermoTOF" };
         msInstrumentField = new JComboBox<>(msInstruments);
@@ -1635,10 +1708,12 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 3;
         gbc.weightx = 0;
-        panel.add(createLabel("Computational Device:","The computational device to use for deep learning model training and inference.\n"+
-        "GPU is recommended for faster training (requires CUDA-compatible GPU)\n"+
-        "If GPU is not available, Carafe will automatically fall back to CPU.\n"+
-        "When it is set to 'auto', Carafe will automatically detect the available device and use it."), gbc);
+        panel.add(createLabel("Computational Device:",
+                "The computational device to use for deep learning model training and inference.\n" +
+                        "GPU is recommended for faster training (requires CUDA-compatible GPU)\n" +
+                        "If GPU is not available, Carafe will automatically fall back to CPU.\n" +
+                        "When it is set to 'auto', Carafe will automatically detect the available device and use it."),
+                gbc);
 
         String[] devices = { "auto", "gpu", "cpu" };
         deviceCombo = new JComboBox<>(devices);
@@ -1681,7 +1756,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.weightx = 0;
-        panel.add(createLabel("Enzyme:","The enzyme to consider for protein in-silico digestion during library generation."), gbc);
+        panel.add(createLabel("Enzyme:",
+                "The enzyme to consider for protein in-silico digestion during library generation."), gbc);
 
         String[] enzymes = {
                 "1: Trypsin (default)",
@@ -1703,8 +1779,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 1;
         gbc.weightx = 0;
-        panel.add(createLabel("Missed Cleavages:","The maximum number of missed cleavages to consider\n"+
-                                                  " for protein in-silico digestion during library generation."), gbc);
+        panel.add(createLabel("Missed Cleavages:", "The maximum number of missed cleavages to consider\n" +
+                " for protein in-silico digestion during library generation."), gbc);
 
         missCleavageSpinner = createSpinner(1, 0, 5, 1);
         gbc.gridx = 1;
@@ -1714,9 +1790,11 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 2;
         gbc.weightx = 0;
-        panel.add(createLabel("Fixed Modification Available:","The available fixed modifications to consider for library generation.\n"+
-                              "Each modification is represented by an integer number.\n"+
-                              "For example, 0 means no modification, 1 means Carbamidomethyl of C, etc."), gbc);
+        panel.add(createLabel("Fixed Modification Available:",
+                "The available fixed modifications to consider for library generation.\n" +
+                        "Each modification is represented by an integer number.\n" +
+                        "For example, 0 means no modification, 1 means Carbamidomethyl of C, etc."),
+                gbc);
 
         // Populate Fixed Modifications dynamically
         LinkedHashMap<Integer, String> mod_id2name = CModification.getInstance().get_top_mod_list(26);
@@ -1753,10 +1831,12 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 3;
         gbc.weightx = 0;
-        panel.add(createLabel("Fixed Modifications Selected:","The selected fixed modifications to consider for library generation.\n"+
-                              "Each modification is represented by an integer number.\n"+
-                              "For example, 0 means no modification, 1 means Carbamidomethyl of C, etc.\n"+
-                              "Multiple modifications can be selected by separating them with commas (e.g., 1,11,12)."), gbc);
+        panel.add(createLabel("Fixed Modifications Selected:",
+                "The selected fixed modifications to consider for library generation.\n" +
+                        "Each modification is represented by an integer number.\n" +
+                        "For example, 0 means no modification, 1 means Carbamidomethyl of C, etc.\n" +
+                        "Multiple modifications can be selected by separating them with commas (e.g., 1,11,12)."),
+                gbc);
 
         fixModSelectedField = createTextField("e.g., 1");
         fixModSelectedField.setText("1");
@@ -1767,9 +1847,12 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 4;
         gbc.weightx = 0;
-        panel.add(createLabel("Variable Modifications Available:","The available variable modifications to consider for library generation.\n"+"Each modification is represented by an integer number.\n"+
-                              "For example, 0 means no modification, 2 means Oxidation of M,\n"+
-                              "7 means Phospho of S, \"7,8,9\" means Phospho of S, T and Y, etc."), gbc);
+        panel.add(createLabel("Variable Modifications Available:",
+                "The available variable modifications to consider for library generation.\n"
+                        + "Each modification is represented by an integer number.\n" +
+                        "For example, 0 means no modification, 2 means Oxidation of M,\n" +
+                        "7 means Phospho of S, \"7,8,9\" means Phospho of S, T and Y, etc."),
+                gbc);
 
         // Populate Variable Modifications with presets + dynamic list
         Vector<String> varModItems = new Vector<>();
@@ -1805,11 +1888,13 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 5;
         gbc.weightx = 0;
-        panel.add(createLabel("Variable Modifications Selected:","The selected variable modifications to consider for library generation.\n"+
-                              "Each modification is represented by an integer number.\n"+
-                              "For example, 0 means no modification, 2 means Oxidation of M,\n"+
-                              "7 means Phospho of S, \"7,8,9\" means Phospho of S, T and Y, etc.\n"+
-                              "Multiple modifications can be selected by separating them with commas (e.g., 2,7,8,9)."), gbc);
+        panel.add(createLabel("Variable Modifications Selected:",
+                "The selected variable modifications to consider for library generation.\n" +
+                        "Each modification is represented by an integer number.\n" +
+                        "For example, 0 means no modification, 2 means Oxidation of M,\n" +
+                        "7 means Phospho of S, \"7,8,9\" means Phospho of S, T and Y, etc.\n" +
+                        "Multiple modifications can be selected by separating them with commas (e.g., 2,7,8,9)."),
+                gbc);
 
         varModSelectedField = createTextField("e.g., 0 or 2");
         varModSelectedField.setText("0");
@@ -1820,7 +1905,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 6;
         gbc.weightx = 0;
-        panel.add(createLabel("Maximum Variable Modifications:","The maximum number of variable modifications to consider for library generation."), gbc);
+        panel.add(createLabel("Maximum Variable Modifications:",
+                "The maximum number of variable modifications to consider for library generation."), gbc);
 
         maxVarSpinner = createSpinner(1, 0, 5, 1);
         gbc.gridx = 1;
@@ -1830,8 +1916,9 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 7;
         gbc.weightx = 0;
-        panel.add(createLabel("Clip N-Terminal Methionine:","When digesting a protein starting with amino acid M,\n"+
-                              "two copies of the leading peptides (with and without the N-terminal M) are considered if checked."), gbc);
+        panel.add(createLabel("Clip N-Terminal Methionine:", "When digesting a protein starting with amino acid M,\n" +
+                "two copies of the leading peptides (with and without the N-terminal M) are considered if checked."),
+                gbc);
 
         clipNmCheckbox = createCheckBox("", true);
         gbc.gridx = 1;
@@ -1841,7 +1928,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 8;
         gbc.weightx = 0;
-        panel.add(createLabel("Minimum Peptide Length:","The minimum length of peptide to consider for library generation."), gbc);
+        panel.add(createLabel("Minimum Peptide Length:",
+                "The minimum length of peptide to consider for library generation."), gbc);
 
         minLengthSpinner = createSpinner(7, 1, 50, 1);
         gbc.gridx = 1;
@@ -1851,7 +1939,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 9;
         gbc.weightx = 0;
-        panel.add(createLabel("Maximum Peptide Length:","The maximum length of peptide to consider for library generation."), gbc);
+        panel.add(createLabel("Maximum Peptide Length:",
+                "The maximum length of peptide to consider for library generation."), gbc);
 
         maxLengthSpinner = createSpinner(35, 1, 100, 1);
         gbc.gridx = 1;
@@ -1861,8 +1950,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 10;
         gbc.weightx = 0;
-        panel.add(createLabel("Minimum Peptide m/z:","The minimum m/z of peptide to consider for library generation.\n"+
-                              "This setting will be changed based on the minimum precursor m/z detected in the training MS/MS data."), gbc);
+        panel.add(createLabel("Minimum Peptide m/z:", "The minimum m/z of peptide to consider for library generation.\n"
+                +
+                "This setting will be changed based on the minimum precursor m/z detected in the training MS/MS data."),
+                gbc);
 
         minPepMzSpinner = createSpinner(300, 100, 2000, 50);
         gbc.gridx = 1;
@@ -1872,8 +1963,10 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 11;
         gbc.weightx = 0;
-        panel.add(createLabel("Maximum Peptide m/z:","The maximum m/z of peptide to consider for library generation.\n"+
-                              "This setting will be changed based on the maximum precursor m/z detected in the training MS/MS data."), gbc);
+        panel.add(createLabel("Maximum Peptide m/z:", "The maximum m/z of peptide to consider for library generation.\n"
+                +
+                "This setting will be changed based on the maximum precursor m/z detected in the training MS/MS data."),
+                gbc);
 
         maxPepMzSpinner = createSpinner(1800, 100, 3000, 50);
         gbc.gridx = 1;
@@ -1883,7 +1976,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 12;
         gbc.weightx = 0;
-        panel.add(createLabel("Minimum Peptide Charge:","The minimum charge of peptide to consider for library generation."), gbc);
+        panel.add(createLabel("Minimum Peptide Charge:",
+                "The minimum charge of peptide to consider for library generation."), gbc);
 
         minPepChargeSpinner = createSpinner(2, 1, 10, 1);
         gbc.gridx = 1;
@@ -1893,7 +1987,8 @@ public class CarafeGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = 13;
         gbc.weightx = 0;
-        panel.add(createLabel("Maximum Peptide Charge:","The maximum charge of peptide to consider for library generation."), gbc);
+        panel.add(createLabel("Maximum Peptide Charge:",
+                "The maximum charge of peptide to consider for library generation."), gbc);
 
         maxPepChargeSpinner = createSpinner(4, 1, 10, 1);
         gbc.gridx = 1;
@@ -2980,8 +3075,6 @@ public class CarafeGUI extends JFrame {
         return button;
     }
 
-
-
     private java.util.List<String> detectMsConvertInstallations() {
         java.util.List<String> paths = new java.util.ArrayList<>();
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
@@ -3280,9 +3373,9 @@ public class CarafeGUI extends JFrame {
             trainMsFile = trainMsFileOverride;
         } else if (trainMsFiles != null && !trainMsFiles.isEmpty()) {
             // Multi-file selection: use the parent folder of the first file
-            if(trainMsFiles.size() >= 2){
+            if (trainMsFiles.size() >= 2) {
                 trainMsFile = new File(trainMsFiles.getFirst()).getParent();
-            }else{
+            } else {
                 trainMsFile = trainMsFiles.getFirst();
             }
         } else {
@@ -3799,9 +3892,9 @@ public class CarafeGUI extends JFrame {
                 String trainMsFile;
                 if (!trainMsFiles.isEmpty()) {
                     // Multi-file selection: use the parent folder of the first file
-                    if(trainMsFiles.size() >= 2){
+                    if (trainMsFiles.size() >= 2) {
                         trainMsFile = new File(trainMsFiles.getFirst()).getParent();
-                    }else{
+                    } else {
                         trainMsFile = trainMsFiles.getFirst();
                     }
                 } else {
@@ -3822,10 +3915,10 @@ public class CarafeGUI extends JFrame {
                 }
 
                 if (hasRawFiles) {
-                    JOptionPane.showMessageDialog(this, 
+                    JOptionPane.showMessageDialog(this,
                             "RAW files are not supported for Workflow 2.\n" +
-                            "The train MS file(s) must be mzML format, and\n" +
-                            "the DIA-NN report file must be generated using the same mzML files(s).",
+                                    "The train MS file(s) must be mzML format, and\n" +
+                                    "the DIA-NN report file must be generated using the same mzML files(s).",
                             "RAW Files Not Supported", JOptionPane.WARNING_MESSAGE);
                     setInputsFrozen(false);
                     return;
@@ -3880,7 +3973,7 @@ public class CarafeGUI extends JFrame {
                 }
 
                 if (effectiveProjectFiles.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, 
+                    JOptionPane.showMessageDialog(this,
                             "No project MS files found.",
                             "No Project MS Files", JOptionPane.WARNING_MESSAGE);
                     setInputsFrozen(false);
@@ -4482,9 +4575,9 @@ public class CarafeGUI extends JFrame {
                 // 2.3.1: diann.exe --lib "" --threads 8 --verbose 1 --out "D:\software\DIA-NN\2.3.1\report.parquet" --qvalue 0.01 --matrices  --unimod4 --var-mods 1 --var-mod UniMod:21,79.966331,STY --peptidoforms --reanalyse --rt-profiling
                 // --var-mod UniMod:21,79.966331,STY --peptidoforms
                 diannArgs.add("--var-mods");
-                if((int)maxVarSpinner.getValue() >= 1) {
+                if ((int) maxVarSpinner.getValue() >= 1) {
                     diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
-                }else{
+                } else {
                     // show warning message
                     JOptionPane.showMessageDialog(this,
                             "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
@@ -4493,18 +4586,18 @@ public class CarafeGUI extends JFrame {
                 }
                 diannArgs.add("--var-mod");
                 diannArgs.add("UniMod:21,79.966331,STY");
-                if(this.diannVersion.equalsIgnoreCase("1.8.1")) {
+                if (this.diannVersion.equalsIgnoreCase("1.8.1")) {
                     // --monitor-mod UniMod:21
                     diannArgs.add("--monitor-mod");
                     diannArgs.add("UniMod:21");
-                }else{
+                } else {
                     diannArgs.add("--peptidoforms");
                 }
-            } else if(varModSelected.equalsIgnoreCase("2,7,8,9")){
+            } else if (varModSelected.equalsIgnoreCase("2,7,8,9")) {
                 diannArgs.add("--var-mods");
-                if((int)maxVarSpinner.getValue() >= 1) {
+                if ((int) maxVarSpinner.getValue() >= 1) {
                     diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
-                }else{
+                } else {
                     // show warning message
                     JOptionPane.showMessageDialog(this,
                             "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
@@ -4515,19 +4608,20 @@ public class CarafeGUI extends JFrame {
                 diannArgs.add("UniMod:21,79.966331,STY");
                 diannArgs.add("--var-mod");
                 diannArgs.add("UniMod:35,15.994915,M");
-                if(this.diannVersion.equalsIgnoreCase("1.8.1")) {
+                if (this.diannVersion.equalsIgnoreCase("1.8.1")) {
                     // --monitor-mod UniMod:21
                     diannArgs.add("--monitor-mod");
                     diannArgs.add("UniMod:21");
-                }else{
+                } else {
                     diannArgs.add("--peptidoforms");
                 }
-            } else if(varModSelected.equalsIgnoreCase("10")){
-                // --var-mod UniMod:121,114.042927,K --no-cut-after-mod UniMod:121 --peptidoforms
+            } else if (varModSelected.equalsIgnoreCase("10")) {
+                // --var-mod UniMod:121,114.042927,K --no-cut-after-mod UniMod:121
+                // --peptidoforms
                 diannArgs.add("--var-mods");
-                if((int)maxVarSpinner.getValue() >= 1) {
+                if ((int) maxVarSpinner.getValue() >= 1) {
                     diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
-                }else{
+                } else {
                     // show warning message
                     JOptionPane.showMessageDialog(this,
                             "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
@@ -4538,11 +4632,11 @@ public class CarafeGUI extends JFrame {
                 diannArgs.add("UniMod:121,114.042927,K");
                 diannArgs.add("--no-cut-after-mod");
                 diannArgs.add("UniMod:121");
-                if(this.diannVersion.equalsIgnoreCase("1.8.1")) {
+                if (this.diannVersion.equalsIgnoreCase("1.8.1")) {
                     // --monitor-mod UniMod:21
                     diannArgs.add("--monitor-mod");
                     diannArgs.add("UniMod:121");
-                }else{
+                } else {
                     diannArgs.add("--peptidoforms");
                 }
             } else {
@@ -5313,7 +5407,8 @@ public class CarafeGUI extends JFrame {
             else
                 FlatLightLaf.setup();
 
-            // Enable custom window decorations for FlatLaf to allow hiding the title bar icon
+            // Enable custom window decorations for FlatLaf to allow hiding the title bar
+            // icon
             javax.swing.JFrame.setDefaultLookAndFeelDecorated(true);
             javax.swing.JDialog.setDefaultLookAndFeelDecorated(true);
 
@@ -5359,7 +5454,9 @@ public class CarafeGUI extends JFrame {
             }
         }).start();
     }
-    private void chooseFiles(String title, String[] extensions, String description, java.util.function.Consumer<File[]> onFilesSelected) {
+
+    private void chooseFiles(String title, String[] extensions, String description,
+            java.util.function.Consumer<File[]> onFilesSelected) {
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         new Thread(() -> {
             try {
@@ -5372,7 +5469,8 @@ public class CarafeGUI extends JFrame {
                     chooser.setDialogTitle(title);
                 }
                 if (extensions != null && extensions.length > 0) {
-                    javax.swing.filechooser.FileNameExtensionFilter filter = new javax.swing.filechooser.FileNameExtensionFilter(description, extensions);
+                    javax.swing.filechooser.FileNameExtensionFilter filter = new javax.swing.filechooser.FileNameExtensionFilter(
+                            description, extensions);
                     chooser.setFileFilter(filter);
                 }
                 SwingUtilities.invokeLater(() -> {
@@ -5380,7 +5478,7 @@ public class CarafeGUI extends JFrame {
                     if (chooser.showOpenDialog(CarafeGUI.this) == JFileChooser.APPROVE_OPTION) {
                         File[] files = chooser.getSelectedFiles();
                         if (files != null && files.length > 0) {
-                             onFilesSelected.accept(files);
+                            onFilesSelected.accept(files);
                         }
                     }
                 });
@@ -5394,10 +5492,10 @@ public class CarafeGUI extends JFrame {
     private void saveParameterScreenshots() {
         String outDir = outputDirField.getText().trim();
         if (outDir.isEmpty()) {
-             // Should not happen if workflow ran, but safety check
+            // Should not happen if workflow ran, but safety check
             return;
         }
-        
+
         outDir = outDir + File.separator + "parameter_screenshots";
         File dir = new File(outDir);
         if (!dir.exists()) {
@@ -5406,7 +5504,7 @@ public class CarafeGUI extends JFrame {
 
         // We want to capture specific tabs that contain parameters.
         // Indices: 0=Workflow, 1=Training Data, 2=Model Training, 3=Library Generation
-        String[] tabNames = {"workflow", "training_data", "model_training", "library_generation"};
+        String[] tabNames = { "workflow", "training_data", "model_training", "library_generation" };
 
         logToConsole("\n[INFO] Saving parameter panel screenshots to: " + outDir + "\n");
 
@@ -5417,23 +5515,24 @@ public class CarafeGUI extends JFrame {
             Graphics2D g2 = fullWindowImage.createGraphics();
             this.validate();
             this.repaint();
-            this.print(g2); 
+            this.print(g2);
             g2.dispose();
 
             File fullFile = new File(dir, "full_window_capture.png");
             javax.imageio.ImageIO.write(fullWindowImage, "png", fullFile);
             logToConsole(" - Saved: " + fullFile.getName() + " (Full Window)\n");
-            
+
         } catch (Exception e) {
-             logToConsole(" - Failed to save full window screenshot: " + e.getMessage() + "\n");
+            logToConsole(" - Failed to save full window screenshot: " + e.getMessage() + "\n");
         }
 
         // 2. Capture Individual Content Panels (Full Scroll Capture)
         for (int i = 0; i < tabNames.length; i++) {
-            if (i >= tabbedPane.getTabCount()) break;
+            if (i >= tabbedPane.getTabCount())
+                break;
 
             Component tabComponent = tabbedPane.getComponentAt(i);
-            
+
             // The tabs are JScrollPanes wrapping the actual content panels.
             // We need the view component to capture the full size (including off-screen).
             Component view = tabComponent;
@@ -5445,17 +5544,18 @@ public class CarafeGUI extends JFrame {
                 try {
                     // Layout buffer if needed, though usually valid by now
                     if (view.getWidth() <= 0 || view.getHeight() <= 0) {
-                        continue; 
+                        continue;
                     }
-                    
+
                     java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(
                             view.getWidth(), view.getHeight(), java.awt.image.BufferedImage.TYPE_INT_RGB);
-                    
+
                     Graphics2D g2 = image.createGraphics();
-                    // Fill background explicitly because some panels might be non-opaque or depend on parent background
+                    // Fill background explicitly because some panels might be non-opaque or depend
+                    // on parent background
                     g2.setColor(view.getBackground());
                     g2.fillRect(0, 0, image.getWidth(), image.getHeight());
-                    
+
                     view.print(g2); // print() is often better than paint() for off-screen full capture
                     g2.dispose();
 
@@ -5468,7 +5568,7 @@ public class CarafeGUI extends JFrame {
                 }
             }
         }
-        
+
         logToConsole("\n");
     }
 }

@@ -143,6 +143,10 @@ public final  class AIWorker implements Runnable{
             throw new RuntimeException(e);
         }
 
+        if (!pass) {
+            throw new RuntimeException("AI prediction process failed when running: "+StringUtils.join(cmd));
+        }
+
         return pass;
     }
 }

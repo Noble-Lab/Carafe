@@ -1757,13 +1757,16 @@ public class AIGear {
             // perform spectrum and rt prediction.
             String mode = this.mod_ai.equalsIgnoreCase("-")?"general":this.mod_ai;
             Cloger.getInstance().logger.info("NCE: "+this.nce);
+            List<Future<?>> futures = new ArrayList<>();
             for(int i=0;i<input_files.size();i++){
                 // prediction
+                AIWorker worker;
                 if(this.use_user_provided_ms_instrument) {
-                    fixedThreadPool.execute(new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.user_provided_ms_instrument, this.nce, this.mod_ai));
+                    worker = new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.user_provided_ms_instrument, this.nce, this.mod_ai);
                 }else{
-                    fixedThreadPool.execute(new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.ms_instrument, this.nce, this.mod_ai));
+                    worker = new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.ms_instrument, this.nce, this.mod_ai);
                 }
+                futures.add(fixedThreadPool.submit(worker));
                 res_files.put(input_files.get(i),new HashMap<>());
                 if(this.use_parquet){
                     res_files.get(input_files.get(i)).put("ms2", this.out_dir + File.separator + i + "_ms2_df.parquet");
@@ -1787,9 +1790,16 @@ public class AIGear {
             fixedThreadPool.shutdown();
 
             try {
-                fixedThreadPool.awaitTermination(Long.MAX_VALUE, TimeUnit.HOURS);
-            } catch (InterruptedException e) {
+                for (Future<?> future : futures) {
+                    future.get();
+                }
+            } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
+                Cloger.getInstance().logger.error("AI prediction task failed: " + e.getMessage());
+                if (e.getCause() != null) {
+                    Cloger.getInstance().logger.error("Cause: " + e.getCause().getMessage());
+                }
+                System.exit(1);
             }
         }
 
