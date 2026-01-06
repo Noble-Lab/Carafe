@@ -443,8 +443,6 @@ public class UniProtDownloadDialog extends JDialog {
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(is, StandardCharsets.UTF_8))) {
                     writer.newLine();
-                    writer.write("# Common contaminants (cRAP)");
-                    writer.newLine();
                     String line;
                     while ((line = reader.readLine()) != null) {
                         writer.write(line);
