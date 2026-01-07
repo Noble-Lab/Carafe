@@ -1409,6 +1409,10 @@ public class CarafeGUI extends JFrame {
 
             fileList.clear();
             fileList.addAll(newPaths);
+            // If all files were removed, clear the text field explicitly
+            if (newPaths.isEmpty()) {
+                field.setText("");
+            }
             updateFileFieldState(field, fileList);
             d.dispose();
         });
@@ -2325,6 +2329,7 @@ public class CarafeGUI extends JFrame {
 
         JButton openButton = new JButton("Open");
         styleButton(openButton);
+        openButton.putClientProperty("carafe.noFreeze", true);
         openButton.setToolTipText("Open the output directory in file explorer");
         openButton.addActionListener(e -> {
             String path = targetField.getText().trim();
@@ -5358,6 +5363,11 @@ public class CarafeGUI extends JFrame {
                 if (component instanceof Container) {
                     enableComponents((Container) component, enable);
                 }
+                continue;
+            }
+
+            // Skip components marked as noFreeze (e.g. Open button for output directory)
+            if (component instanceof JComponent jc && Boolean.TRUE.equals(jc.getClientProperty("carafe.noFreeze"))) {
                 continue;
             }
 
