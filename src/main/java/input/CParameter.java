@@ -159,6 +159,8 @@ public class CParameter {
      */
     public static String outdir = "./";
 
+    public static String terminal_char = "-";
+
 
     public static void init(){
         IonFactory.getDefaultNeutralLosses();

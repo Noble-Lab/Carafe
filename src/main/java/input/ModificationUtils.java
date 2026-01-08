@@ -176,7 +176,11 @@ public class ModificationUtils {
                     mod_name2JMod.get(ptm.getName()).psi_ms_name = unimodModification.getTitle();
                     mod_name2JMod.get(ptm.getName()).unimod_accession = "UniMod:"+unimodModification.getRecordId();
                     mod_name2JMod.get(ptm.getName()).position = position;
-                    mod_name2JMod.get(ptm.getName()).site = site;
+                    if(position.equals("Protein N-term") || position.equals("Protein C-term")) {
+                        mod_name2JMod.get(ptm.getName()).site = position;
+                    }else{
+                        mod_name2JMod.get(ptm.getName()).site = site;
+                    }
                     mod_name2JMod.get(ptm.getName()).mod_mass = monoMass;
                 }
                 if(!testSite.contains(site)){

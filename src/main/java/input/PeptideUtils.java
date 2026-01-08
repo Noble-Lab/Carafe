@@ -1,6 +1,7 @@
 package main.java.input;
 
 import com.compomics.util.experiment.biology.modifications.Modification;
+import com.compomics.util.experiment.biology.modifications.ModificationType;
 import com.compomics.util.experiment.biology.proteins.Peptide;
 import com.compomics.util.experiment.identification.matches.ModificationMatch;
 import com.compomics.util.experiment.identification.protein_sequences.SingleProteinSequenceProvider;
@@ -8,8 +9,10 @@ import com.compomics.util.experiment.identification.utils.ModificationUtils;
 import com.compomics.util.experiment.io.biology.protein.SequenceProvider;
 import com.compomics.util.parameters.identification.advanced.SequenceMatchingParameters;
 import com.compomics.util.parameters.identification.search.ModificationParameters;
+import main.java.util.Cloger;
 import org.paukov.combinatorics3.Generator;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class PeptideUtils {
 
@@ -17,6 +20,10 @@ public final class PeptideUtils {
     private static final SequenceMatchingParameters modificationsSequenceMatchingParameters = SequenceMatchingParameters.getDefaultSequenceMatching();
     public static final ModificationParameters modificationParameters = new ModificationParameters();
     public static final SequenceMatchingParameters sequenceMatchingParameters = new SequenceMatchingParameters();
+    /**
+     * This is a set of peptide sequences that are protein N-terminal peptides
+     */
+    public static Set<String> protein_n_term_peptides = ConcurrentHashMap.newKeySet();
 
     public static ArrayList<Peptide> calcPeptideIsoforms(String peptideSequence){
         ArrayList<Modification> varMods = CModification.getInstance().get_var_modifications();
@@ -27,10 +34,19 @@ public final class PeptideUtils {
             ArrayList<CPTM> all_mod_sites = new ArrayList<>();
             // get all possible modifications sites for all variable modifications
             for (Modification ptm : varMods) {
-                int[] pSites = ModificationUtils.getPossibleModificationSites(peptide, ptm, sequenceProvider, modificationsSequenceMatchingParameters);
-                if(pSites.length >= 1){
-                    for(int i : pSites){
-                        all_mod_sites.add(new CPTM(i,ptm));
+                if(ptm.getModificationType() == ModificationType.modn_protein) {
+                    if(!protein_n_term_peptides.isEmpty() && protein_n_term_peptides.contains(peptideSequence)){
+                        all_mod_sites.add(new CPTM(0, ptm));
+                    }
+                }else if(ptm.getModificationType() == ModificationType.modc_protein){
+                    Cloger.getInstance().logger.error("C-terminal modification is not supported yet in peptide modification generation.");
+                    System.exit(1);
+                }else{
+                    int[] pSites = ModificationUtils.getPossibleModificationSites(peptide, ptm, sequenceProvider, modificationsSequenceMatchingParameters);
+                    if (pSites.length >= 1) {
+                        for (int i : pSites) {
+                            all_mod_sites.add(new CPTM(i, ptm));
+                        }
                     }
                 }
             }

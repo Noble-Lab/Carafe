@@ -4726,11 +4726,88 @@ public class CarafeGUI extends JFrame {
                 } else {
                     diannArgs.add("--peptidoforms");
                 }
+            } else if (varModSelected.equalsIgnoreCase("5")) {
+                diannArgs.add("--var-mods");
+                if ((int) maxVarSpinner.getValue() >= 1) {
+                    diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+                } else {
+                    // show warning message
+                    JOptionPane.showMessageDialog(this,
+                            "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
+                            "Warning", JOptionPane.WARNING_MESSAGE);
+                    return null;
+                }
+
+                diannArgs.add("--var-mod");
+                // --var-mod UniMod:1,42.010565,*n
+                diannArgs.add("UniMod:1,42.010565,*n");
+                diannArgs.add("--peptidoforms");
+            } else if (varModSelected.equalsIgnoreCase("2,5") || varModSelected.equalsIgnoreCase("5,2")) {
+                diannArgs.add("--var-mods");
+                if ((int) maxVarSpinner.getValue() >= 1) {
+                    diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+                } else {
+                    // show warning message
+                    JOptionPane.showMessageDialog(this,
+                            "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
+                            "Warning", JOptionPane.WARNING_MESSAGE);
+                    return null;
+                }
+
+                diannArgs.add("--var-mod");
+                diannArgs.add("UniMod:35,15.994915,M");
+                diannArgs.add("--var-mod");
+                // --var-mod UniMod:1,42.010565,*n
+                diannArgs.add("UniMod:1,42.010565,*n");
+                diannArgs.add("--peptidoforms");
             } else {
-                JOptionPane.showMessageDialog(this,
-                        "Unsupported modification settings. Please select '2' for Variable modifications.", "Warning",
-                        JOptionPane.WARNING_MESSAGE);
-                return null;
+                if (isV2) {
+                    diannArgs.add("--var-mods");
+                    if ((int) maxVarSpinner.getValue() >= 1) {
+                        diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+                    } else {
+                        // show warning message
+                        JOptionPane.showMessageDialog(this,
+                                "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
+                                "Warning", JOptionPane.WARNING_MESSAGE);
+                        return null;
+                    }
+                    String[] var_int_list = varModSelected.split(",");
+                    ArrayList<String> phos_var_mods = new ArrayList<>();
+                    for (String var_int : var_int_list) {
+                        if (var_int.trim().equalsIgnoreCase("0")) {
+                            // no modification
+                        } else if (var_int.trim().equalsIgnoreCase("2")) {
+                            diannArgs.add("--var-mod");
+                            diannArgs.add("UniMod:35,15.994915,M");
+                        } else if (var_int.trim().equalsIgnoreCase("5")) {
+                            diannArgs.add("--var-mod");
+                            diannArgs.add("UniMod:1,42.010565,*n");
+                        } else if (var_int.trim().equalsIgnoreCase("7")) {
+                            phos_var_mods.add("S");
+                        } else if (var_int.trim().equalsIgnoreCase("8")) {
+                            phos_var_mods.add("T");
+                        } else if (var_int.trim().equalsIgnoreCase("9")) {
+                            phos_var_mods.add("Y");
+                        } else if (var_int.trim().equalsIgnoreCase("10")) {
+                            diannArgs.add("--var-mod");
+                            diannArgs.add("UniMod:121,114.042927,K");
+                            diannArgs.add("--no-cut-after-mod");
+                            diannArgs.add("UniMod:121");
+                        } else {
+                            JOptionPane.showMessageDialog(this,
+                                    "Unsupported modification settings. Please select '2' for Variable modifications.",
+                                    "Warning",
+                                    JOptionPane.WARNING_MESSAGE);
+                            return null;
+                        }
+                    }
+                    if (!phos_var_mods.isEmpty()) {
+                        diannArgs.add("--var-mod");
+                        diannArgs.add("UniMod:21,79.966331," + String.join(",", phos_var_mods));
+                    }
+                    diannArgs.add("--peptidoforms");
+                }
             }
 
             String enzyme = ((String) enzymeCombo.getSelectedItem()).split(":")[0];
@@ -4924,6 +5001,8 @@ public class CarafeGUI extends JFrame {
         progressBar.setIndeterminate(true);
         progressBar.setString(command.task_description);
         timeUsageMap.clear();
+
+        saveParameterScreenshots();
 
         if (tabbedPane != null) {
             SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));

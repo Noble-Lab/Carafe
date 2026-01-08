@@ -22,6 +22,7 @@ public final class CModification {
 
     /**
      * Modification mapping: UniMod accession -> AI modification name
+     * jMod.site + "(" + jMod.unimod_accession + ")";
      */
     public HashMap<String,String> unimod2modification_code = new HashMap<>();
     public HashMap<String,String> modification_code2modification = new HashMap<>();
@@ -217,7 +218,7 @@ public final class CModification {
             // mods: Acetyl@Protein_N-term mod_sites: 0
             if (jMod.position.toLowerCase().contains("term") && one_time_message) {
                 if (CParameter.verbose == CParameter.VerboseType.DEBUG) {
-                    System.err.println("Terminal modification is not supported:" + mod_name);
+                    System.err.println("Terminal modification is not well supported:" + mod_name);
                 }
                 one_time_message = false;
             }
@@ -233,6 +234,7 @@ public final class CModification {
             String encyclopedia_mod_name;
             String skyline_mod_name;
             if(mod_name.contains("protein N-term")){
+                // Acetyl@Protein_N-term, AlphaPeptDeep supported format
                 psi_name_site = psi_name + "@Protein_N-term";
                 // TODO: need to check if this works
                 skyline_mod_name = "["+jMod.mod_mass+"]";

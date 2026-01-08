@@ -8195,6 +8195,7 @@ public class AIGear {
         // AGEVLNQPM(UniMod:35)MMAAR2
         // AAAAAAAATMALAAPS(UniMod:21)SPTPESPTMLTK
         // AAAGPLDMSLPST(UniMod:21)PDLK
+        // (UniMod:1)AAVTLHLR
         if(mod_seq.equalsIgnoreCase(peptide)){
             return "-";
         }else{
@@ -8203,18 +8204,27 @@ public class AIGear {
                     mod_seq = mod_seq.replace(unimod,CModification.getInstance().unimod2modification_code.get(unimod));
                 }
             }
+            ArrayList<String> mods = new ArrayList<>();
+            int n_term_mods = 0;
             if(mod_seq.length()!=peptide.length()){
-                System.err.println("Unrecognized modification:"+mod_seq+","+peptide);
-                System.exit(1);
+                // TODO: improve this part
+                if(mod_seq.startsWith("(UniMod:1)") && CParameter.varMods.contains("5")){
+                    // Protein N-term Acetylation
+                    String unimod = "Protein N-term(UniMod:1)";
+                    mod_seq = mod_seq.replace("(UniMod:1)",CModification.getInstance().unimod2modification_code.get(unimod));
+                    n_term_mods = n_term_mods + 1;
+                }else {
+                    System.err.println("Unrecognized modification:" + mod_seq + "," + peptide);
+                    System.exit(1);
+                }
             }
             String [] aas = mod_seq.split("");
-            ArrayList<String> mods = new ArrayList<>();
             int pos;
             String mod_name;
             for (int i = 0; i < aas.length; i++) {
                 if(CModification.getInstance().modification_code2modification.containsKey(aas[i])){
                     // Oxidation of M@12[15.9949]
-                    pos = i+1;
+                    pos = i+1 - n_term_mods;
                     mod_name = CModification.getInstance().modification_code2modification.get(aas[i]);
                     mods.add(mod_name+"@"+pos+"["+ CModification.getInstance().getPTMbyName(mod_name).getMass()+"]");
                 }
@@ -8424,6 +8434,12 @@ public class AIGear {
         boolean unrecognized_mod_found = false;
         if(!modification.equals("-")){
             String []m = modification.split(";");
+            String n_term_char = "";
+            if(modification.contains("Acetyl of protein N-term")){
+                // remove the first character
+                peptide = peptide.substring(1);
+                n_term_char = "5";
+            }
             String []aa= peptide.split("");
             for(String ptm:m){
                 String mod_name = ptm.split("@")[0];
@@ -8439,6 +8455,8 @@ public class AIGear {
                 }else if(mod_name.equalsIgnoreCase("Carbamidomethylation of C") || mod_name.equalsIgnoreCase("Carbamidomethyl of C")){
                     // no need to change
                     // fixed modification.
+                }else if(mod_name.equalsIgnoreCase("Acetyl of protein N-term")){
+                    // no need to change
                 }else{
                     if(CModification.getInstance().ptm_name2id.containsKey(mod_name)) {
                         aa[Integer.parseInt(pos) - 1] = String.valueOf(CModification.getInstance().ptm_name2id.get(mod_name));
@@ -8453,6 +8471,13 @@ public class AIGear {
             }else {
                 x = StringUtils.join(aa, "");
             }
+            if(!n_term_char.equalsIgnoreCase("")){
+                x = n_term_char + x + CParameter.terminal_char;
+            }else{
+                x = CParameter.terminal_char + x + CParameter.terminal_char;
+            }
+        }else{
+            x = CParameter.terminal_char + peptide + CParameter.terminal_char;
         }
         return x;
     }
@@ -12486,6 +12511,10 @@ public class AIGear {
                     case "Phospho@Y":
                         ptm_name = "Y[UniMod:21]";
                         aa[ptm_pos] = ptm_name;
+                        break;
+                    case "Acetyl@Protein_N-term":
+                        ptm_name = "[UniMod:1]";
+                        aa[0] = ptm_name + aa[0];
                         break;
                     default:
                         String psi_name_site = names[i]; // "Phospho@S"

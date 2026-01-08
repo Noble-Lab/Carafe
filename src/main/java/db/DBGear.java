@@ -124,11 +124,15 @@ public class DBGear {
         }
         HashSet<String> peptides = enzyme.digest(proteinSequence, CParameter.maxMissedCleavages, CParameter.minPeptideLength, CParameter.maxPeptideLength);
         if(CParameter.clip_nTerm_M && proteinSequence.startsWith("M")){
-            List<String> n_term_peptides = peptides.stream().filter(proteinSequence::startsWith).filter(pep -> pep.length() >= (CParameter.minPeptideLength+1)).map(pep -> pep.substring(1)).collect(toList());
+            List<String> n_term_peptides = peptides.stream().filter(proteinSequence::startsWith).filter(pep -> pep.length() >= (CParameter.minPeptideLength+1)).map(pep -> pep.substring(1)).toList();
             if(!n_term_peptides.isEmpty()){
                 peptides.addAll(n_term_peptides);
+                // Add the n-term peptides with M clipped
+                PeptideUtils.protein_n_term_peptides.addAll(n_term_peptides);
             }
         }
+        // add the original protein n-term peptides
+        PeptideUtils.protein_n_term_peptides.addAll(peptides.stream().filter(proteinSequence::startsWith).toList());
         return peptides;
     }
 
