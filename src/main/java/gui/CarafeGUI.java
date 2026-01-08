@@ -1803,7 +1803,33 @@ public class CarafeGUI extends JFrame {
             if (selected != null) {
                 String[] parts = selected.split(" - ");
                 if (parts.length > 0) {
-                    fixModSelectedField.setText(parts[0]);
+                    String newMod = parts[0].trim();
+                    // If selecting "0" (no modification), replace everything with "0"
+                    if (newMod.equals("0")) {
+                        fixModSelectedField.setText("0");
+                        return;
+                    }
+                    String currentValue = fixModSelectedField.getText().trim();
+                    if (currentValue.isEmpty() || currentValue.equals("0")) {
+                        // Replace "0" or empty with new selection
+                        fixModSelectedField.setText(newMod);
+                    } else {
+                        // Append if not already present (check each mod ID)
+                        java.util.Set<String> existingMods = new java.util.LinkedHashSet<>();
+                        for (String mod : currentValue.split(",")) {
+                            String trimmed = mod.trim();
+                            if (!trimmed.isEmpty())
+                                existingMods.add(trimmed);
+                        }
+                        for (String mod : newMod.split(",")) {
+                            String trimmed = mod.trim();
+                            if (!trimmed.isEmpty())
+                                existingMods.add(trimmed);
+                        }
+                        // Remove "0" if present since we're adding actual mods
+                        existingMods.remove("0");
+                        fixModSelectedField.setText(String.join(",", existingMods));
+                    }
                 }
             }
         });
@@ -1824,6 +1850,51 @@ public class CarafeGUI extends JFrame {
 
         fixModSelectedField = createTextField("e.g., 1");
         fixModSelectedField.setText("1");
+        // Auto-cleanup: remove "0" when other mods are present
+        fixModSelectedField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private boolean updating = false;
+
+            private void cleanup() {
+                if (updating)
+                    return;
+                String text = fixModSelectedField.getText().trim();
+                if (text.contains(",")) {
+                    java.util.List<String> mods = new java.util.ArrayList<>();
+                    boolean hasZero = false;
+                    for (String m : text.split(",")) {
+                        String trimmed = m.trim();
+                        if (trimmed.equals("0")) {
+                            hasZero = true;
+                        } else if (!trimmed.isEmpty()) {
+                            mods.add(trimmed);
+                        }
+                    }
+                    // Only cleanup if there was a standalone "0" with other mods
+                    if (hasZero && !mods.isEmpty()) {
+                        String cleaned = String.join(",", mods);
+                        if (!cleaned.equals(text)) {
+                            updating = true;
+                            SwingUtilities.invokeLater(() -> {
+                                fixModSelectedField.setText(cleaned);
+                                updating = false;
+                            });
+                        }
+                    }
+                }
+            }
+
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                cleanup();
+            }
+
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                cleanup();
+            }
+
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                cleanup();
+            }
+        });
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(fixModSelectedField, gbc);
@@ -1860,7 +1931,33 @@ public class CarafeGUI extends JFrame {
             if (selected != null) {
                 String[] parts = selected.split(" - ");
                 if (parts.length > 0) {
-                    varModSelectedField.setText(parts[0]);
+                    String newMod = parts[0].trim();
+                    // If selecting "0" (no modification), replace everything with "0"
+                    if (newMod.equals("0")) {
+                        varModSelectedField.setText("0");
+                        return;
+                    }
+                    String currentValue = varModSelectedField.getText().trim();
+                    if (currentValue.isEmpty() || currentValue.equals("0")) {
+                        // Replace "0" or empty with new selection
+                        varModSelectedField.setText(newMod);
+                    } else {
+                        // Append if not already present (check each mod ID)
+                        java.util.Set<String> existingMods = new java.util.LinkedHashSet<>();
+                        for (String mod : currentValue.split(",")) {
+                            String trimmed = mod.trim();
+                            if (!trimmed.isEmpty())
+                                existingMods.add(trimmed);
+                        }
+                        for (String mod : newMod.split(",")) {
+                            String trimmed = mod.trim();
+                            if (!trimmed.isEmpty())
+                                existingMods.add(trimmed);
+                        }
+                        // Remove "0" if present since we're adding actual mods
+                        existingMods.remove("0");
+                        varModSelectedField.setText(String.join(",", existingMods));
+                    }
                 }
             }
         });
@@ -1882,6 +1979,51 @@ public class CarafeGUI extends JFrame {
 
         varModSelectedField = createTextField("e.g., 0 or 2");
         varModSelectedField.setText("0");
+        // Auto-cleanup: remove "0" when other mods are present
+        varModSelectedField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private boolean updating = false;
+
+            private void cleanup() {
+                if (updating)
+                    return;
+                String text = varModSelectedField.getText().trim();
+                if (text.contains(",")) {
+                    java.util.List<String> mods = new java.util.ArrayList<>();
+                    boolean hasZero = false;
+                    for (String m : text.split(",")) {
+                        String trimmed = m.trim();
+                        if (trimmed.equals("0")) {
+                            hasZero = true;
+                        } else if (!trimmed.isEmpty()) {
+                            mods.add(trimmed);
+                        }
+                    }
+                    // Only cleanup if there was a standalone "0" with other mods
+                    if (hasZero && !mods.isEmpty()) {
+                        String cleaned = String.join(",", mods);
+                        if (!cleaned.equals(text)) {
+                            updating = true;
+                            SwingUtilities.invokeLater(() -> {
+                                varModSelectedField.setText(cleaned);
+                                updating = false;
+                            });
+                        }
+                    }
+                }
+            }
+
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                cleanup();
+            }
+
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                cleanup();
+            }
+
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                cleanup();
+            }
+        });
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(varModSelectedField, gbc);
@@ -3543,6 +3685,9 @@ public class CarafeGUI extends JFrame {
         String fixModSelected = fixModSelectedField.getText().trim();
         if (!fixModSelected.isEmpty()) {
             // cmd.append("-fixMod ").append(fixModSelected).append(" ");
+            // remove "," at the start and end
+            fixModSelected = fixModSelected.replaceAll("^,", "");
+            fixModSelected = fixModSelected.replaceAll(",$", "");
             commandArgs.add("-fixMod");
             commandArgs.add(fixModSelected);
         }
@@ -3550,6 +3695,9 @@ public class CarafeGUI extends JFrame {
         String varModSelected = varModSelectedField.getText().trim();
         if (!varModSelected.isEmpty()) {
             // cmd.append("-varMod ").append(varModSelected).append(" ");
+            // remove "," at the start and end
+            varModSelected = varModSelected.replaceAll("^,", "");
+            varModSelected = varModSelected.replaceAll(",$", "");
             commandArgs.add("-varMod");
             commandArgs.add(varModSelected);
         }
@@ -4592,6 +4740,9 @@ public class CarafeGUI extends JFrame {
             // diannArgs.add("\"" + out_dir + File.separator + "report-lib.parquet\"");
 
             String fixModSelected = fixModSelectedField.getText().trim();
+            // remove "," at the start and end
+            fixModSelected = fixModSelected.replaceAll("^,", "");
+            fixModSelected = fixModSelected.replaceAll(",$", "");
             if (fixModSelected.equalsIgnoreCase("1")) {
                 diannArgs.add("--unimod4");
             } else {
@@ -4602,6 +4753,9 @@ public class CarafeGUI extends JFrame {
             }
 
             String varModSelected = varModSelectedField.getText().trim();
+            // remove "," at the start and end
+            varModSelected = varModSelected.replaceAll("^,", "");
+            varModSelected = varModSelected.replaceAll(",$", "");
             if (varModSelected.equalsIgnoreCase("2")) {
                 diannArgs.add("--var-mods");
                 if ((int) maxVarSpinner.getValue() >= 1) {
