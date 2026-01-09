@@ -131,6 +131,8 @@ public class CarafeGUI extends JFrame {
     private JSpinner libMinNumFragSpinner;
     private JSpinner libFragNumMinSpinner;
     private JComboBox<String> libraryFormatCombo;
+    private JCheckBox benchmarkCheckbox;
+    private JLabel benchmarkLabel;
 
     // Output console
     private JTextArea consoleArea;
@@ -1470,6 +1472,15 @@ public class CarafeGUI extends JFrame {
             }
         }
 
+        // Show benchmark checkbox only for Workflow 3 (End-to-end)
+        boolean showBenchmark = (globalWorkflowIndex == 2);
+        if (benchmarkCheckbox != null) {
+            benchmarkCheckbox.setVisible(showBenchmark);
+        }
+        if (benchmarkLabel != null) {
+            benchmarkLabel.setVisible(showBenchmark);
+        }
+
         stripScrollPaneBorder(inputFieldsPanel);
         inputFieldsPanel.setBorder(BorderFactory.createEmptyBorder());
         inputFieldsPanel.revalidate();
@@ -2191,6 +2202,23 @@ public class CarafeGUI extends JFrame {
 
         gbc.gridx = 0;
         gbc.gridy = 20;
+        gbc.weightx = 0;
+        gbc.gridwidth = 1;
+        benchmarkLabel = createLabel("Benchmark (DIA-NN library-free):",
+                "When enabled, runs an additional DIA-NN library-free search on project files for comparison.\n" +
+                "This option only applies to Workflow 3 (End-to-end DIA search).");
+        benchmarkLabel.setVisible(false); // Hidden by default, shown only for Workflow 3
+        panel.add(benchmarkLabel, gbc);
+
+        benchmarkCheckbox = new JCheckBox();
+        benchmarkCheckbox.setSelected(false);
+        benchmarkCheckbox.setVisible(false); // Hidden by default, shown only for Workflow 3
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(benchmarkCheckbox, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 21;
         gbc.gridwidth = 2;
         gbc.weighty = 1;
         panel.add(Box.createVerticalGlue(), gbc);
@@ -4337,8 +4365,13 @@ public class CarafeGUI extends JFrame {
 
                 final String finalCarafeMsInput = carafeMsInput;
 
+                // Check if benchmark mode is enabled
+                final boolean runBenchmark = benchmarkCheckbox != null && benchmarkCheckbox.isSelected();
+                final String diann_libfree_dir = outDir + File.separator + "diann_project_library_free";
+
                 executeChainedCommands(initialTasks, () -> {
-                    final CmdTask[] commands = new CmdTask[2];
+                    final int numCommands = runBenchmark ? 3 : 2;
+                    final CmdTask[] commands = new CmdTask[numCommands];
                     try {
                         SwingUtilities.invokeAndWait(() -> {
                             diannReportFileField.setText(diann_report_file);
@@ -4361,6 +4394,21 @@ public class CarafeGUI extends JFrame {
                             if (commands[1] != null) {
                                 commands[1].task_description = "DIA-NN search for project data using fine-tuned library";
                             }
+
+                            // Optional benchmark step: DIA-NN library-free search
+                            if (runBenchmark && !effectiveProjectFiles.isEmpty()) {
+                                // Create lib-free output directory
+                                File libfreeDir = new File(diann_libfree_dir);
+                                if (!libfreeDir.exists()) {
+                                    libfreeDir.mkdirs();
+                                }
+                                // Build library-free command: pass empty library with database
+                                commands[2] = buildDIANNCommand(effectiveProjectFiles, "", libraryDb,
+                                        diann_libfree_dir);
+                                if (commands[2] != null) {
+                                    commands[2].task_description = "DIA-NN library-free search for benchmark comparison";
+                                }
+                            }
                         });
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -4369,6 +4417,7 @@ public class CarafeGUI extends JFrame {
                     return commands;
                 });
             }
+
             default -> JOptionPane.showMessageDialog(this, "Unsupported workflow selected!", "Error",
                     JOptionPane.ERROR_MESSAGE);
         }
