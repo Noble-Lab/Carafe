@@ -1,8 +1,10 @@
 package main.java.gui;
 
+import java.security.cert.CertPath;
 import java.util.Arrays;
 
 import main.java.ai.AIGear;
+import main.java.input.CParameter;
 import main.java.util.GenericUtils;
 
 /**
@@ -14,12 +16,11 @@ import main.java.util.GenericUtils;
  */
 public class CarafeLauncher {
 
-    private static final String VERSION = "2.0.0-beta";
     private static final String BANNER = """
             AI-Powered Spectral Library Generator for DIA Proteomics
             Version: %s
             
-            """.formatted(VERSION);
+            """.formatted(CParameter.getVersion());
     
     // Static initializer - runs before main() and before any Hadoop classes load
     static {
