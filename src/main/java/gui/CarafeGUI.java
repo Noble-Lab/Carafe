@@ -1241,16 +1241,22 @@ public class CarafeGUI extends JFrame {
                 boolean hasRaw = false;
                 boolean hasTimsTof = false;
                 java.util.List<String> invalidDFolders = new java.util.ArrayList<>();
+                boolean hasNonDFolder = false;
 
                 for (File f : files) {
                     String name = f.getName().toLowerCase();
-                    if (f.isDirectory() && name.endsWith(".d")) {
-                        // Validate TIMSTOF folder contains analysis.tdf
-                        File analysisTdf = new File(f, "analysis.tdf");
-                        if (analysisTdf.exists()) {
-                            hasTimsTof = true;
+                    if (f.isDirectory()) {
+                        if (name.endsWith(".d")) {
+                            // Validate TIMSTOF folder contains analysis.tdf
+                            File analysisTdf = new File(f, "analysis.tdf");
+                            if (analysisTdf.exists()) {
+                                hasTimsTof = true;
+                            } else {
+                                invalidDFolders.add(f.getName());
+                            }
                         } else {
-                            invalidDFolders.add(f.getName());
+                            // Regular folder (not a .d folder)
+                            hasNonDFolder = true;
                         }
                     } else if (f.isFile()) {
                         if (name.endsWith(".mzml"))
@@ -1260,13 +1266,30 @@ public class CarafeGUI extends JFrame {
                     }
                 }
 
-                // Show error for invalid .d folders
+                // Check if user selected a single regular folder (not a .d folder)
+                if (files.length == 1 && hasNonDFolder) {
+                    JOptionPane.showMessageDialog(this,
+                            "The selected folder is not a timsTOF .d folder.\n" +
+                                    "If you want to select a folder which contains the training MS files, " +
+                                    "please use the Folder button.",
+                            "Invalid Selection",
+                            JOptionPane.WARNING_MESSAGE);
+                    fileList.clear();
+                    updateFileFieldState(targetField, fileList);
+                    targetField.setText("");
+                    return;
+                }
+
+                // Show error for invalid .d folders (missing analysis.tdf)
                 if (!invalidDFolders.isEmpty()) {
                     JOptionPane.showMessageDialog(this,
                             "The following .d folders do not contain analysis.tdf:\n" +
                                     String.join(", ", invalidDFolders),
                             "Invalid TIMSTOF Folder",
                             JOptionPane.WARNING_MESSAGE);
+                    fileList.clear();
+                    updateFileFieldState(targetField, fileList);
+                    targetField.setText("");
                     return;
                 }
 
