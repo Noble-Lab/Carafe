@@ -1236,19 +1236,45 @@ public class CarafeGUI extends JFrame {
         styleButton(button);
         button.addActionListener(e -> {
             chooseFiles("Select Files", extensions, description, files -> {
-                // Validation: Check for mixed extensions
+                // Validation: Check for mixed types (mzML, raw, TIMSTOF .d folders)
                 boolean hasMzML = false;
                 boolean hasRaw = false;
+                boolean hasTimsTof = false;
+                java.util.List<String> invalidDFolders = new java.util.ArrayList<>();
+
                 for (File f : files) {
                     String name = f.getName().toLowerCase();
-                    if (name.endsWith(".mzml"))
-                        hasMzML = true;
-                    if (name.endsWith(".raw"))
-                        hasRaw = true;
+                    if (f.isDirectory() && name.endsWith(".d")) {
+                        // Validate TIMSTOF folder contains analysis.tdf
+                        File analysisTdf = new File(f, "analysis.tdf");
+                        if (analysisTdf.exists()) {
+                            hasTimsTof = true;
+                        } else {
+                            invalidDFolders.add(f.getName());
+                        }
+                    } else if (f.isFile()) {
+                        if (name.endsWith(".mzml"))
+                            hasMzML = true;
+                        if (name.endsWith(".raw"))
+                            hasRaw = true;
+                    }
                 }
-                if (hasMzML && hasRaw) {
+
+                // Show error for invalid .d folders
+                if (!invalidDFolders.isEmpty()) {
                     JOptionPane.showMessageDialog(this,
-                            "Please select only mzML files OR only RAW files, not both.",
+                            "The following .d folders do not contain analysis.tdf:\n" +
+                                    String.join(", ", invalidDFolders),
+                            "Invalid TIMSTOF Folder",
+                            JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                // Prevent mixing different data types
+                int typeCount = (hasMzML ? 1 : 0) + (hasRaw ? 1 : 0) + (hasTimsTof ? 1 : 0);
+                if (typeCount > 1) {
+                    JOptionPane.showMessageDialog(this,
+                            "Please select only one type: mzML files, RAW files, or TIMSTOF .d folders.",
                             "Invalid Selection",
                             JOptionPane.WARNING_MESSAGE);
                     return;
@@ -1256,10 +1282,20 @@ public class CarafeGUI extends JFrame {
 
                 fileList.clear();
                 for (File f : files) {
-                    fileList.add(f.getAbsolutePath());
+                    // Only add valid files/folders
+                    if (f.isDirectory() && f.getName().toLowerCase().endsWith(".d")) {
+                        fileList.add(f.getAbsolutePath());
+                    } else if (f.isFile()) {
+                        fileList.add(f.getAbsolutePath());
+                    }
                 }
                 updateFileFieldState(targetField, fileList);
-                prefs.put(PREF_LAST_DIR, files[0].getParent());
+                if (files.length > 0) {
+                    File parent = files[0].getParentFile();
+                    if (parent != null) {
+                        prefs.put(PREF_LAST_DIR, parent.getAbsolutePath());
+                    }
+                }
             });
         });
         return button;
@@ -2206,7 +2242,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridwidth = 1;
         benchmarkLabel = createLabel("Benchmark (DIA-NN library-free):",
                 "When enabled, runs an additional DIA-NN library-free search on project files for comparison.\n" +
-                "This option only applies to Workflow 3 (End-to-end DIA search).");
+                        "This option only applies to Workflow 3 (End-to-end DIA search).");
         benchmarkLabel.setVisible(false); // Hidden by default, shown only for Workflow 3
         panel.add(benchmarkLabel, gbc);
 
@@ -3523,10 +3559,10 @@ public class CarafeGUI extends JFrame {
     }
 
     private CmdTask buildCarafeCommand() {
-        return buildCarafeCommand(null);
+        return buildCarafeCommand(null, false);
     }
 
-    private CmdTask buildCarafeCommand(String trainMsFileOverride) {
+    private CmdTask buildCarafeCommand(String trainMsFileOverride, boolean isTimsTOF) {
         List<String> commandArgs = new ArrayList<>();
         StringBuilder cmd = new StringBuilder();
         boolean exe_launch = false;
@@ -3700,6 +3736,11 @@ public class CarafeGUI extends JFrame {
             // cmd.append("-device ").append(device).append(" ");
             commandArgs.add("-device");
             commandArgs.add(device);
+        }
+
+        // Add -ccs flag for TIMSTOF data
+        if (isTimsTOF) {
+            commandArgs.add("-ccs");
         }
 
         String enzyme = ((String) enzymeCombo.getSelectedItem()).split(":")[0];
@@ -3992,14 +4033,24 @@ public class CarafeGUI extends JFrame {
                 CmdTask conversionTask = null;
                 java.util.List<String> finalMsFiles = new ArrayList<>();
                 java.util.List<String> rawFilesToConvert = new ArrayList<>();
+                boolean isTimsTOF = false;
 
                 // Resolve inputs
                 if (!trainMsFiles.isEmpty()) {
                     for (String path : trainMsFiles) {
-                        if (path.toLowerCase().endsWith(".raw"))
+                        File pathFile = new File(path);
+                        if (path.toLowerCase().endsWith(".d") && pathFile.isDirectory()) {
+                            // TIMSTOF .d folder
+                            File analysisTdf = new File(pathFile, "analysis.tdf");
+                            if (analysisTdf.exists()) {
+                                finalMsFiles.add(path);
+                                isTimsTOF = true;
+                            }
+                        } else if (path.toLowerCase().endsWith(".raw")) {
                             rawFilesToConvert.add(path);
-                        else
+                        } else {
                             finalMsFiles.add(path);
+                        }
                     }
                 } else if (!trainMsFile.isEmpty()) {
                     File trainFileObj = new File(trainMsFile);
@@ -4099,13 +4150,14 @@ public class CarafeGUI extends JFrame {
                 }
 
                 final String finalEffectiveMsFile = effectiveMsFile;
+                final boolean finalIsTimsTOF = isTimsTOF;
                 executeChainedCommands(initialTasks, () -> {
                     final CmdTask[] commandContainer = new CmdTask[1];
                     try {
                         SwingUtilities.invokeAndWait(() -> {
                             diannReportFileField.setText(diann_report_file);
                             // System.out.println("DIANN report file: " + diann_report_file);
-                            CmdTask carafe_task = buildCarafeCommand(finalEffectiveMsFile);
+                            CmdTask carafe_task = buildCarafeCommand(finalEffectiveMsFile, finalIsTimsTOF);
                             if (carafe_task != null) {
                                 carafe_task.task_description = "Run Carafe to generate fine-tuned library";
                             }
@@ -4156,7 +4208,45 @@ public class CarafeGUI extends JFrame {
                     return;
                 }
 
-                CmdTask carafeTask = buildCarafeCommand(null);
+                // Detect TIMSTOF data
+                boolean isTimsTOF = false;
+                // Check multi-file list directly (user may have selected .d folders)
+                if (!trainMsFiles.isEmpty()) {
+                    for (String msFile : trainMsFiles) {
+                        if (msFile.toLowerCase().endsWith(".d")) {
+                            File dFolder = new File(msFile);
+                            File analysisTdf = new File(dFolder, "analysis.tdf");
+                            if (dFolder.isDirectory() && analysisTdf.exists()) {
+                                isTimsTOF = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Also check trainMsFile (single file or parent folder)
+                if (!isTimsTOF) {
+                    if (trainMsFile.toLowerCase().endsWith(".d") && new File(trainMsFile).isDirectory()) {
+                        File analysisTdf = new File(trainMsFile, "analysis.tdf");
+                        if (analysisTdf.exists()) {
+                            isTimsTOF = true;
+                        }
+                    } else if (new File(trainMsFile).isDirectory()) {
+                        // Check if parent folder contains .d subdirectories
+                        File trainFileObj = new File(trainMsFile);
+                        File[] dFolders = trainFileObj.listFiles((dir, name) -> name.toLowerCase().endsWith(".d"));
+                        if (dFolders != null && dFolders.length > 0) {
+                            for (File dFolder : dFolders) {
+                                File analysisTdf = new File(dFolder, "analysis.tdf");
+                                if (analysisTdf.exists()) {
+                                    isTimsTOF = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                CmdTask carafeTask = buildCarafeCommand(null, isTimsTOF);
                 if (carafeTask != null) {
                     carafeTask.task_description = "Run Carafe to generate spectral library";
                 }
@@ -4234,13 +4324,37 @@ public class CarafeGUI extends JFrame {
                 // scanning logic.
 
                 boolean isDirectory = false;
+                boolean isTimsTofFolder = false;
+                boolean isTimsTOFData = false;
                 if (effectiveTrainFiles.size() == 1) {
-                    if (new File(effectiveTrainFiles.get(0)).isDirectory()) {
-                        isDirectory = true;
+                    File trainFile = new File(effectiveTrainFiles.get(0));
+                    if (trainFile.isDirectory()) {
+                        // Check if it's a TIMSTOF .d folder
+                        if (trainFile.getName().toLowerCase().endsWith(".d")) {
+                            File analysisTdf = new File(trainFile, "analysis.tdf");
+                            if (analysisTdf.exists()) {
+                                isTimsTofFolder = true;
+                                isTimsTOFData = true;
+                            }
+                        }
+                        if (!isTimsTofFolder) {
+                            isDirectory = true;
+                        }
                     }
                 }
 
-                if (isDirectory) {
+                // Check if we have TIMSTOF folders in the file list (multi-select case)
+                boolean hasTimsTof = effectiveTrainFiles.stream().anyMatch(f -> {
+                    File file = new File(f);
+                    return f.toLowerCase().endsWith(".d") && file.isDirectory()
+                            && new File(file, "analysis.tdf").exists();
+                });
+
+                if (isTimsTofFolder || hasTimsTof) {
+                    // TIMSTOF .d folders - pass directly to DIA-NN, no conversion needed
+                    isTimsTOFData = true;
+                    finalTrainMzMLFiles.addAll(effectiveTrainFiles);
+                } else if (isDirectory) {
                     // Fallback to existing directory scanning logic
                     File trainFileObj = new File(effectiveTrainFiles.get(0));
                     boolean hasMzML = false;
@@ -4269,6 +4383,18 @@ public class CarafeGUI extends JFrame {
                                 finalTrainMzMLFiles.add(subDir + File.separator + baseName + ".mzML");
                             }
                             singleEffectiveMsFile = subDir; // Pass subdir for searching
+                        } else {
+                            // Check for .d subdirectories (TIMSTOF batch folder)
+                            File[] dFolders = trainFileObj.listFiles((d, n) -> n.toLowerCase().endsWith(".d"));
+                            if (dFolders != null && dFolders.length > 0) {
+                                for (File dFolder : dFolders) {
+                                    File analysisTdf = new File(dFolder, "analysis.tdf");
+                                    if (analysisTdf.exists()) {
+                                        isTimsTOFData = true;
+                                        finalTrainMzMLFiles.add(dFolder.getAbsolutePath());
+                                    }
+                                }
+                            }
                         }
                     } else {
                         singleEffectiveMsFile = trainFileObj.getAbsolutePath();
@@ -4364,6 +4490,7 @@ public class CarafeGUI extends JFrame {
                 }
 
                 final String finalCarafeMsInput = carafeMsInput;
+                final boolean finalIsTimsTOFData = isTimsTOFData;
 
                 // Check if benchmark mode is enabled
                 final boolean runBenchmark = benchmarkCheckbox != null && benchmarkCheckbox.isSelected();
@@ -4375,7 +4502,7 @@ public class CarafeGUI extends JFrame {
                     try {
                         SwingUtilities.invokeAndWait(() -> {
                             diannReportFileField.setText(diann_report_file);
-                            CmdTask carafe_task = buildCarafeCommand(finalCarafeMsInput);
+                            CmdTask carafe_task = buildCarafeCommand(finalCarafeMsInput, finalIsTimsTOFData);
                             if (carafe_task != null) {
                                 carafe_task.task_description = "Run Carafe to generate fine-tuned library";
                             }
@@ -5429,41 +5556,86 @@ public class CarafeGUI extends JFrame {
         else if (!projectMsFileField.getText().trim().isEmpty())
             effectiveProjectFiles.add(projectMsFileField.getText().trim());
 
-        boolean hasRaw = false;
-        // Check for raw files in training entries
-        for (String p : effectiveTrainFiles) {
-            String low = p.toLowerCase();
-            if (low.endsWith(".raw")) {
-                hasRaw = true;
-                break;
-            }
-            File f = new File(p);
-            if (f.isDirectory()) {
-                File[] raws = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
-                if (raws != null && raws.length > 0) {
-                    hasRaw = true;
-                    break;
-                }
-            }
-        }
-        // Check for raw files in project entries if applicable to workflow
-        if (workflowIndex == 2 && !hasRaw) {
-            for (String p : effectiveProjectFiles) {
+        // Helper to detect MS data type: "timstof", "raw", "mzml", or "unknown"
+        java.util.function.Function<java.util.List<String>, String> detectMsDataType = (fileList) -> {
+            boolean hasMzML = false;
+            boolean hasRaw = false;
+            boolean hasTimsTof = false;
+            for (String p : fileList) {
                 String low = p.toLowerCase();
-                if (low.endsWith(".raw")) {
-                    hasRaw = true;
-                    break;
-                }
                 File f = new File(p);
-                if (f.isDirectory()) {
-                    File[] raws = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
-                    if (raws != null && raws.length > 0) {
+                if (low.endsWith(".d") && f.isDirectory()) {
+                    File analysisTdf = new File(f, "analysis.tdf");
+                    if (analysisTdf.exists()) {
+                        hasTimsTof = true;
+                    }
+                } else if (low.endsWith(".mzml")) {
+                    hasMzML = true;
+                } else if (low.endsWith(".raw")) {
+                    hasRaw = true;
+                } else if (f.isDirectory()) {
+                    // Check folder contents
+                    File[] dFolders = f.listFiles((d, n) -> n.toLowerCase().endsWith(".d"));
+                    if (dFolders != null && dFolders.length > 0) {
+                        hasTimsTof = true;
+                    }
+                    File[] rawFiles = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
+                    if (rawFiles != null && rawFiles.length > 0) {
                         hasRaw = true;
-                        break;
+                    }
+                    File[] mzmlFiles = f.listFiles((d, n) -> n.toLowerCase().endsWith(".mzml"));
+                    if (mzmlFiles != null && mzmlFiles.length > 0) {
+                        hasMzML = true;
                     }
                 }
             }
+            if (hasTimsTof && !hasRaw && !hasMzML)
+                return "timstof";
+            if (hasRaw && !hasTimsTof && !hasMzML)
+                return "raw";
+            if (hasMzML && !hasTimsTof && !hasRaw)
+                return "mzml";
+            if (hasTimsTof || hasRaw || hasMzML)
+                return "mixed";
+            return "unknown";
+        };
+
+        String trainDataType = !effectiveTrainFiles.isEmpty() ? detectMsDataType.apply(effectiveTrainFiles) : "unknown";
+        String projectDataType = !effectiveProjectFiles.isEmpty() ? detectMsDataType.apply(effectiveProjectFiles)
+                : "unknown";
+
+        // Validate .d folders contain analysis.tdf
+        for (String p : effectiveTrainFiles) {
+            File f = new File(p);
+            if (p.toLowerCase().endsWith(".d") && f.isDirectory()) {
+                File analysisTdf = new File(f, "analysis.tdf");
+                if (!analysisTdf.exists()) {
+                    errors.add("- TIMSTOF folder missing analysis.tdf: " + f.getName());
+                }
+            }
         }
+        for (String p : effectiveProjectFiles) {
+            File f = new File(p);
+            if (p.toLowerCase().endsWith(".d") && f.isDirectory()) {
+                File analysisTdf = new File(f, "analysis.tdf");
+                if (!analysisTdf.exists()) {
+                    errors.add("- TIMSTOF folder missing analysis.tdf: " + f.getName());
+                }
+            }
+        }
+
+        // Cross-field consistency: Train and Project must be same type
+        if (workflowIndex == 2 && !effectiveTrainFiles.isEmpty() && !effectiveProjectFiles.isEmpty()) {
+            if (!trainDataType.equals("unknown") && !projectDataType.equals("unknown")
+                    && !trainDataType.equals(projectDataType)) {
+                errors.add("- Train MS and Project MS files must be the same type. " +
+                        "Train is " + trainDataType.toUpperCase() + ", Project is " + projectDataType.toUpperCase()
+                        + ".");
+            }
+        }
+
+        boolean hasRaw = "raw".equals(trainDataType) || "raw".equals(projectDataType);
+        boolean hasTimsTof = "timstof".equals(trainDataType) || "timstof".equals(projectDataType);
 
         switch (workflowIndex) {
             case 0: // Library Generation using FASTA
@@ -5899,15 +6071,35 @@ public class CarafeGUI extends JFrame {
                 String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
                 chooser.setCurrentDirectory(new File(lastDir));
                 chooser.setMultiSelectionEnabled(true);
-                chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+                // Use FILES_AND_DIRECTORIES to support TIMSTOF .d folders
+                chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
                 if (title != null) {
                     chooser.setDialogTitle(title);
                 }
-                if (extensions != null && extensions.length > 0) {
-                    javax.swing.filechooser.FileNameExtensionFilter filter = new javax.swing.filechooser.FileNameExtensionFilter(
-                            description, extensions);
-                    chooser.setFileFilter(filter);
-                }
+                // Custom filter that accepts files with specified extensions AND .d folders
+                // (TIMSTOF)
+                chooser.setFileFilter(new javax.swing.filechooser.FileFilter() {
+                    @Override
+                    public boolean accept(File f) {
+                        if (f.isDirectory()) {
+                            // Always show directories for navigation
+                            // .d folders are valid TIMSTOF data if they contain analysis.tdf
+                            return true;
+                        }
+                        String name = f.getName().toLowerCase();
+                        for (String ext : extensions) {
+                            if (name.endsWith("." + ext.toLowerCase())) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+
+                    @Override
+                    public String getDescription() {
+                        return description + " or TIMSTOF .d folders";
+                    }
+                });
                 SwingUtilities.invokeLater(() -> {
                     setCursor(Cursor.getDefaultCursor());
                     if (chooser.showOpenDialog(CarafeGUI.this) == JFileChooser.APPROVE_OPTION) {

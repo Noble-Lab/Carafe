@@ -12,7 +12,8 @@ import java.util.Arrays;
 import static main.java.ai.AIGear.get_jar_path;
 
 /**
- * This class is used to call the rust library timsquery to extract spectra from TIMS-TOF data.
+ * This class is used to call the rust library timsquery to extract spectra from
+ * TIMS-TOF data.
  */
 public class CallTimsQuery {
 
@@ -24,7 +25,7 @@ public class CallTimsQuery {
     /**
      * The retention time window size
      */
-    public double rt_win = 5/60.0; // in minutes
+    public double rt_win = 5 / 60.0; // in minutes
 
     public double mobility = 3.0;
 
@@ -37,22 +38,77 @@ public class CallTimsQuery {
     public String itolu = "ppm";
     public double itol_shift = 0.0;
 
+    /**
+     * Get the platform-specific timsquery binary path.
+     * The binaries are located in: bin/timsquery/<platform>/
+     * - Windows: bin/timsquery/windows/timsquery_cli.exe
+     * - Linux: bin/timsquery/linux/timsquery_cli
+     * - macOS: bin/timsquery/macos/timsquery_cli
+     */
+    private String getTimsQueryBinaryPath() {
+        String osName = System.getProperty("os.name").toLowerCase();
+        String platformFolder;
+        String binaryName;
+        boolean isWindows = osName.contains("win");
+
+        if (isWindows) {
+            platformFolder = "windows";
+            binaryName = "timsquery_cli.exe";
+        } else if (osName.contains("mac") || osName.contains("darwin")) {
+            platformFolder = "macos";
+            binaryName = "timsquery_cli";
+        } else {
+            // Default to Linux for other Unix-like systems
+            platformFolder = "linux";
+            binaryName = "timsquery_cli";
+        }
+
+        // Try jar path first: bin/timsquery/<platform>/<binary>
+        String timsQueryBin = get_jar_path() + File.separator + "bin" + File.separator + "timsquery"
+                + File.separator + platformFolder + File.separator + binaryName;
+        File f = new File(timsQueryBin);
+        if (f.exists()) {
+            // Set executable permission on Linux/macOS
+            if (!isWindows && !f.canExecute()) {
+                boolean success = f.setExecutable(true);
+                if (success) {
+                    Cloger.getInstance().logger.info("Set executable permission for: " + timsQueryBin);
+                } else {
+                    Cloger.getInstance().logger.warn("Failed to set executable permission for: " + timsQueryBin);
+                }
+            }
+            Cloger.getInstance().logger.info("timsquery found at: " + timsQueryBin);
+            return timsQueryBin;
+        }
+
+        // Try current directory as fallback
+        timsQueryBin = "bin" + File.separator + "timsquery" + File.separator + platformFolder
+                + File.separator + binaryName;
+        f = new File(timsQueryBin);
+        if (f.exists()) {
+            // Set executable permission on Linux/macOS
+            if (!isWindows && !f.canExecute()) {
+                boolean success = f.setExecutable(true);
+                if (success) {
+                    Cloger.getInstance().logger.info("Set executable permission for: " + timsQueryBin);
+                } else {
+                    Cloger.getInstance().logger.warn("Failed to set executable permission for: " + timsQueryBin);
+                }
+            }
+            timsQueryBin = f.getAbsolutePath();
+            Cloger.getInstance().logger.info("timsquery found at: " + timsQueryBin);
+            return timsQueryBin;
+        }
+
+        Cloger.getInstance().logger.error("TIMSQUERY binary not found! Expected at: bin/timsquery/"
+                + platformFolder + "/" + binaryName);
+        return null;
+    }
 
     public void run_ms2_spectra_query(String ms_file, String psm_query_file, String out_file) {
-        String tims_query_bin = get_jar_path() + File.separator + "timsquery";
-        File F = new File(tims_query_bin);
-        if(!F.exists()){
-            // check if timsquery is in the current directory
-            tims_query_bin = "timsquery";
-            F = new File(tims_query_bin);
-            if(!F.exists()){
-                Cloger.getInstance().logger.error("TIMSQUERY binary not found!");
-            }else{
-                tims_query_bin = F.getAbsolutePath();
-                Cloger.getInstance().logger.info("timsquery found at: " + tims_query_bin);
-            }
-        }else{
-            Cloger.getInstance().logger.info("timsquery found at: " + tims_query_bin);
+        String tims_query_bin = getTimsQueryBinaryPath();
+        if (tims_query_bin == null) {
+            return;
         }
 
         // get the folder of out_file
@@ -75,9 +131,9 @@ public class CallTimsQuery {
                 "-f", "ndjson",
                 "-o", out_file
         };
-        ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
+        ArrayList<String> cmd_list = new ArrayList<>(Arrays.asList(cmd_list_short));
 
-        System.out.println("cmd: "+ StringUtils.join(cmd_list));
+        System.out.println("cmd: " + StringUtils.join(cmd_list));
         // convert cmd_list to String []
         String[] cmd = new String[cmd_list.size()];
         cmd = cmd_list.toArray(cmd);
@@ -85,20 +141,9 @@ public class CallTimsQuery {
     }
 
     public void run_xic_query(String ms_file, String psm_query_file, String out_file) {
-        String tims_query_bin = get_jar_path() + File.separator + "timsquery";
-        File F = new File(tims_query_bin);
-        if(!F.exists()){
-            // check if timsquery is in the current directory
-            tims_query_bin = "timsquery";
-            F = new File(tims_query_bin);
-            if(!F.exists()){
-                Cloger.getInstance().logger.error("TIMSQUERY binary not found!");
-            }else{
-                tims_query_bin = F.getAbsolutePath();
-                Cloger.getInstance().logger.info("timsquery found at: " + tims_query_bin);
-            }
-        }else{
-            Cloger.getInstance().logger.info("timsquery found at: " + tims_query_bin);
+        String tims_query_bin = getTimsQueryBinaryPath();
+        if (tims_query_bin == null) {
+            return;
         }
 
         // get the folder of out_file
@@ -121,16 +166,16 @@ public class CallTimsQuery {
                 "-f", "ndjson",
                 "-o", out_file
         };
-        ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
+        ArrayList<String> cmd_list = new ArrayList<>(Arrays.asList(cmd_list_short));
 
-        System.out.println("cmd: "+ StringUtils.join(cmd_list));
+        System.out.println("cmd: " + StringUtils.join(cmd_list));
         // convert cmd_list to String []
         String[] cmd = new String[cmd_list.size()];
         cmd = cmd_list.toArray(cmd);
         run_cmd(cmd);
     }
 
-    private boolean run_cmd(String[] cmd){
+    private boolean run_cmd(String[] cmd) {
         boolean pass = true;
         Runtime rt = Runtime.getRuntime();
         Process p;
@@ -141,8 +186,10 @@ public class CallTimsQuery {
             throw new RuntimeException(e);
         }
 
-        StreamLog errorLog = new StreamLog(p.getErrorStream(), Thread.currentThread().getName()+": AI => Error:", true);
-        StreamLog stdLog = new StreamLog(p.getInputStream(), Thread.currentThread().getName()+": AI => Message:", true);
+        StreamLog errorLog = new StreamLog(p.getErrorStream(), Thread.currentThread().getName() + ": AI => Error:",
+                true);
+        StreamLog stdLog = new StreamLog(p.getInputStream(), Thread.currentThread().getName() + ": AI => Message:",
+                true);
 
         errorLog.start();
         stdLog.start();
@@ -151,7 +198,7 @@ public class CallTimsQuery {
             int exitValue = p.waitFor();
             if (exitValue != 0) {
                 pass = false;
-                Cloger.getInstance().logger.error(Thread.currentThread().getName()+": AI error:" + exitValue);
+                Cloger.getInstance().logger.error(Thread.currentThread().getName() + ": AI error:" + exitValue);
             }
         } catch (InterruptedException e) {
             pass = false;
@@ -175,7 +222,8 @@ public class CallTimsQuery {
     private void generate_timsquery_spectra_parameter_file(String out_file) throws IOException {
         BufferedWriter bw = new BufferedWriter(new FileWriter(out_file));
         bw.write("{\n");
-        bw.write("\"ms\": { \""+this.itolu+"\": [" + (this.itol-this.itol_shift) + "," + (this.itol+this.itol_shift) + "]},\n");
+        bw.write("\"ms\": { \"" + this.itolu + "\": [" + (this.itol - this.itol_shift) + ","
+                + (this.itol + this.itol_shift) + "]},\n");
         bw.write("\"rt\": { \"minutes\": [" + this.rt_win + "," + this.rt_win + "]},\n");
         bw.write("\"mobility\": { \"percent\": [" + this.mobility + "," + this.mobility + "]},\n");
         bw.write("\"quad\": { \"absolute\": [" + this.quad + "," + this.quad + "]}\n");
@@ -186,7 +234,8 @@ public class CallTimsQuery {
     private void generate_timsquery_xic_parameter_file(String out_file) throws IOException {
         BufferedWriter bw = new BufferedWriter(new FileWriter(out_file));
         bw.write("{\n");
-        bw.write("\"ms\": { \""+this.itolu+"\": [" + (this.itol-this.itol_shift) + "," + (this.itol+this.itol_shift) + "]},\n");
+        bw.write("\"ms\": { \"" + this.itolu + "\": [" + (this.itol - this.itol_shift) + ","
+                + (this.itol + this.itol_shift) + "]},\n");
         bw.write("\"rt\": { \"minutes\": [" + this.rt_win + "," + this.rt_win + "]},\n");
         bw.write("\"mobility\": { \"percent\": [" + this.mobility + "," + this.mobility + "]},\n");
         bw.write("\"quad\": { \"absolute\": [" + this.quad + "," + this.quad + "]}\n");
