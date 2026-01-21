@@ -1000,7 +1000,7 @@ public class CarafeGUI extends JFrame {
 
         int gridy = 0;
 
-        trainMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train MS File:",
+        trainMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train MS File(s):",
                 "MS/MS data for model training.\n" +
                         "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n" +
                         "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"
@@ -1008,7 +1008,7 @@ public class CarafeGUI extends JFrame {
                         "Thermo raw files are only supported when starting with DIA-NN search or performing end-to-end DIA search.\n"
                         +
                         "When the format is Thermo raw, MSConvert (ProteoWizard) needs to be installed (convert raw to mzML for Carafe).",
-                trainMsFileField = createTextField("Path to mzML/raw file or folder for training"),
+                trainMsFileField = createTextField("Select one or more MS files (or a folder) for training"),
                 createMsButtonsPanel(trainMsFileField));
 
         // Initialize debounce timer (300ms delay)
@@ -1050,13 +1050,13 @@ public class CarafeGUI extends JFrame {
 
         // This is the MS/MS data for peptide detection using the fine-tuned spectral
         // library
-        projectMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Project MS File:",
+        projectMsRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Project MS File(s):",
                 "MS/MS data for peptide detection using the fine-tuned spectral library using DIA-NN.\n" +
                         "Supported formats: mzML, Thermo raw, Bruker raw (.d).\n" +
                         "A single MS/MS file, multiple MS/MS files, or a folder containing MS/MS files are accepted.\n"
                         +
                         "When the format is Thermo raw, users need to make sure DIA-NN is configured to use Thermo raw format.",
-                projectMsFileField = createTextField("Path to mzML/raw file or folder for project"),
+                projectMsFileField = createTextField("Select one or more MS files (or a folder) for analyzing using the fine-tuned spectral library"),
                 createMsButtonsPanel(projectMsFileField));
 
         libraryDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Library Protein Database:",
@@ -1172,12 +1172,12 @@ public class CarafeGUI extends JFrame {
         if (targetField == trainMsFileField) {
             associatedList = trainMsFiles;
             browse = createMultiFileBrowseButton(targetField, "mzML/raw Files", new String[] { "mzML", "raw" },
-                    associatedList);
+                    associatedList,"Select one or more mzML/raw files or timsTOF .d folders");
             setupMultiFileFieldInteraction(targetField, associatedList);
         } else if (targetField == projectMsFileField) {
             associatedList = projectMsFiles;
             browse = createMultiFileBrowseButton(targetField, "mzML/raw Files", new String[] { "mzML", "raw" },
-                    associatedList);
+                    associatedList,"Select one or more mzML/raw files or timsTOF .d folders");
             setupMultiFileFieldInteraction(targetField, associatedList);
         } else {
             associatedList = null;
@@ -1189,6 +1189,7 @@ public class CarafeGUI extends JFrame {
         // Custom Folder Button logic to ensure list is cleared
         JButton folderBtn = new JButton("Folder");
         styleButton(folderBtn);
+        folderBtn.setToolTipText("Select a folder containing mzML/raw files or timsTOF .d folders");
         folderBtn.addActionListener(e -> {
             setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
             new Thread(() -> {
@@ -1231,9 +1232,12 @@ public class CarafeGUI extends JFrame {
     }
 
     private JButton createMultiFileBrowseButton(JTextField targetField, String description, String[] extensions,
-            java.util.List<String> fileList) {
+            java.util.List<String> fileList, String toolTipText) {
         JButton button = new JButton("Browse");
         styleButton(button);
+        if(toolTipText != null && !toolTipText.isEmpty()){
+            button.setToolTipText(toolTipText);
+        }
         button.addActionListener(e -> {
             chooseFiles("Select Files", extensions, description, files -> {
                 // Validation: Check for mixed types (mzML, raw, TIMSTOF .d folders)
@@ -6115,7 +6119,24 @@ public class CarafeGUI extends JFrame {
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         new Thread(() -> {
             try {
-                JFileChooser chooser = new JFileChooser();
+                // Custom JFileChooser that navigates to a folder when a directory path is pasted
+                // (except for .d folders which are valid TIMSTOF data selections)
+                JFileChooser chooser = new JFileChooser() {
+                    @Override
+                    public void approveSelection() {
+                        File[] selectedFiles = getSelectedFiles();
+                        // If only one item selected and it's a directory (not a .d folder), navigate into it
+                        if (selectedFiles != null && selectedFiles.length == 1) {
+                            File selected = selectedFiles[0];
+                            // if (selected.isDirectory() && !selected.getName().toLowerCase().endsWith(".d")) {
+                            if (selected.isDirectory() && !GenericUtils.isTimsTOFData(selected.getAbsolutePath())) {
+                                setCurrentDirectory(selected);
+                                return; // Don't approve, just navigate
+                            }
+                        }
+                        super.approveSelection();
+                    }
+                };
                 String lastDir = prefs.get(PREF_LAST_DIR, System.getProperty("user.home"));
                 chooser.setCurrentDirectory(new File(lastDir));
                 chooser.setMultiSelectionEnabled(true);
