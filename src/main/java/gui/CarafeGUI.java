@@ -4296,7 +4296,7 @@ public class CarafeGUI extends JFrame {
                     String projectPath = projectMsFileField.getText().trim();
                     File projectFile = new File(projectPath);
                     if (projectFile.isDirectory()) {
-                        // Expand folder to individual files (RAW or mzML)
+                        // Expand folder to individual files (RAW, mzML, or TimsTOF .d folders)
                         // check if there are mzML files in the folder first
                         File[] mzMLFiles = projectFile.listFiles((dir, name) -> name.toLowerCase().endsWith(".mzml"));
                         if (mzMLFiles != null && mzMLFiles.length > 0) {
@@ -4306,9 +4306,19 @@ public class CarafeGUI extends JFrame {
                         } else {
                             // check if there are raw files in the folder
                             File[] rawFiles = projectFile.listFiles((dir, name) -> name.toLowerCase().endsWith(".raw"));
-                            if (rawFiles != null) {
+                            if (rawFiles != null && rawFiles.length > 0) {
                                 for (File f : rawFiles) {
                                     effectiveProjectFiles.add(f.getAbsolutePath());
+                                }
+                            } else {
+                                // check if there are TimsTOF .d folders in the folder
+                                File[] dFolders = projectFile.listFiles(f -> 
+                                    f.isDirectory() && f.getName().toLowerCase().endsWith(".d") 
+                                    && new File(f, "analysis.tdf").exists());
+                                if (dFolders != null) {
+                                    for (File f : dFolders) {
+                                        effectiveProjectFiles.add(f.getAbsolutePath());
+                                    }
                                 }
                             }
                         }
@@ -4873,10 +4883,16 @@ public class CarafeGUI extends JFrame {
             }
             isDiannV2 = isV2;
 
+            boolean isTimsTOFData = false;
             for (String f : msFiles) {
                 diannArgs.add("--f");
                 diannArgs.add(f);
                 // diannArgs.add("\"" + f + "\"");
+
+                // check if this is a TimsTOF .d folder (i.e., timsTOF DIA data)
+                if (GenericUtils.isTimsTOFData(f)) {
+                    isTimsTOFData = true;
+                }
             }
 
             if (spectral_library_file.isEmpty() && !database.isEmpty()) {
@@ -5226,6 +5242,15 @@ public class CarafeGUI extends JFrame {
 
             if (msFiles.size() >= 2) {
                 diannArgs.add("--reanalyse");
+            }
+
+            if (isTimsTOFData) {
+                // https://github.com/vdemichev/DiaNN?tab=readme-ov-file#changing-default-settings
+                // add --mass-acc 15 --mass-acc-ms1 15
+                diannArgs.add("--mass-acc");
+                diannArgs.add("15");
+                diannArgs.add("--mass-acc-ms1");
+                diannArgs.add("15");
             }
 
             // check if --smart-profiling is present in the additional options

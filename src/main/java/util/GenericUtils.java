@@ -1,5 +1,7 @@
 package main.java.util;
 
+import java.io.File;
+
 import oshi.SystemInfo;
 import oshi.hardware.GlobalMemory;
 
@@ -67,6 +69,14 @@ public class GenericUtils {
         System.out.printf("Total RAM: %.2f GB%n", total);
         System.out.printf("Available RAM: %.2f GB%n", available);
         return available;
+    }
+
+    public static boolean isTimsTOFData(String filePath) {
+        File fFile = new File(filePath);
+        if (fFile.isDirectory() && fFile.getName().toLowerCase().endsWith(".d") && new File(fFile, "analysis.tdf").exists()) {
+            return true;
+        }
+        return false;
     }
 
 }
