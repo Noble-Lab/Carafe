@@ -356,12 +356,13 @@ def plot_rt(out_dir):
         plt.scatter(y_obs, y_pred, s=4, c="blue", alpha=0.5)
         
         # Identity line
-        max_rt = max(rt_max, y_obs.max(), y_pred.max())
+        max_rt = max(rt_max, y_obs.max(), y_pred.max())*1.02
         plt.plot([0, max_rt], [0, max_rt], color='red', linestyle='--', linewidth=1)
         
         stats_text = f"PCC = {cor:.4f}\nMAE = {mae:.2f} min\n$R^2$ = {r2:.4f}\n95% Range = {range_95:.2f} min\nN = {len(df)}"
-        plt.text(0.05 * max_rt, 0.75 * max_rt, stats_text, 
-                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        # Use relative positioning (0.05, 0.95) to stay in top-left regardless of data range
+        plt.text(0.05, 0.95, stats_text, transform=plt.gca().transAxes, 
+                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         
         plt.xlabel('Observed RT (Minute)')
         plt.ylabel('Predicted RT (Minute)')
@@ -379,9 +380,72 @@ def plot_rt(out_dir):
         print(f"Error generating RT plot: {e}")
 
 
+def plot_mobility(out_dir):
+    import os
+    import json
+    import pandas as pd
+    import numpy as np
+    try:
+        import matplotlib.pyplot as plt
+        import scipy.stats
+        from sklearn.metrics import median_absolute_error, r2_score
+    except ImportError:
+        print("Required libraries for plotting (matplotlib, sklearn, scipy) not found.")
+        return
+
+    test_file = os.path.join(out_dir, "mobility_test.tsv")
+    if not os.path.exists(test_file):
+        print(f"Test file {test_file} not found. Skipping plotting.")
+        return
+
+    try:
+        df = pd.read_csv(test_file, sep="\t")
+        if 'mobility' not in df.columns or 'mobility_pred' not in df.columns:
+            print(f"Columns 'mobility' or 'mobility_pred' not found in {test_file}")
+            return
+            
+        y_obs = df['mobility']
+        y_pred = df['mobility_pred']
+
+        cor = scipy.stats.pearsonr(y_obs, y_pred)[0]
+        mae = median_absolute_error(y_obs, y_pred)
+        r2 = r2_score(y_obs, y_pred)
+        # The minimum delta mobility which covers 95% of the data when sorted
+        # i.e., the 95th percentile of the absolute difference between observed and predicted mobility
+        range_95 = np.percentile(np.abs(y_obs - y_pred), 95)
+
+        plt.rcParams['figure.figsize'] = [5, 5]
+        plt.scatter(y_obs, y_pred, s=4, c="blue", alpha=0.5)
+        
+        # Identity line
+        max_mobility = max(y_obs.max(), y_pred.max())*1.02
+        min_mobility = min(y_obs.min(), y_pred.min())*0.98
+        plt.plot([min_mobility, max_mobility], [min_mobility, max_mobility], color='red', linestyle='--', linewidth=1)
+        
+        stats_text = f"PCC = {cor:.4f}\nMAE = {mae:.4f}\n$R^2$ = {r2:.4f}\n95% Range = {range_95:.4f}\nN = {len(df)}"
+        # Use relative positioning (0.05, 0.95) to stay in top-left regardless of data range
+        plt.text(0.05, 0.95, stats_text, transform=plt.gca().transAxes, 
+                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+        plt.xlabel('Observed Mobility')
+        plt.ylabel('Predicted Mobility')
+        plt.xlim(min_mobility, max_mobility)
+        plt.ylim(min_mobility, max_mobility)
+        plt.grid(True, linestyle=':', alpha=0.6)
+        plt.title('Mobility Prediction Performance')
+        
+        output_plot = os.path.join(out_dir, "mobility_performance_test.png")
+        plt.tight_layout()
+        plt.savefig(output_plot, dpi=300)
+        plt.close()
+        print(f"Mobility performance plot saved to {output_plot}")
+    except Exception as e:
+        print(f"Error generating mobility plot: {e}")
+
+
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Predict MS2 and RT.')
+    parser = argparse.ArgumentParser(description='Predict MS2, RT, and Ion Mobility.')
     parser.add_argument('--in_dir', default='./', help='Training data directory')
     parser.add_argument('--out_dir', default='./', help='Output directory')
     parser.add_argument('--out_prefix', default="test", help='Output prefix')
@@ -481,6 +545,7 @@ if __name__ == "__main__":
             ccs_data = pd.read_csv(os.path.join(in_dir,"ccs_train_data.tsv"),sep="\t")
             if ccs_data.shape[0] >= 100:
                 model_mgr_ccs = train_ccs(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device,threads=n_physical)
+                plot_mobility(out_dir)
         model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid,threads=n_physical)
     elif tf_type == "rt":
         model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device,threads=n_physical)
