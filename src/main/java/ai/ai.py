@@ -155,6 +155,7 @@ def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=
         model_mgr.load_installed_models('phos')
 
     model_mgr.train_verbose = True
+    model_mgr.verbose = False
     model_mgr.thread_num = threads
     model_mgr.epoch_to_train_rt_ccs=40
     model_mgr.warmup_epoch_to_train_rt_ccs = 10
