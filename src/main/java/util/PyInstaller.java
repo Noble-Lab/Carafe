@@ -42,6 +42,7 @@ public class PyInstaller {
                 "numpy<2",
                 "pandas==2.2.3",
                 "transformers==4.47.0",
+                "matplotlib==3.8.2",
                 "pip"
         );
 

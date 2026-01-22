@@ -135,6 +135,9 @@ def train_rt(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1
     else:
         model_mgr.train_rt_model(psm_df=a)
     model_mgr.rt_model.save(out_dir+"/rt_model.pt")
+    # Save test results if available
+    if hasattr(model_mgr.rt_model, 'test_df') and model_mgr.rt_model.test_df is not None:
+        model_mgr.rt_model.test_df.to_csv(os.path.join(out_dir, "rt_test.tsv"), sep="\t", index=False)
     return model_mgr
 
 def train_ccs(in_dir:str, out_dir:str, mode_type="general",device='gpu',threads=1,verbose=1):
@@ -270,6 +273,112 @@ def print_thread_state(tag: str = ""):
         pass
 
 
+def plot_rt(out_dir):
+    import os
+    import json
+    import pandas as pd
+    import numpy as np
+    try:
+        import matplotlib.pyplot as plt
+        import scipy.stats
+        from sklearn.metrics import median_absolute_error, r2_score
+    except ImportError:
+        print("Required libraries for plotting (matplotlib, sklearn, scipy) not found.")
+        return
+
+    test_file = os.path.join(out_dir, "rt_test.tsv")
+    if not os.path.exists(test_file):
+        print(f"Test file {test_file} not found. Skipping plotting.")
+        return
+
+    meta_file = os.path.join(out_dir, "meta.json")
+    rt_min = 0.0
+    rt_max = 1.0
+    if os.path.exists(meta_file):
+        try:
+            with open(meta_file, 'r') as f:
+                content = f.read()
+                # Robust parsing: handle unescaped backslashes commonly found in Windows paths in malformed JSON
+                # This doubles backslashes that are not already escaped (neither preceded nor followed by a backslash)
+                # and are not escaping a quote.
+                import re
+                # Use a lambda to avoid backslash escape issues in re.sub replacement string
+                content = re.sub(r'(?<!\\)\\(?![\\"])', lambda m: r'\\', content)
+                try:
+                    meta_data = json.loads(content)
+                except json.JSONDecodeError as je:
+                    print(f"JSON decode failed even after regex fix: {je}")
+                    # Ultimate fallback: just replace all single backslashes with double ones 
+                    # except for escaped quotes
+                    f.seek(0)
+                    content = f.read()
+                    content = content.replace('\\', '\\\\').replace('\\\\"', '\\"')
+                    meta_data = json.loads(content)
+                
+                if meta_data:
+                    # Collect all rt_min and rt_max values
+                    all_rt_min = []
+                    all_rt_max = []
+                    for key in meta_data:
+                        if isinstance(meta_data[key], dict):
+                            if 'rt_min' in meta_data[key]:
+                                all_rt_min.append(meta_data[key]['rt_min'])
+                            if 'rt_max' in meta_data[key]:
+                                all_rt_max.append(meta_data[key]['rt_max'])
+                    
+                    if all_rt_min:
+                        rt_min = min(all_rt_min)
+                    if all_rt_max:
+                        rt_max = max(all_rt_max)
+                        
+                    print(f"Using global RT normalization factors: rt_min={rt_min}, rt_max={rt_max}")
+        except Exception as e:
+            print(f"Error reading meta.json: {e}")
+
+    try:
+        df = pd.read_csv(test_file, sep="\t")
+        if 'rt_norm' not in df.columns or 'rt_pred' not in df.columns:
+            print(f"Columns 'rt_norm' or 'rt_pred' not found in {test_file}")
+            return
+            
+        # Denormalize to minutes
+        y_obs = df['rt_norm'] * (rt_max - rt_min) + rt_min
+        y_pred = df['rt_pred'] * (rt_max - rt_min) + rt_min
+
+        cor = scipy.stats.pearsonr(y_obs, y_pred)[0]
+        mae = median_absolute_error(y_obs, y_pred)
+        r2 = r2_score(y_obs, y_pred)
+        # The minimum delta RT which covers 95% of the data when sorted
+        # i.e., the 95th percentile of the absolute difference between observed and predicted RT
+        range_95 = np.percentile(np.abs(y_obs - y_pred), 95)
+
+        plt.rcParams['figure.figsize'] = [5, 5]
+        plt.scatter(y_obs, y_pred, s=4, c="blue", alpha=0.5)
+        
+        # Identity line
+        max_rt = max(rt_max, y_obs.max(), y_pred.max())
+        plt.plot([0, max_rt], [0, max_rt], color='red', linestyle='--', linewidth=1)
+        
+        stats_text = f"PCC = {cor:.4f}\nMAE = {mae:.2f} min\n$R^2$ = {r2:.4f}\n95% Range = {range_95:.2f} min\nN = {len(df)}"
+        plt.text(0.05 * max_rt, 0.75 * max_rt, stats_text, 
+                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        plt.xlabel('Observed RT (Minute)')
+        plt.ylabel('Predicted RT (Minute)')
+        plt.xlim(0, max_rt)
+        plt.ylim(0, max_rt)
+        plt.grid(True, linestyle=':', alpha=0.6)
+        plt.title('RT Prediction Performance')
+        
+        output_plot = os.path.join(out_dir, "rt_performance_test.png")
+        plt.tight_layout()
+        plt.savefig(output_plot, dpi=300)
+        plt.close()
+        print(f"RT performance plot saved to {output_plot}")
+    except Exception as e:
+        print(f"Error generating RT plot: {e}")
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Predict MS2 and RT.')
@@ -367,6 +476,7 @@ if __name__ == "__main__":
         if tf_type == "test":
             print("Test mode ...")
         model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device,threads=n_physical)
+        plot_rt(out_dir)
         if os.path.exists(os.path.join(in_dir,"ccs_train_data.tsv")):
             ccs_data = pd.read_csv(os.path.join(in_dir,"ccs_train_data.tsv"),sep="\t")
             if ccs_data.shape[0] >= 100:
@@ -374,6 +484,7 @@ if __name__ == "__main__":
         model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid,threads=n_physical)
     elif tf_type == "rt":
         model_mgr_rt = train_rt(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,device=device,threads=n_physical)
+        plot_rt(out_dir)
     elif tf_type == "ms2":
         model_mgr = train_ms2(in_dir=in_dir,out_dir=out_dir,mode_type=args.mode,log_transform=args.log_transform,nce=nce,device=device,instrument=instrument,use_valid=use_valid,threads=n_physical)
 
