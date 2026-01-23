@@ -8,6 +8,12 @@ public class CmdTask {
     public List<String> args = new ArrayList<>();
     public String task_name;
     public String task_description;
+    public String time_start;
+    public String time_end;
+    public double time_used;
+    public String out_dir;
+    public List<String> out_files = new ArrayList<>();
+    public List<String> out_files_description = new ArrayList<>();
 
     public CmdTask(String cmd, String task_name, String task_description) {
         this.cmd = cmd;

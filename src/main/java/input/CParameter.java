@@ -179,4 +179,17 @@ public class CParameter {
         }
         return properties.getProperty("version");
     }
+
+    /**
+     * Configure third-party library loggers based on verbose level.
+     * Call this after setting the verbose level.
+     */
+    public static void configureThirdPartyLoggers() {
+        // Only show Hadoop/Parquet INFO logs in DEBUG mode
+        if (verbose != VerboseType.DEBUG) {
+            // Use Log4j2 Configurator to set log level to WARN for Hadoop
+            org.apache.logging.log4j.core.config.Configurator.setLevel("org.apache.hadoop", org.apache.logging.log4j.Level.WARN);
+            org.apache.logging.log4j.core.config.Configurator.setLevel("org.apache.parquet", org.apache.logging.log4j.Level.WARN);
+        }
+    }
 }

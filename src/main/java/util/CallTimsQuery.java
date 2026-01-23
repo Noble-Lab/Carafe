@@ -186,9 +186,9 @@ public class CallTimsQuery {
             throw new RuntimeException(e);
         }
 
-        StreamLog errorLog = new StreamLog(p.getErrorStream(), Thread.currentThread().getName() + ": AI => Error:",
+        StreamLog errorLog = new StreamLog(p.getErrorStream(), "TimsQuery => Error:",
                 true);
-        StreamLog stdLog = new StreamLog(p.getInputStream(), Thread.currentThread().getName() + ": AI => Message:",
+        StreamLog stdLog = new StreamLog(p.getInputStream(), "TimsQuery => Message:",
                 true);
 
         errorLog.start();
@@ -198,7 +198,7 @@ public class CallTimsQuery {
             int exitValue = p.waitFor();
             if (exitValue != 0) {
                 pass = false;
-                Cloger.getInstance().logger.error(Thread.currentThread().getName() + ": AI error:" + exitValue);
+                Cloger.getInstance().logger.error("TimsQuery => Error: " + exitValue);
             }
         } catch (InterruptedException e) {
             pass = false;

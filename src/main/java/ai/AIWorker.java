@@ -115,8 +115,8 @@ public final  class AIWorker implements Runnable{
             throw new RuntimeException(e);
         }
 
-        StreamLog errorLog = new StreamLog(p.getErrorStream(), Thread.currentThread().getName()+": AI => Error:", true);
-        StreamLog stdLog = new StreamLog(p.getInputStream(), Thread.currentThread().getName()+": AI => Message:", true);
+        StreamLog errorLog = new StreamLog(p.getErrorStream(), "Model prediction: " + Thread.currentThread().getName()+" => Error:", true);
+        StreamLog stdLog = new StreamLog(p.getInputStream(), "Model prediction: " + Thread.currentThread().getName()+" => Message:", true);
 
         errorLog.start();
         stdLog.start();
@@ -125,7 +125,7 @@ public final  class AIWorker implements Runnable{
             int exitValue = p.waitFor();
             if (exitValue != 0) {
                 pass = false;
-                Cloger.getInstance().logger.error(Thread.currentThread().getName()+": AI error:" + exitValue);
+                Cloger.getInstance().logger.error("Model prediction: " + Thread.currentThread().getName()+" => Error:" + exitValue);
             }
         } catch (InterruptedException e) {
             pass = false;
@@ -144,7 +144,7 @@ public final  class AIWorker implements Runnable{
         }
 
         if (!pass) {
-            throw new RuntimeException("AI prediction process failed when running: "+StringUtils.join(cmd));
+            throw new RuntimeException("Model prediction process failed when running: "+StringUtils.join(cmd));
         }
 
         return pass;

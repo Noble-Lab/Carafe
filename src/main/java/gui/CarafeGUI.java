@@ -179,6 +179,10 @@ public class CarafeGUI extends JFrame {
      * Time usage tracking map.
      */
     private final java.util.Map<String, Double> timeUsageMap = new java.util.LinkedHashMap<>();
+    /**
+     * List of tasks
+     */
+    private final java.util.List<CmdTask> tasks = new java.util.ArrayList<>();
 
     private String diannVersion = "";
     private boolean isDiannV2 = false;
@@ -3685,6 +3689,10 @@ public class CarafeGUI extends JFrame {
             commandArgs.add("-o");
             commandArgs.add(carafe_library_directory);
             // commandArgs.add("\"" + carafe_library_directory + "\"");
+        }else{
+            carafe_library_directory = "carafe_library";
+            commandArgs.add("-o");
+            commandArgs.add(carafe_library_directory);
         }
 
         // cmd.append("-fdr ").append(fdrSpinner.getValue()).append(" ");
@@ -3978,6 +3986,9 @@ public class CarafeGUI extends JFrame {
 
         CmdTask cmdTask = new CmdTask(commandArgs, "Carafe", "Run Carafe for fine-tuned spectral library generation");
         cmdTask.cmd = StringUtils.join(commandArgs, " ");
+        cmdTask.out_dir = carafe_library_directory;
+        cmdTask.out_files.add(carafe_library_directory+File.separator+"carafe_spectral_library.tsv");
+        cmdTask.out_files_description.add("Carafe fine-tuned spectral library");
 
         return cmdTask;
     }
@@ -4114,6 +4125,7 @@ public class CarafeGUI extends JFrame {
 
                     String convCmd = buildMsConvertCommand(rawFilesToConvert, subDir);
                     conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW files to mzML");
+                    conversionTask.out_dir = subDir;
 
                     for (String rawPath : rawFilesToConvert) {
                         String rawName = new File(rawPath).getName();
@@ -4133,6 +4145,7 @@ public class CarafeGUI extends JFrame {
 
                 CmdTask diannTask = buildDIANNCommand(finalMsFiles, "", trainDb, diann_train_dir);
                 if (diannTask != null) {
+                    diannTask.out_dir = diann_train_dir;
                     diannTask.task_description = "Run DIA-NN search on the training MS data";
                 }
 
@@ -4411,6 +4424,7 @@ public class CarafeGUI extends JFrame {
                             String convCmd = buildMsConvertCommand(wildcardPath, subDir);
                             conversionTask = new CmdTask(convCmd, "MSConvert",
                                     "Convert RAW files in directory to mzML");
+                            conversionTask.out_dir = subDir;
 
                             for (File raw : rawFiles) {
                                 String rawName = raw.getName();
@@ -4449,6 +4463,7 @@ public class CarafeGUI extends JFrame {
 
                         String convCmd = buildMsConvertCommand(effectiveTrainFiles, subDir);
                         conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW files to mzML");
+                        conversionTask.out_dir = subDir;
 
                         for (String f : effectiveTrainFiles) {
                             String rawName = new File(f).getName();
@@ -4469,14 +4484,17 @@ public class CarafeGUI extends JFrame {
                             conversionTask != null);
                 }
 
-                if (diannTask != null) {
-                    diannTask.task_description = "Run DIA-NN search on the training MS data";
-                }
                 String diann_report_file;
                 if (this.isDiannV2) {
                     diann_report_file = diann_train_dir + File.separator + "report.parquet";
                 } else {
                     diann_report_file = diann_train_dir + File.separator + "report.tsv";
+                }
+                if (diannTask != null) {
+                    diannTask.task_description = "Run DIA-NN search on the training MS data";
+                    diannTask.out_dir = diann_train_dir;
+                    diannTask.out_files.add(diann_report_file);
+                    diannTask.out_files_description.add("DIA-NN report");
                 }
 
                 String diann_project_dir = outDir + File.separator + "diann_project";
@@ -4485,7 +4503,7 @@ public class CarafeGUI extends JFrame {
                     diannProjectDirFile.mkdirs();
                 }
                 final String carafeLibraryPath = outDir + File.separator + "carafe_library" + File.separator
-                        + "SkylineAI_spectral_library.tsv";
+                        + "carafe_spectral_library.tsv";
 
                 if (tabbedPane != null) {
                     SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
@@ -4600,6 +4618,7 @@ public class CarafeGUI extends JFrame {
         progressBar.setString("Running DIA-NN...");
 
         timeUsageMap.clear();
+        tasks.clear();
 
         Object selectedPython = pythonPathCombo.getSelectedItem();
         String pythonPath = selectedPython != null ? selectedPython.toString().trim() : "";
@@ -4625,14 +4644,17 @@ public class CarafeGUI extends JFrame {
                     logToConsole("Running: " + command.task_description + "\n");
                     logToConsole("Command: " + command.cmd + "\n");
                     logToConsole("========================================\n\n");
-
+                    command.time_start = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
                     long start = System.nanoTime();
                     int exitCode = runSingleCommand(command, pythonPath);
                     long end = System.nanoTime();
                     double minutes = (end - start) / 1e9 / 60.0;
+                    command.time_end = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+                    command.time_used = minutes;
                     String key = String.format("%02d. %s - %s", stepIndex++, command.task_name,
                             command.task_description);
                     timeUsageMap.put(key, minutes);
+                    tasks.add(command);
 
                     if (exitCode != 0) {
                         SwingUtilities.invokeLater(() -> {
@@ -4657,12 +4679,16 @@ public class CarafeGUI extends JFrame {
                         logToConsole("Command: " + command.cmd + "\n");
                         logToConsole("========================================\n\n");
                         long start = System.nanoTime();
+                        command.time_start = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
                         int exitCode = runSingleCommand(command, pythonPath);
                         long end = System.nanoTime();
                         double minutes = (end - start) / 1e9 / 60.0;
+                        command.time_end = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+                        command.time_used = minutes;
                         String key = String.format("%02d. %s - %s", stepIndex++, command.task_name,
                                 command.task_description);
                         timeUsageMap.put(key, minutes);
+                        tasks.add(command);
                         if (exitCode != 0) {
                             SwingUtilities.invokeLater(() -> {
                                 logToConsole("\n[ERROR] Command failed with exit code: " + exitCode + "\n");
@@ -4680,8 +4706,22 @@ public class CarafeGUI extends JFrame {
                     logToConsole("\n[SUMMARY] Step durations (min):\n");
                     double totalTime = 0.0;
                     for (java.util.Map.Entry<String, Double> e : timeUsageMap.entrySet()) {
-                        logToConsole(" - " + e.getKey() + " : " + String.format("%.2f", e.getValue()) + "\n");
+                        // logToConsole(" - " + e.getKey() + " : " + String.format("%.2f", e.getValue()) + "\n");
                         totalTime += e.getValue();
+                    }
+                    int taskIndex = 1;
+                    for (CmdTask task : tasks) {
+                        logToConsole("\n[" + String.format("%02d", taskIndex++) + "] " + task.task_name + " - " + task.task_description + "\n");
+                        // logToConsole("  Command: " + task.cmd + "\n");
+                        logToConsole("  Output directory: " + task.out_dir + "\n");
+                        if(!task.out_files.isEmpty()){
+                            for(int k=0;k<task.out_files.size();k++){
+                                logToConsole("  - " + task.out_files_description.get(k) + ": " + task.out_files.get(k) + "\n");
+                            }
+                        }
+                        logToConsole("  Time start: " + task.time_start + "\n");
+                        logToConsole("  Time end: " + task.time_end + "\n");
+                        logToConsole("  Time used: " + String.format("%.2f", task.time_used) + " min\n");
                     }
                     logToConsole("Total time: " + String.format("%.2f", totalTime) + " min\n");
                     finishExecution();
@@ -5310,6 +5350,7 @@ public class CarafeGUI extends JFrame {
             }
             CmdTask task = new CmdTask(diannArgs, "DIA-NN", "Running DIA-NN");
             task.cmd = String.join(" ", diannArgs);
+            task.out_dir = out_dir;
             return task;
         } else {
             JOptionPane.showMessageDialog(this, "Please provide a valid DIA-NN executable path.", "Input Required",
@@ -5383,6 +5424,7 @@ public class CarafeGUI extends JFrame {
         progressBar.setIndeterminate(true);
         progressBar.setString(command.task_description);
         timeUsageMap.clear();
+        tasks.clear();
 
         saveParameterScreenshots();
 
@@ -5404,6 +5446,7 @@ public class CarafeGUI extends JFrame {
         logToConsole("Command: " + command.cmd + "\n");
         logToConsole("========================================\n\n");
         long start = System.nanoTime();
+        command.time_start = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
         executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
             try {
@@ -5447,14 +5490,31 @@ public class CarafeGUI extends JFrame {
                 SwingUtilities.invokeLater(() -> {
                     if (exitCode == 0) {
                         long end = System.nanoTime();
+                        command.time_end = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
                         double minutes = (end - start) / 1e9 / 60.0;
+                        command.time_used = minutes;
                         String key = "01. " + command.task_name + " - " + command.task_description;
                         timeUsageMap.put(key, minutes);
+                        tasks.add(command);
                         logToConsole("\n[SUCCESS] Carafe completed successfully!\n");
                         progressBar.setString("Completed");
                         logToConsole("\n[SUMMARY] Step durations (min):\n");
                         for (java.util.Map.Entry<String, Double> e : timeUsageMap.entrySet()) {
-                            logToConsole(" - " + e.getKey() + " : " + String.format("%.2f", e.getValue()) + "\n");
+                            //logToConsole(" - " + e.getKey() + " : " + String.format("%.2f", e.getValue()) + "\n");
+                        }
+                        int taskIndex = 1;
+                        for (CmdTask task : tasks) {
+                            logToConsole("\n[" + String.format("%02d", taskIndex++) + "] " + task.task_name + " - " + task.task_description + "\n");
+                            // logToConsole("  Command: " + task.cmd + "\n");
+                            logToConsole("  Output directory: " + task.out_dir + "\n");
+                            if(!task.out_files.isEmpty()){
+                                for(int k=0;k<task.out_files.size();k++){
+                                    logToConsole("  " + task.out_files_description.get(k) + ": " + task.out_files.get(k) + "\n");
+                                }
+                            }
+                            logToConsole("  Time start: " + task.time_start + "\n");
+                            logToConsole("  Time end: " + task.time_end + "\n");
+                            logToConsole("  Time used: " + String.format("%.2f", task.time_used) + " min\n");
                         }
                     } else {
                         logToConsole("\n[ERROR] Carafe exited with code: " + exitCode + "\n");
@@ -6017,7 +6077,7 @@ public class CarafeGUI extends JFrame {
                 msConvertExec = pref;
         }
 
-        System.out.println("DEBUG: Using MSConvert executable: " + msConvertExec);
+        // System.out.println("DEBUG: Using MSConvert executable: " + msConvertExec);
 
         if (msConvertExec.equalsIgnoreCase("msconvert")) {
             // TODO

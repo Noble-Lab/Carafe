@@ -31,7 +31,7 @@ import com.compomics.util.waiting.WaitingHandler;
 import com.google.common.base.Splitter;
 import com.google.common.math.Quantiles;
 import com.jerolba.carpet.CarpetReader;
-import main.java.input.ModificationUtils;
+
 import main.java.db.DBGear;
 import main.java.dia.*;
 import main.java.input.*;
@@ -659,6 +659,9 @@ public class AIGear {
             }
         }
 
+        // Configure third-party loggers based on verbose level
+        CParameter.configureThirdPartyLoggers();
+
         if (cmd.hasOption("user_var_mods")) {
             CParameter.user_var_mods = cmd.getOptionValue("user_var_mods");
         }
@@ -1176,14 +1179,14 @@ public class AIGear {
         try {
             if(this.use_parquet) {
                 if(this.export_spectral_library_format.equalsIgnoreCase("Skyline")) {
-                    generate_spectral_library_parquet_skyline(p_res_files, out_dir, "SkylineAI_spectral_library_pretrained.tsv");
+                    generate_spectral_library_parquet_skyline(p_res_files, out_dir, "carafe_spectral_library_pretrained.tsv");
                 }else if(this.export_spectral_library_format.equalsIgnoreCase("mzSpecLib")) {
-                    generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "SkylineAI_spectral_library_pretrained.tsv");
+                    generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "carafe_spectral_library_pretrained.tsv");
                 }else{
-                    generate_spectral_library_parquet(p_res_files, out_dir, "SkylineAI_spectral_library_pretrained.tsv");
+                    generate_spectral_library_parquet(p_res_files, out_dir, "carafe_spectral_library_pretrained.tsv");
                 }
             } else {
-                generate_spectral_library(p_res_files, out_dir, "SkylineAI_spectral_library_pretrained.tsv");
+                generate_spectral_library(p_res_files, out_dir, "carafe_spectral_library_pretrained.tsv");
             }
         } catch (IOException | SQLException e) {
             throw new RuntimeException(e);
@@ -1217,14 +1220,14 @@ public class AIGear {
         try {
             if(this.use_parquet){
                 if(this.export_spectral_library_format.equalsIgnoreCase("Skyline")) {
-                    generate_spectral_library_parquet_skyline(p_res_files, out_dir, "SkylineAI_spectral_library_rt_only.tsv");
+                    generate_spectral_library_parquet_skyline(p_res_files, out_dir, "carafe_spectral_library_rt_only.tsv");
                 }else if(this.export_spectral_library_format.equalsIgnoreCase("mzSpecLib")) {
-                    generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "SkylineAI_spectral_library_rt_only.tsv");
+                    generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "carafe_spectral_library_rt_only.tsv");
                 }else {
-                    generate_spectral_library_parquet(p_res_files, out_dir, "SkylineAI_spectral_library_rt_only.tsv");
+                    generate_spectral_library_parquet(p_res_files, out_dir, "carafe_spectral_library_rt_only.tsv");
                 }
             } else {
-                generate_spectral_library(p_res_files, out_dir, "SkylineAI_spectral_library_rt_only.tsv");
+                generate_spectral_library(p_res_files, out_dir, "carafe_spectral_library_rt_only.tsv");
             }
         } catch (IOException | SQLException e) {
             throw new RuntimeException(e);
@@ -1258,14 +1261,14 @@ public class AIGear {
         try {
             if(this.use_parquet) {
                 if(this.export_spectral_library_format.equalsIgnoreCase("Skyline")) {
-                    generate_spectral_library_parquet_skyline(p_res_files, out_dir, "SkylineAI_spectral_library_ms2_only.tsv");
+                    generate_spectral_library_parquet_skyline(p_res_files, out_dir, "carafe_spectral_library_ms2_only.tsv");
                 }else if(this.export_spectral_library_format.equalsIgnoreCase("mzSpecLib")) {
-                    generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "SkylineAI_spectral_library_ms2_only.tsv");
+                    generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "carafe_spectral_library_ms2_only.tsv");
                 }else {
-                    generate_spectral_library_parquet(p_res_files, out_dir, "SkylineAI_spectral_library_ms2_only.tsv");
+                    generate_spectral_library_parquet(p_res_files, out_dir, "carafe_spectral_library_ms2_only.tsv");
                 }
             } else {
-                generate_spectral_library(p_res_files, out_dir, "SkylineAI_spectral_library_ms2_only.tsv");
+                generate_spectral_library(p_res_files, out_dir, "carafe_spectral_library_ms2_only.tsv");
             }
         } catch (IOException | SQLException e) {
             throw new RuntimeException(e);
@@ -1298,14 +1301,14 @@ public class AIGear {
             try {
                 if(this.use_parquet) {
                     if(this.export_spectral_library_format.equalsIgnoreCase("Skyline")) {
-                        generate_spectral_library_parquet_skyline(p_res_files, out_dir, "SkylineAI_spectral_library_ccs_only.tsv");
+                        generate_spectral_library_parquet_skyline(p_res_files, out_dir, "carafe_spectral_library_ccs_only.tsv");
                     }else if(this.export_spectral_library_format.equalsIgnoreCase("mzSpecLib")) {
-                        generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "SkylineAI_spectral_library_ccs_only.tsv");
+                        generate_spectral_library_parquet_mzSpecLib(p_res_files, out_dir, "carafe_spectral_library_ccs_only.tsv");
                     }else {
-                        generate_spectral_library_parquet(p_res_files, out_dir, "SkylineAI_spectral_library_ccs_only.tsv");
+                        generate_spectral_library_parquet(p_res_files, out_dir, "carafe_spectral_library_ccs_only.tsv");
                     }
                 } else {
-                    generate_spectral_library(p_res_files, out_dir, "SkylineAI_spectral_library_ccs_only.tsv");
+                    generate_spectral_library(p_res_files, out_dir, "carafe_spectral_library_ccs_only.tsv");
                 }
             } catch (IOException | SQLException e) {
                 throw new RuntimeException(e);
@@ -1387,7 +1390,7 @@ public class AIGear {
                     p_res_files.get(i).put("ccs", get_file_path(ccs_file, folder));
                 }
             }
-            run_spectral_library_generation(p_res_files, "SkylineAI_spectral_library_pretrained.tsv");
+            run_spectral_library_generation(p_res_files, "carafe_spectral_library_pretrained.tsv");
             return null;
         });
 
@@ -1416,7 +1419,7 @@ public class AIGear {
                     p_res_files.get(i).put("ccs", get_file_path(ccs_file, folder));
                 }
             }
-            run_spectral_library_generation(p_res_files, "SkylineAI_spectral_library_rt_only.tsv");
+            run_spectral_library_generation(p_res_files, "carafe_spectral_library_rt_only.tsv");
             return null;
         });
 
@@ -1445,7 +1448,7 @@ public class AIGear {
                     p_res_files.get(i).put("ccs", get_file_path(ccs_file, folder));
                 }
             }
-            run_spectral_library_generation(p_res_files, "SkylineAI_spectral_library_ms2_only.tsv");
+            run_spectral_library_generation(p_res_files, "carafe_spectral_library_ms2_only.tsv");
             return null;
         });
 
@@ -1472,7 +1475,7 @@ public class AIGear {
                     // Using fine-tuned CCS model
                     p_res_files.get(i).put("ccs", ccs_file);
                 }
-                run_spectral_library_generation(p_res_files, "SkylineAI_spectral_library_ccs_only.tsv");
+                run_spectral_library_generation(p_res_files, "carafe_spectral_library_ccs_only.tsv");
                 return null;
             });
         }
@@ -2562,7 +2565,7 @@ public class AIGear {
      * @param cmd The command to run as an array of strings.
      * @return True if the command executed successfully, false otherwise.
      */
-    private boolean run_cmd(String[] cmd) {
+    private boolean run_cmd(String[] cmd, String message_prefix) {
         System.out.println(String.join(" ", cmd));
         boolean pass = true;
         Runtime rt = Runtime.getRuntime();
@@ -2574,8 +2577,8 @@ public class AIGear {
             throw new RuntimeException(e);
         }
 
-        StreamLog errorLog = new StreamLog(p.getErrorStream(), "AI => Error:", true);
-        StreamLog stdLog = new StreamLog(p.getInputStream(), "AI => Message:", true);
+        StreamLog errorLog = new StreamLog(p.getErrorStream(), message_prefix+" => Error:", true);
+        StreamLog stdLog = new StreamLog(p.getInputStream(), message_prefix+" => Message:", true);
 
         errorLog.start();
         stdLog.start();
@@ -2584,7 +2587,7 @@ public class AIGear {
             int exitValue = p.waitFor();
             if (exitValue != 0) {
                 pass = false;
-                Cloger.getInstance().logger.error("AI error:" + exitValue);
+                Cloger.getInstance().logger.error(message_prefix+" => Error:" + exitValue);
             }
         } catch (InterruptedException e) {
             pass = false;
@@ -2674,7 +2677,7 @@ public class AIGear {
         // convert cmd_list to String []
         String[] cmd = new String[cmd_list.size()];
         cmd = cmd_list.toArray(cmd);
-        run_cmd(cmd);
+        run_cmd(cmd,"Model training");
     }
 
     /**
@@ -6185,7 +6188,7 @@ public class AIGear {
         double original_fragment_ion_intensity_cutoff = CParameter.fragment_ion_intensity_cutoff;
         CParameter.fragment_ion_intensity_cutoff = 0.0001;
         PeptideFrag.lossWaterNH3 = this.lossWaterNH3;
-        System.out.println(PeptideFrag.lossWaterNH3);
+        Cloger.getInstance().logger.info("lossWaterNH3:"+PeptideFrag.lossWaterNH3);
         PeptideFrag.max_fragment_ion_charge = this.max_fragment_ion_charge;
         PeptideFrag.fragment_ion_charge_less_than_precursor_charge = this.fragment_ion_charge_less_than_precursor_charge;
 
@@ -6194,7 +6197,7 @@ public class AIGear {
         this.load_mod_map();
         set_ion_type_column_index(this.fragmentation_method,this.max_fragment_ion_charge, this.lossWaterNH3);
         int n_ion_types = !(this.mod_ai.equals("-") || this.mod_ai.equalsIgnoreCase("general"))?this.max_fragment_ion_charge*2*2:this.max_fragment_ion_charge*2;
-        System.out.println("The number of ion types:"+n_ion_types);
+        Cloger.getInstance().logger.info("The number of ion types:"+n_ion_types);
         DBGear dbGear = new DBGear();
 
         // for RT
@@ -6284,14 +6287,14 @@ public class AIGear {
 
         for (String ms_file : this.ms_file2psm.keySet()) {
             psm_id++;
-            System.out.println("Process MS file:" + ms_file);
+            Cloger.getInstance().logger.info("Process MS file:" + ms_file);
             ms_file2meta.put(ms_file, new JMeta());
             ms_file2meta.get(ms_file).ms_file = ms_file;
             // For store raw data
             CCSDIAMeta meta = new CCSDIAMeta();
             if (CParameter.itol > 0.2 && CParameter.itolu.startsWith("da")) {
                 meta.fragment_ion_mz_bin_size = 0.5;
-                System.out.println("Fragment ion bin size:" + meta.fragment_ion_mz_bin_size);
+                Cloger.getInstance().logger.info("Fragment ion bin size:" + meta.fragment_ion_mz_bin_size);
             }
             // meta.load_ms_data(ms_file);
             meta.get_ms_run_meta_data_using_sql(ms_file);
@@ -6308,14 +6311,14 @@ public class AIGear {
             }
             CParameter.NCE = meta.nce;
             this.nce = meta.nce;
-            System.out.println("NCE:" + CParameter.NCE);
+            Cloger.getInstance().logger.info("NCE:" + CParameter.NCE);
             String ms_instrument_name = meta.get_ms_instrument();
             if (!ms_instrument_name.isEmpty()) {
                 CParameter.ms_instrument = ms_instrument_name;
                 this.ms_instrument = ms_instrument_name;
-                System.out.println("MS instrument:"+ms_instrument_name);
+                Cloger.getInstance().logger.info("MS instrument:"+ms_instrument_name);
             }else{
-                System.out.println("No MS instrument detected from MS/MS data. Use default:"+this.ms_instrument+", "+CParameter.ms_instrument);
+                Cloger.getInstance().logger.info("No MS instrument detected from MS/MS data. Use default:"+this.ms_instrument+", "+CParameter.ms_instrument);
             }
 
             ms_file2meta.get(ms_file).ms_instrument = ms_instrument_name;
@@ -6332,7 +6335,7 @@ public class AIGear {
 
             this.min_fragment_ion_mz = meta.fragment_ion_mz_min;
             this.max_fragment_ion_mz = meta.fragment_ion_mz_max;
-            System.out.println("Fragment ion m/z range:" + this.min_fragment_ion_mz + "," + this.max_fragment_ion_mz);
+            Cloger.getInstance().logger.info("Fragment ion m/z range:" + this.min_fragment_ion_mz + "," + this.max_fragment_ion_mz);
 
             CCSDIAMap diaMap_tmp = new CCSDIAMap();
             diaMap_tmp.meta = meta;
@@ -6344,9 +6347,9 @@ public class AIGear {
 
             if (meta.rt_max > this.rt_max) {
                 this.rt_max = meta.rt_max;
-                System.out.println("RT max:" + this.rt_max);
+                Cloger.getInstance().logger.info("RT max:" + this.rt_max);
             } else {
-                System.out.println("RT max:" + this.rt_max);
+                Cloger.getInstance().logger.info("RT max:" + this.rt_max);
             }
 
             // for output
@@ -6592,8 +6595,8 @@ public class AIGear {
                         }
                     }
                 }
-                System.out.println("Precursor ion matched index in fragment ions:" + i_precursor_ion_matched);
-                System.out.println("Total PSM queries:" + psm_query_results.size());
+                Cloger.getInstance().logger.info("Precursor ion matched index in fragment ions:" + i_precursor_ion_matched);
+                Cloger.getInstance().logger.info("Total PSM queries:" + psm_query_results.size());
             }
 
             String xic_result_file = xic_result_dir + File.separator + "results.json";
@@ -6606,7 +6609,7 @@ public class AIGear {
             }
             xic_br.close();
 
-            System.out.println("Loading spectra query results done!");
+            Cloger.getInstance().logger.info("Loading spectra query results done!");
 
             CCSDIAIndex diaIndex = new CCSDIAIndex();
             diaIndex.fragment_ion_intensity_threshold = this.fragment_ion_intensity_threshold;
@@ -6878,8 +6881,10 @@ public class AIGear {
                 } else {
                     index2peptideMatch.get(row_i).matched_ions = new ArrayList<>();
                     invalid_psm_indices.add(row_i);
-                    System.out.println("No match: "+row_i + " => "+line);
-                    System.out.println("Match information: query apex RT="+index2peptideMatch.get(row_i).rt_apex+", return apex RT="+matched_apex_rt);
+                    if (CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                        Cloger.getInstance().logger.warn("No match: "+row_i + " => "+line);
+                        Cloger.getInstance().logger.warn("Match information: query apex RT="+index2peptideMatch.get(row_i).rt_apex+", return apex RT="+matched_apex_rt);
+                    }
                 }
                 if (!matched_ion_mzs.isEmpty()) {
                     index2peptideMatch.get(row_i).libSpectrum.spectrum.mz = new double[matched_ion_mzs.size()];
@@ -7402,11 +7407,15 @@ public class AIGear {
                 for (String line : un_recognized_PSMs.keySet()) {
                     if (un_recognized_PSMs.get(line) == 0) {
                         n_un_recognized_PSMs++;
-                        System.out.println("Spectrum not found:" + line);
+                        if (CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                            Cloger.getInstance().logger.warn("Spectrum not found:" + line);
+                        }
                     }
                 }
                 if (n_un_recognized_PSMs >= 1) {
-                    System.out.println("Spectrum not found:" + n_un_recognized_PSMs);
+                    if (CParameter.verbose == CParameter.VerboseType.DEBUG) {
+                        Cloger.getInstance().logger.warn("Spectrum not found:" + n_un_recognized_PSMs);
+                    }
                 }
             }
 
@@ -9715,7 +9724,9 @@ public class AIGear {
                                     peptideMatch.rt_apex = peak.apex_rt;
                                 }
                             }else{
-                                System.out.println("No refining: "+xicQueryResult.id+"\t"+peptideMatch.index+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
+                                if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                                    Cloger.getInstance().logger.warn("No refining: "+xicQueryResult.id+"\t"+peptideMatch.index+"\t"+peptideMatch.scan+"\t"+peptideMatch.rt_start+"\t"+peptideMatch.rt_apex+"\t"+peptideMatch.rt_end);
+                                }
                             }
                         }
                         if(refined_peak_boundary){
@@ -9762,21 +9773,25 @@ public class AIGear {
                         System.exit(1);
                     }
                 } else {
-                    System.out.println("index_start: " + peak.boundary_left_index);
-                    System.out.println("index_end: " + peak.boundary_right_index);
-                    System.out.println("index_apex: " + peak.apex_index);
-                    System.out.println("x: " + pepXIC_smoothed.getRowDimension());
-                    System.out.println("x: " + pepXIC_smoothed.getColumnDimension());
-                    System.out.println(peptideMatch.rt_start);
-                    System.out.println(peptideMatch.rt_apex);
-                    System.out.println(peptideMatch.rt_end);
-                    System.out.println(max_rt);
+                    if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                        System.out.println("index_start: " + peak.boundary_left_index);
+                        System.out.println("index_end: " + peak.boundary_right_index);
+                        System.out.println("index_apex: " + peak.apex_index);
+                        System.out.println("x: " + pepXIC_smoothed.getRowDimension());
+                        System.out.println("x: " + pepXIC_smoothed.getColumnDimension());
+                        System.out.println(peptideMatch.rt_start);
+                        System.out.println(peptideMatch.rt_apex);
+                        System.out.println(peptideMatch.rt_end);
+                        System.out.println(max_rt);
+                    }
 
                     for (int i = 0; i < scan_num; i++) {
                         int cur_index = index_min + i;
                         int cur_scan = cur_index;
                         rt = xicQueryResult.retention_time_results_seconds[cur_scan] / 60.0;
-                        System.out.println(rt);
+                        if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                            System.out.println(rt);
+                        }
 
                     }
                 }
@@ -9867,11 +9882,15 @@ public class AIGear {
                 peak.apex_rt = ms2index.get_rt_by_scan(isoWinID,index2scan.get((int) peak.apex_index));
                 is_refined = true;
             } else {
-                System.out.println("Peak too narrow!");
+                if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                    Cloger.getInstance().logger.warn("Peak too narrow!");
+                }
             }
 
         } else {
-            System.out.println("few fragment ions detected");
+            if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                Cloger.getInstance().logger.warn("few fragment ions detected");
+            }
 
         }
         return is_refined;
@@ -9960,11 +9979,15 @@ public class AIGear {
                 peak.apex_rt = ms2index.get_rt_by_scan(isoWinID,index2scan.get((int) peak.apex_index));
                 is_refined = true;
             } else {
-                System.out.println("Peak too narrow!");
+                if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                    Cloger.getInstance().logger.warn("Peak too narrow!");
+                }
             }
 
         } else {
-            System.out.println("few fragment ions detected");
+            if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                Cloger.getInstance().logger.warn("few fragment ions detected");
+            }
 
         }
         return is_refined;
@@ -10101,11 +10124,15 @@ public class AIGear {
                 peak.apex_rt = xicQueryResult.retention_time_results_seconds[(int) peak.apex_index]/60.0;
                 is_refined = true;
             } else {
-                System.out.println("Peak too narrow!");
+                if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                    Cloger.getInstance().logger.warn("Peak too narrow!");
+                }
             }
 
         } else {
-            System.out.println("few fragment ions detected");
+            if(CParameter.verbose == CParameter.VerboseType.DEBUG){
+                Cloger.getInstance().logger.warn("few fragment ions detected");
+            }
 
         }
         return is_refined;
@@ -11775,7 +11802,7 @@ public class AIGear {
             // if(this.export_spectral_library_format.equalsIgnoreCase("Skyline")){
             if (this.export_spectral_library_format.toLowerCase().contains("skyline")) {
                 try {
-                    generate_spectral_library_parquet_skyline(res_files, this.out_dir, "SkylineAI_spectral_library.tsv");
+                    generate_spectral_library_parquet_skyline(res_files, this.out_dir, "carafe_spectral_library.tsv");
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -11788,21 +11815,21 @@ public class AIGear {
                             this.export_spectral_library_format = f;
                             this.export_spectral_library_file_format = "tsv";
                             // only generate tsv format in this case
-                            generate_spectral_library_parquet(res_files, this.out_dir, "SkylineAI_spectral_library.tsv");
+                            generate_spectral_library_parquet(res_files, this.out_dir, "carafe_spectral_library.tsv");
                         }
                     }
                 }
             } else if (this.export_spectral_library_format.equalsIgnoreCase("mzSpecLib")) {
                 try {
-                    generate_spectral_library_parquet_mzSpecLib(res_files, this.out_dir, "SkylineAI_spectral_library.tsv");
+                    generate_spectral_library_parquet_mzSpecLib(res_files, this.out_dir, "carafe_spectral_library.tsv");
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
             } else {
-                generate_spectral_library_parquet(res_files, this.out_dir, "SkylineAI_spectral_library.tsv");
+                generate_spectral_library_parquet(res_files, this.out_dir, "carafe_spectral_library.tsv");
             }
         } else {
-            generate_spectral_library(res_files, this.out_dir, "SkylineAI_spectral_library.tsv");
+            generate_spectral_library(res_files, this.out_dir, "carafe_spectral_library.tsv");
         }
     }
 
@@ -11818,7 +11845,7 @@ public class AIGear {
     public void generate_spectral_library(Map<String, HashMap<String, String>> res_files, String out_folder,
             String file_name) throws IOException {
         // String out_library_file = this.out_dir + File.separator +
-        // "SkylineAI_spectral_library.tsv";
+        // "carafe_spectral_library.tsv";
         String out_library_file = out_folder + File.separator + file_name;
         BufferedWriter libWriter = new BufferedWriter(new FileWriter(out_library_file));
         if(this.ccs_enabled) {
@@ -12047,7 +12074,7 @@ public class AIGear {
     public void generate_spectral_library_parquet(Map<String, HashMap<String, String>> res_files, String out_folder,
             String file_name) throws IOException {
         // String out_library_file = this.out_dir + File.separator +
-        // "SkylineAI_spectral_library.tsv";
+        // "carafe_spectral_library.tsv";
         String out_library_file = out_folder + File.separator + file_name;
         BufferedWriter libWriter = null;
         boolean export_tsv = true;
@@ -12294,7 +12321,7 @@ public class AIGear {
     public void generate_spectral_library_parquet_skyline(Map<String, HashMap<String, String>> res_files,
             String out_folder, String file_name) throws IOException, SQLException {
         // String out_library_file = this.out_dir + File.separator +
-        // "SkylineAI_spectral_library.tsv";
+        // "carafe_spectral_library.tsv";
         String out_library_file = out_folder + File.separator + file_name;
         if (out_library_file.endsWith("tsv")) {
             out_library_file = out_library_file.replaceAll("tsv$", "blib");
@@ -12547,7 +12574,7 @@ public class AIGear {
     public void generate_spectral_library_parquet_mzSpecLib(Map<String, HashMap<String, String>> res_files,
             String out_folder, String file_name) throws IOException, SQLException {
         // String out_library_file = this.out_dir + File.separator +
-        // "SkylineAI_spectral_library.tsv";
+        // "carafe_spectral_library.tsv";
         String out_library_file = out_folder + File.separator + file_name;
         if (out_library_file.endsWith("tsv")) {
             out_library_file = out_library_file.replaceAll("tsv$", "mzlib.txt");
