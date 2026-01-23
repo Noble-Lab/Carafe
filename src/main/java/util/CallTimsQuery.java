@@ -2,12 +2,15 @@ package main.java.util;
 
 import org.apache.commons.lang3.StringUtils;
 
+import main.java.input.CParameter;
+
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import static main.java.ai.AIGear.get_jar_path;
 
@@ -186,10 +189,26 @@ public class CallTimsQuery {
             throw new RuntimeException(e);
         }
 
+        List<String> filterPatterns;
+        if (CParameter.verbose == CParameter.VerboseType.DEBUG){
+            filterPatterns = new ArrayList<>();
+        }else{
+            // Define patterns to filter out from console output
+            // Add patterns here to suppress specific messages
+            filterPatterns = List.of(
+                    // Add specific patterns to filter.
+                    " INFO.*main_query_index",
+                    " INFO.*read_parquet_peaks",
+                    " INFO.*timscentroid::indexing",
+                    " INFO.*check_bucket_sorted_heuristic",
+                    "ERROR.*main_query_index.*metadata.json not found or unreadable"
+            );
+        }
+
         StreamLog errorLog = new StreamLog(p.getErrorStream(), "TimsQuery => Error:",
-                true);
+                true, filterPatterns);
         StreamLog stdLog = new StreamLog(p.getInputStream(), "TimsQuery => Message:",
-                true);
+                true, filterPatterns);
 
         errorLog.start();
         stdLog.start();

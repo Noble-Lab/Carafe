@@ -261,7 +261,12 @@ public class CarafeGUI extends JFrame {
      * Can now be made static since it only touches UIManager.
      */
     private static void customizeUIDefaults() {
-        UIManager.put("defaultFont", new Font("Segoe UI", Font.PLAIN, 13));
+        Font defaultFont = UIManager.getFont("Label.font");
+        if (defaultFont != null) {
+            UIManager.put("defaultFont", defaultFont.deriveFont(13f));
+        } else {
+            UIManager.put("defaultFont", new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+        }
         UIManager.put("Button.arc", 10);
         UIManager.put("Component.arc", 10);
         UIManager.put("ProgressBar.arc", 10);
@@ -307,7 +312,7 @@ public class CarafeGUI extends JFrame {
         // Main content with tabs
         tabbedPane = new JTabbedPane();
         tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-        tabbedPane.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        // Uses defaultFont from UIManager if not explicitly set
 
         inputScrollPane = wrapInScrollPane(createInputPanel());
         tabbedPane.addTab("Workflow", inputScrollPane);
@@ -401,7 +406,7 @@ public class CarafeGUI extends JFrame {
         btn.setOpaque(false);
         btn.setFocusPainted(false);
         btn.setMargin(new Insets(6, 16, 6, 16));
-        btn.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        btn.setFont(btn.getFont().deriveFont(12f));
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btn.setPreferredSize(new Dimension(100, 30));
         btn.addActionListener(action);
@@ -720,17 +725,17 @@ public class CarafeGUI extends JFrame {
         } catch (Exception e) {
             // failed to load icon
         }
-        headerIconLabel.setFont(new Font("Segoe UI", Font.BOLD, 42));
+        headerIconLabel.setFont(headerIconLabel.getFont().deriveFont(Font.BOLD, 42f));
 
         headerTextPanel = new JPanel();
         headerTextPanel.setOpaque(false);
         headerTextPanel.setLayout(new BoxLayout(headerTextPanel, BoxLayout.Y_AXIS));
 
         headerTitleLabel = new JLabel("Carafe");
-        headerTitleLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        headerTitleLabel.setFont(headerTitleLabel.getFont().deriveFont(Font.BOLD, 28f));
 
         headerSubtitleLabel = new JLabel("AI-Powered Spectral Library Generator for DIA Proteomics");
-        headerSubtitleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        headerSubtitleLabel.setFont(headerSubtitleLabel.getFont().deriveFont(Font.PLAIN, 13f));
 
         headerTextPanel.add(headerTitleLabel);
         headerTextPanel.add(Box.createVerticalStrut(3));
@@ -758,7 +763,7 @@ public class CarafeGUI extends JFrame {
         headerRightPanel.add(darkModeToggle);
 
         headerVersionLabel = new JLabel(CParameter.getVersion());
-        headerVersionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        headerVersionLabel.setFont(headerVersionLabel.getFont().deriveFont(Font.PLAIN, 12f));
         headerRightPanel.add(headerVersionLabel);
 
         headerPanel.add(headerTitlePanel, BorderLayout.WEST);
@@ -2485,7 +2490,7 @@ public class CarafeGUI extends JFrame {
 
     private JLabel createLabel(String text) {
         JLabel label = new JLabel(text);
-        label.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        // label.setFont(...) will inherit from UIManager defaultFont (13pt)
         return label;
     }
 
@@ -3479,7 +3484,7 @@ public class CarafeGUI extends JFrame {
 
     private JButton createPrimaryButton(String text, Color color) {
         JButton button = new JButton(text);
-        button.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        button.setFont(button.getFont().deriveFont(Font.BOLD, 14f));
         button.setFocusPainted(false);
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         button.setMargin(new Insets(12, 30, 12, 30));
@@ -3493,7 +3498,7 @@ public class CarafeGUI extends JFrame {
 
     private JButton createSecondaryButton(String text) {
         JButton button = new JButton(text);
-        button.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        button.setFont(button.getFont().deriveFont(Font.PLAIN, 13f));
         button.setFocusPainted(false);
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
@@ -3540,7 +3545,7 @@ public class CarafeGUI extends JFrame {
         card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
 
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
         titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
         card.add(titleLabel, BorderLayout.NORTH);
 
@@ -3551,7 +3556,7 @@ public class CarafeGUI extends JFrame {
                 return new Dimension(200, d.height);
             }
         };
-        contentArea.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        contentArea.setFont(contentArea.getFont().deriveFont(Font.PLAIN, 12f));
         contentArea.setEditable(false);
         contentArea.setLineWrap(true);
         contentArea.setWrapStyleWord(true);
@@ -5948,7 +5953,7 @@ public class CarafeGUI extends JFrame {
     private void showHelp() {
         String helpHtml = """
                 <html>
-                <body style="font-family: Segoe UI, sans-serif; font-size: 12pt; padding: 10px;">
+                <body style="font-family: 'Segoe UI', sans-serif; font-size: 12pt; padding: 10px;">
                 <h2 style="margin-top: 0;">Carafe - AI-Powered Spectral Library Generator</h2>
 
                 <p>Carafe generates experiment-specific in silico spectral libraries
@@ -6118,8 +6123,11 @@ public class CarafeGUI extends JFrame {
             else
                 FlatLightLaf.setup();
 
-            // Optional: consistent font size across the app
-            UIManager.put("defaultFont", UIManager.getFont("Label.font").deriveFont(13f));
+            // Consistent font size across the app
+            Font defaultFont = UIManager.getFont("Label.font");
+            if (defaultFont != null) {
+                UIManager.put("defaultFont", defaultFont.deriveFont(13f));
+            }
 
             // Optional: rounder components (FlatLaf supports this)
             UIManager.put("Component.arc", 12);
