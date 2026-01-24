@@ -95,7 +95,7 @@ public class CarafeGUI extends JFrame {
     private JSpinner fdrSpinner;
     private JSpinner ptmSiteProbSpinner;
     private JSpinner ptmSiteQvalueSpinner;
-    private JSpinner fragTolSpinner;
+    private JTextField fragTolField;
     private JComboBox<String> fragTolUnitCombo;
     private JCheckBox refineBoundaryCheckbox;
     private JTextField rtPeakWindowField;
@@ -1612,10 +1612,11 @@ public class CarafeGUI extends JFrame {
                         "during fragment ion intensity annotation and XIC extraction."),
                 gbc);
 
-        fragTolSpinner = createSpinner(20, 1, 100, 1);
+        fragTolField = createTextField("20");
+        fragTolField.setText("20");
         gbc.gridx = 1;
         gbc.weightx = 1;
-        panel.add(fragTolSpinner, gbc);
+        panel.add(fragTolField, gbc);
 
         gbc.gridx = 0;
         gbc.gridy = 4;
@@ -1665,7 +1666,7 @@ public class CarafeGUI extends JFrame {
                         "for fragment ion intensity model finetuning."),
                 gbc);
 
-        xicCorSpinner = createDoubleSpinner(0.8, 0.0, 1.0, 0.05);
+        xicCorSpinner = createDoubleSpinner(0.8, 0.0, 1.0, 0.01);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(xicCorSpinner, gbc);
@@ -3713,7 +3714,7 @@ public class CarafeGUI extends JFrame {
         commandArgs.add(ptmSiteQvalueSpinner.getValue().toString());
         // cmd.append("-itol ").append(fragTolSpinner.getValue()).append(" ");
         commandArgs.add("-itol");
-        commandArgs.add(fragTolSpinner.getValue().toString());
+        commandArgs.add(fragTolField.getText().trim());
         // cmd.append("-itolu ").append(fragTolUnitCombo.getSelectedItem()).append(" ");
         commandArgs.add("-itolu");
         commandArgs.add(fragTolUnitCombo.getSelectedItem().toString());
@@ -5882,6 +5883,18 @@ public class CarafeGUI extends JFrame {
                 if (hasRaw)
                     checkMsConvert.accept(null);
                 break;
+        }
+
+        // Validate Fragment Ion Tolerance
+        try {
+            String tolText = fragTolField.getText().trim();
+            if (tolText.isEmpty()) {
+                errors.add("- Fragment Ion Mass Tolerance is empty.");
+            } else {
+                Double.parseDouble(tolText);
+            }
+        } catch (NumberFormatException e) {
+            errors.add("- Fragment Ion Mass Tolerance must be a valid number.");
         }
 
         if (!errors.isEmpty()) {
