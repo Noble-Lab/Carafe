@@ -2579,7 +2579,7 @@ public class CarafeGUI extends JFrame {
         if(support_speclib){
             browseButton.addActionListener(e -> {
                 chooseFile("FASTA File (*.fasta, *.fa) or Spectral Library File (*.speclib)", JFileChooser.FILES_ONLY,
-                        new FileNameExtensionFilter("FASTA File (*.fasta, *.fa) or Spectral Library File (*.speclib)", "*.fasta", "*.fa", "*.speclib"), f -> {
+                        new FileNameExtensionFilter("FASTA File (*.fasta, *.fa) or Spectral Library File (*.speclib)", "fasta", "fa", "speclib"), f -> {
                             targetField.setText(f.getAbsolutePath());
                             prefs.put(PREF_LAST_DIR, f.getParent());
                         });
@@ -2587,7 +2587,7 @@ public class CarafeGUI extends JFrame {
         }else{
             browseButton.addActionListener(e -> {
                 chooseFile("FASTA File (*.fasta, *.fa)", JFileChooser.FILES_ONLY,
-                        new FileNameExtensionFilter("FASTA File (*.fasta, *.fa)", "*.fasta", "*.fa"), f -> {
+                        new FileNameExtensionFilter("FASTA File (*.fasta, *.fa)", "fasta", "fa"), f -> {
                             targetField.setText(f.getAbsolutePath());
                             prefs.put(PREF_LAST_DIR, f.getParent());
                         });
