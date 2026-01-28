@@ -392,6 +392,15 @@ public class AIGear {
      * The path of python executable to use for model training and prediction.
      */
     private String python_bin = "python";
+    /**
+     * The version of ai scripts to use: v1 (default) or v2
+     */
+    public String ai_version = "v1";
+
+    /**
+     * Use torch.compile to speed up training and inference
+     */
+    public boolean torch_compile = false;
 
     /**
      * The number of peptides to predict in each batch.
@@ -636,6 +645,8 @@ public class AIGear {
         options.addOption("model_dir", true, "The directory of the model to use for spectral library generation");
 
         options.addOption("verbose", true, "The level of detail of the log: 1 (info, default), 2 (debug)");
+        options.addOption("ai_version", true, "The version of AI scripts to use: v1 (default), v2");
+        options.addOption("torch_compile", false, "Use torch.compile to speed up training and inference");
 
         options.addOption("h", false, "Help");
 
@@ -784,6 +795,15 @@ public class AIGear {
 
         AIGear aiGear = new AIGear();
         aiGear.load_mod_map();
+
+        if (cmd.hasOption("ai_version")) {
+            aiGear.ai_version = cmd.getOptionValue("ai_version");
+        }
+
+        if (cmd.hasOption("torch_compile")) {
+            aiGear.torch_compile = true;
+            AIWorker.torch_compile = true;
+        }
 
         if (cmd.hasOption("mod2mass")) {
             // change the mass of a modification
@@ -1770,9 +1790,9 @@ public class AIGear {
             for (int i = 0; i < input_files.size(); i++) {
                 // prediction
                 if(this.use_user_provided_ms_instrument) {
-                    fixedThreadPool.execute(new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.user_provided_ms_instrument, this.nce, this.mod_ai));
+                    fixedThreadPool.execute(new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.user_provided_ms_instrument, this.nce, this.mod_ai, this.ai_version));
                 }else{
-                    fixedThreadPool.execute(new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.ms_instrument, this.nce, this.mod_ai));
+                    fixedThreadPool.execute(new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.ms_instrument, this.nce, this.mod_ai, this.ai_version));
                 }
                 res_files.put(input_files.get(i), new HashMap<>());
                 if (this.use_parquet) {
@@ -1821,9 +1841,9 @@ public class AIGear {
                 // prediction
                 AIWorker worker;
                 if(this.use_user_provided_ms_instrument) {
-                    worker = new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.user_provided_ms_instrument, this.nce, this.mod_ai);
+                    worker = new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.user_provided_ms_instrument, this.nce, this.mod_ai, this.ai_version);
                 }else{
-                    worker = new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.ms_instrument, this.nce, this.mod_ai);
+                    worker = new AIWorker(model_dir, input_files.get(i), this.out_dir, i + "", this.device, this.ms_instrument, this.nce, this.mod_ai, this.ai_version);
                 }
                 futures.add(fixedThreadPool.submit(worker));
                 res_files.put(input_files.get(i), new HashMap<>());
@@ -2632,10 +2652,12 @@ public class AIGear {
             ms_instrument_for_training = this.ms_instrument;
         }
         System.out.println("NCE:" + this.nce);
-        String ai_py = get_jar_path() + File.separator + "ai.py";
+        String ai_py_name = this.ai_version.equalsIgnoreCase("v2") ? "v2/ai.py" : "ai.py";
+        String ai_py = get_jar_path() + File.separator + ai_py_name.replace("/", File.separator);
         File F = new File(ai_py);
+        String py_resource_root = this.ai_version.equalsIgnoreCase("v2") ? "/py/" : "/main/java/ai/";
         if (!F.exists()) {
-            ai_py = get_py_path("/main/java/ai/ai.py", "carafe_ai");
+            ai_py = get_py_path(py_resource_root + ai_py_name, "carafe_ai", this.ai_version.equalsIgnoreCase("v2"));
         }
         // String cmd = this.python_bin + " " + ai_py +
         // " --in_dir " + in_dir +
@@ -2664,6 +2686,11 @@ public class AIGear {
                 "--verbose", String.valueOf(CParameter.verbose.getValue())
         };
         ArrayList<String> cmd_list = new ArrayList<>(Arrays.asList(cmd_list_short));
+
+        if(this.torch_compile && this.ai_version.equalsIgnoreCase("v2")){
+            // cmd += " --torch_compile";
+            cmd_list.add("--torch_compile");
+        }
 
         if (this.no_masking) {
             // cmd = cmd + " --no_masking";
@@ -2699,26 +2726,46 @@ public class AIGear {
      * Extract the Python script from the JAR file to a temporary file and then
      * return its absolute path.
      * 
-     * @param py_file_path The path to the Python script within the JAR file, e.g.,
-     *                     "/main/java/ai/ai.py".
-     * @param prefix       A prefix for the temporary file name.
+     * @param py_file_path          The path to the Python script within the JAR
+     *                              file, e.g., "/py/v2/ai.py".
+     * @param prefix                A prefix for the temporary file name.
+     * @param extract_dependencies  If true, also extract models.py to the same
+     *                              directory.
      * @return The absolute path of the extracted Python script file.
      */
-    static String get_py_path(String py_file_path, String prefix) {
+    static String get_py_path(String py_file_path, String prefix, boolean extract_dependencies) {
         String py = "";
         // Extract the Python script from the JAR
-        // e.g., "/main/java/ai/ai.py"
+        // e.g., "/py/v2/ai.py"
         InputStream input = AIWorker.class.getResourceAsStream(py_file_path);
         if (input != null) {
             try {
                 File F = File.createTempFile(prefix, ".py");
                 Files.copy(input, F.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 py = F.getAbsolutePath();
+
+                if (extract_dependencies) {
+                    // Extract models.py to the same directory
+                    String parent_dir = F.getParent();
+                    File models_file = new File(parent_dir + File.separator + "models.py");
+                    InputStream models_input = AIWorker.class.getResourceAsStream("/py/v2/models.py");
+                    if (models_input != null) {
+                        try {
+                            Files.copy(models_input, models_file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        } catch (IOException e) {
+                             // Ignore potential file lock issues if another thread is using it,
+                             // though this is rare for temp files
+                             e.printStackTrace();
+                        }
+                    } else {
+                        Cloger.getInstance().logger.error(Thread.currentThread().getName() + ": AI error: models.py not found in JAR");
+                    }
+                }
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-        }else{
-            Cloger.getInstance().logger.error(Thread.currentThread().getName()+": AI error: "+py_file_path+" not found");
+        } else {
+            Cloger.getInstance().logger.error(Thread.currentThread().getName() + ": AI error: " + py_file_path + " not found");
         }
         return py;
     }
@@ -13202,9 +13249,9 @@ public class AIGear {
                 System.out.println("NCE: " + i_nce);
                 // prediction
                 if(this.use_user_provided_ms_instrument) {
-                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.user_provided_ms_instrument, i_nce, this.mod_ai));
+                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.user_provided_ms_instrument, i_nce, this.mod_ai, this.ai_version));
                 }else{
-                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.ms_instrument, i_nce, this.mod_ai));
+                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.ms_instrument, i_nce, this.mod_ai, this.ai_version));
                 }
                 String nce_str = String.valueOf(i_nce);
                 res_files.put(nce_str, new HashMap<>());
@@ -13231,9 +13278,9 @@ public class AIGear {
                 System.out.println("NCE: " + i_nce);
                 // prediction
                 if(this.use_user_provided_ms_instrument) {
-                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.user_provided_ms_instrument, i_nce, this.mod_ai));
+                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.user_provided_ms_instrument, i_nce, this.mod_ai, this.ai_version));
                 }else{
-                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.ms_instrument, i_nce, this.mod_ai));
+                    fixedThreadPool.execute(new AIWorker(in_dir, input_pred_file, i_out_dir, i_nce + "", this.device, this.ms_instrument, i_nce, this.mod_ai, this.ai_version));
                 }
                 String nce_str = String.valueOf(i_nce);
                 res_files.put(nce_str, new HashMap<>());

@@ -1052,10 +1052,10 @@ public class CarafeGUI extends JFrame {
                 createBrowseButton(diannReportFileField, "DIA-NN Report", new String[] { "tsv", "parquet" }));
 
         trainDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train Protein Database:",
-                "Protein database used for peptide detection on the train MS file(s).\n" +
-                        "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
-                trainDbFileField = createTextField("Path to protein FASTA for training"),
-                createDbButtonsPanel(trainDbFileField));
+                "Protein database or a DIA-NN library used for peptide detection on the train MS file(s).\n" +
+                        "Supported formats: FASTA. (e.g. protein.fasta, protein.fa or *.speclib)",
+                trainDbFileField = createTextField("Path to protein FASTA or DIA-NN library for searching the train MS file(s)"),
+                createDbButtonsPanel(trainDbFileField, true, "Select a protein database or a DIA-NN library used for peptide detection on the train MS file(s)."));
 
         // This is the MS/MS data for peptide detection using the fine-tuned spectral
         // library
@@ -1072,7 +1072,7 @@ public class CarafeGUI extends JFrame {
                 "Protein database used for fine-tuned spectral library generation.\n" +
                         "Supported formats: FASTA. (e.g. protein.fasta or protein.fa)",
                 libraryDbFileField = createTextField("Path to protein FASTA for library generation"),
-                createDbButtonsPanel(libraryDbFileField));
+                createDbButtonsPanel(libraryDbFileField, "Select a protein database for fine-tuned spectral library generation."));
 
         addInputRowToPanel(inputFieldsPanel, gridy++, "Output Directory:",
                 "Output directory for the analysis.",
@@ -2530,19 +2530,69 @@ public class CarafeGUI extends JFrame {
         return button;
     }
 
-    private JPanel createDbButtonsPanel(JTextField targetField) {
+    private JPanel createDbButtonsPanel(JTextField targetField, String tipString) {
         JPanel panel = new JPanel(new GridLayout(1, 0, 5, 0));
         panel.setOpaque(false);
 
         JButton browseButton = new JButton("Browse");
         styleButton(browseButton);
+        if(tipString != null && !tipString.isEmpty()){
+            browseButton.setToolTipText(tipString);
+        }
         browseButton.addActionListener(e -> {
-            chooseFile("FASTA Files", JFileChooser.FILES_ONLY,
-                    new FileNameExtensionFilter("FASTA Files", "fasta", "fa"), f -> {
+            chooseFile("FASTA File (*.fasta, *.fa)", JFileChooser.FILES_ONLY,
+                    new FileNameExtensionFilter("FASTA File (*.fasta, *.fa)", "fasta", "fa"), f -> {
                         targetField.setText(f.getAbsolutePath());
                         prefs.put(PREF_LAST_DIR, f.getParent());
                     });
         });
+
+        JButton downloadButton = new JButton("Download");
+        styleButton(downloadButton);
+        downloadButton.setToolTipText("Download protein database from UniProt");
+        downloadButton.addActionListener(e -> {
+            UniProtDownloadDialog dialog = new UniProtDownloadDialog(this, targetField, outputDirField);
+            dialog.showDialog();
+        });
+
+        panel.add(browseButton);
+        panel.add(downloadButton);
+        return panel;
+    }
+
+    /**
+     * Create buttons for database selection, supporting both FASTA files and spectral libraries.
+     * This is current used for train protein database input.
+     * @param targetField The text field to store the selected file path.
+     * @param support_speclib Whether to support spectral library files.
+     * @return A panel containing the browse and download buttons.
+     */
+    private JPanel createDbButtonsPanel(JTextField targetField, boolean support_speclib, String tipString) {
+        JPanel panel = new JPanel(new GridLayout(1, 0, 5, 0));
+        panel.setOpaque(false);
+
+        JButton browseButton = new JButton("Browse");
+        styleButton(browseButton);
+        if(tipString != null && !tipString.isEmpty()){
+            browseButton.setToolTipText(tipString);
+        }
+        if(support_speclib){
+            browseButton.addActionListener(e -> {
+                chooseFile("FASTA File (*.fasta, *.fa) or Spectral Library File (*.speclib)", JFileChooser.FILES_ONLY,
+                        new FileNameExtensionFilter("FASTA File (*.fasta, *.fa) or Spectral Library File (*.speclib)", "*.fasta", "*.fa", "*.speclib"), f -> {
+                            targetField.setText(f.getAbsolutePath());
+                            prefs.put(PREF_LAST_DIR, f.getParent());
+                        });
+            });
+        }else{
+            browseButton.addActionListener(e -> {
+                chooseFile("FASTA File (*.fasta, *.fa)", JFileChooser.FILES_ONLY,
+                        new FileNameExtensionFilter("FASTA File (*.fasta, *.fa)", "*.fasta", "*.fa"), f -> {
+                            targetField.setText(f.getAbsolutePath());
+                            prefs.put(PREF_LAST_DIR, f.getParent());
+                        });
+            });
+        }
 
         JButton downloadButton = new JButton("Download");
         styleButton(downloadButton);
@@ -4946,15 +4996,23 @@ public class CarafeGUI extends JFrame {
             }
 
             if (spectral_library_file.isEmpty() && !database.isEmpty()) {
-                diannArgs.add("--lib");
-                diannArgs.add("");
-                // diannArgs.add("\"\"");
-                diannArgs.add("--gen-spec-lib");
-                diannArgs.add("--predictor");
-                diannArgs.add("--fasta");
-                diannArgs.add(database);
-                // diannArgs.add("\"" + database + "\"");
-                diannArgs.add("--fasta-search");
+                if (database.endsWith(".speclib")) {
+                    diannArgs.add("--lib");
+                    diannArgs.add(database);
+                    // diannArgs.add("\"" + spectral_library_file + "\"");  
+                    diannArgs.add("--gen-spec-lib");
+                } else {
+                    // .fasta or .fa
+                    diannArgs.add("--lib");
+                    diannArgs.add("");
+                    // diannArgs.add("\"\"");
+                    diannArgs.add("--gen-spec-lib");
+                    diannArgs.add("--predictor");
+                    diannArgs.add("--fasta");
+                    diannArgs.add(database);
+                    // diannArgs.add("\"" + database + "\"");
+                    diannArgs.add("--fasta-search");
+                }
             } else if (!spectral_library_file.isEmpty() && !database.isEmpty()) {
                 diannArgs.add("--lib");
                 diannArgs.add(spectral_library_file);

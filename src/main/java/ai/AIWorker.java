@@ -24,12 +24,18 @@ public final  class AIWorker implements Runnable{
     public String ms_instrument;
     public double nce;
     public String ai_mode = "-";
+    public String ai_version = "v1";
+    /**
+     * Use torch.compile to speed up training and inference.
+     * Only available in v2.
+     */
+    public static boolean torch_compile = false;
     public static boolean fast_mode = false;
     public static boolean ccs_enabled = false;
     public static String mod2mass = "-";
     public static String user_mod = "";
 
-    public AIWorker(String model_dir, String input_file, String out_dir, String out_prefix, String device, String ms_instrument, double nce, String ai_mode){
+    public AIWorker(String model_dir, String input_file, String out_dir, String out_prefix, String device, String ms_instrument, double nce, String ai_mode, String ai_version){
 
         this.model_dir = model_dir;
         this.input_file = input_file;
@@ -39,28 +45,20 @@ public final  class AIWorker implements Runnable{
         this.ms_instrument = ms_instrument;
         this.nce = nce;
         this.ai_mode = ai_mode;
+        this.ai_version = ai_version;
     }
 
     @Override
     public void run() {
         Cloger.getInstance().logger.info(Thread.currentThread().getName()+": predicting "+this.input_file);
         String mode = this.ai_mode.equals("-")? "general": this.ai_mode;
-        String ai_pred = get_jar_path() + File.separator + "ai_pred.py";
+        String ai_pred_name = this.ai_version.equalsIgnoreCase("v2") ? "v2/ai_pred.py" : "ai_pred.py";
+        String ai_pred = get_jar_path() + File.separator + ai_pred_name.replace("/", File.separator);
         File F = new File(ai_pred);
+        String py_resource_root = this.ai_version.equalsIgnoreCase("v2") ? "/py/" : "/main/java/ai/";
         if(!F.exists()){
-            ai_pred = get_py_path("/main/java/ai/ai_pred.py","carafe_ai_pred");
+            ai_pred = get_py_path(py_resource_root + ai_pred_name, "carafe_ai_pred", this.ai_version.equalsIgnoreCase("v2"));
         }
-        //String cmd = python_bin +" " + ai_pred +
-        //        " --model_dir "+ model_dir +
-        //        " --in_file "+ this.input_file +
-        //        " --out_dir " + this.out_dir +
-        //        " --out_prefix "+ this.out_prefix +
-        //        " --device " + this.device +
-        //        " --instrument " + this.ms_instrument +
-        //        " --tf_type " + CParameter.tf_type +
-        //        " --nce " + this.nce+
-        //        " --mode " + mode;
-
 
         String[] cmd_list_short = new String[] {
                 python_bin,
@@ -78,6 +76,11 @@ public final  class AIWorker implements Runnable{
                 "--verbose", String.valueOf(CParameter.verbose.getValue())
         };
         ArrayList<String> cmd_list =  new ArrayList<>(Arrays.asList(cmd_list_short));
+
+        if(torch_compile && this.ai_version.equalsIgnoreCase("v2")){
+            // cmd += " --torch_compile";
+            cmd_list.add("--torch_compile");
+        }
 
         if(fast_mode){
             // cmd += " --fast";
@@ -150,4 +153,3 @@ public final  class AIWorker implements Runnable{
         return pass;
     }
 }
-

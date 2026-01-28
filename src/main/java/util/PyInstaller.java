@@ -13,6 +13,34 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class PyInstaller {
+    private static final String PYTHON_VERSION = "3.9.18";
+
+    public static void main(String[] args) {
+        try {
+            Path installRoot;
+            if (args.length > 0) {
+                installRoot = Paths.get(args[0]);
+            } else {
+                String userHome = System.getProperty("user.home");
+                installRoot = Paths.get(userHome, ".carafe");
+            }
+
+            System.out.println("Starting Python Environment Installation (" + PYTHON_VERSION + ")...");
+            System.out.println("Target Directory: " + installRoot.toAbsolutePath());
+
+            String pythonPath = installAll(installRoot);
+
+            System.out.println("\n==========================================");
+            System.out.println("Installation Successful!");
+            System.out.println("Python Path: " + pythonPath);
+            System.out.println("==========================================\n");
+
+        } catch (Exception e) {
+            System.err.println("\nInstallation Failed!");
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
 
     /**
      * Single-function installer (Windows + Linux).
@@ -164,7 +192,7 @@ public class PyInstaller {
 
         // ---------------- Create venv (Python 3.9.18) ----------------
         // Creates: installRoot\.venv
-        cmd.run(List.of(uvExe.toString(), "venv", "--python", "3.9.18", ".venv"), installRoot);
+        cmd.run(List.of(uvExe.toString(), "venv", "--clear", "--python", PYTHON_VERSION, ".venv"), installRoot);
 
         // ---------------- Detect NVIDIA driver (nvidia-smi) ----------------
         String driverVersion = null;
