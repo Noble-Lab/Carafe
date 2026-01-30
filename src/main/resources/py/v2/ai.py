@@ -89,6 +89,12 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
+def get_steps_per_epoch(num_samples: int, batch_size: int) -> int:
+    """Calculate steps per epoch."""
+    if batch_size <= 0: return 0
+    return math.ceil(num_samples / batch_size)
+
+
 def get_auto_tune_params(num_peptides: int, mode='ms2'):
     """
     Hybrid steps-based auto-tuning for consistent training effort.
@@ -158,7 +164,8 @@ def train_ms2(in_dir: str,
               warmup_epoch_to_train_ms2=10,
               batch_size_to_train_ms2=512,
               lr_to_train_ms2=0.0001,
-              torch_compile=False):
+              torch_compile=False,
+              pretrained_model: str = None):
     """Train MS2 prediction model - replicates peptdeep exactly"""
     import torch
     from models import (ModelManager, psm_sampling_with_important_mods, 
@@ -203,6 +210,14 @@ def train_ms2(in_dir: str,
             model_mgr.load_installed_models('generic', model_list=['ms2'])
     except Exception as e:
         print(f"Warning: Could not load pretrained models: {e}")
+
+    # Load user-provided pretrained model if available
+    if pretrained_model and os.path.exists(pretrained_model):
+        try:
+            print(f"Loading user-provided MS2 model from: {pretrained_model}")
+            model_mgr.load_external_models(ms2_model_file=pretrained_model)
+        except Exception as e:
+            print(f"Error loading user-provided MS2 model: {e}")
     
     logging.info(f"MS2 Model Parameter Size: {model_mgr.ms2_model.get_parameter_num():,}")
     
@@ -237,6 +252,8 @@ def train_ms2(in_dir: str,
     
     print(f"The number of PSMs to train MS2 model: {len(tr_df)}")
     print(f"The number of PSMs to test MS2 model: {len(test_psm_df)}")
+    steps = get_steps_per_epoch(len(tr_df), batch_size_to_train_ms2)
+    print(f"Training steps per epoch: {steps}")
     
     model_mgr.nce = nce
     model_mgr.instrument = instrument
@@ -440,7 +457,9 @@ def train_ms2(in_dir: str,
             run_training_loop()
     
     # Pre-reload evaluation
+    test_psm_df_clean = None
     if len(test_psm_df) > 0 and use_best_model:
+        test_psm_df_clean = test_psm_df.copy()
         # Ensure indices remain integer to prevent IndexError in predict/normalize
         for col in ['frag_start_idx', 'frag_stop_idx', 'psm_id', 'ms2_scan']:
             if col in test_psm_df.columns:
@@ -459,6 +478,8 @@ def train_ms2(in_dir: str,
 
     # Post-training evaluation
     if len(test_psm_df) > 0:
+        if test_psm_df_clean is not None:
+            test_psm_df = test_psm_df_clean
         # verbose: 1=normal, 2=debug
         if verbose >=2:
             print("test_psm_df dtypes:")
@@ -507,7 +528,8 @@ def train_ms2(in_dir: str,
 
 
 def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threads=1, use_best_model=False, auto_tune=False, early_stop=False, patience=10, verbose=1,
-             epoch_to_train_rt_ccs=40, warmup_epoch_to_train_rt_ccs=10, batch_size_to_train_rt_ccs=1024, lr_to_train_rt_ccs=0.0001, torch_compile=False):
+             epoch_to_train_rt_ccs=40, warmup_epoch_to_train_rt_ccs=10, batch_size_to_train_rt_ccs=1024, lr_to_train_rt_ccs=0.0001, torch_compile=False,
+             pretrained_model: str = None):
     """Train RT prediction model - replicates peptdeep exactly"""
     import pandas as pd
     import numpy as np
@@ -553,6 +575,14 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
     except Exception as e:
         print(f"Warning: Could not load pretrained models: {e}")
 
+    # Load user-provided pretrained model if available
+    if pretrained_model and os.path.exists(pretrained_model):
+        try:
+            print(f"Loading user-provided RT model from: {pretrained_model}")
+            model_mgr.load_external_models(rt_model_file=pretrained_model)
+        except Exception as e:
+            print(f"Error loading user-provided RT model: {e}")
+
     logging.info(f"RT Model Parameter Size: {model_mgr.rt_model.get_parameter_num():,}")
 
     # Training parameters
@@ -594,6 +624,8 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
         test_psm_df = psm_df.copy()
     
     logging.info(f"{len(tr_df)} PSMs for RT model training/transfer learning")
+    steps = get_steps_per_epoch(len(tr_df), batch_size_to_train_rt_ccs)
+    logging.info(f"Training steps per epoch: {steps}")
     
     rt_model = model_mgr.rt_model
     if torch_compile:
@@ -729,7 +761,8 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
     return model_mgr
 
 def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', threads=1, use_best_model=False, auto_tune=False, early_stop=False, patience=10, verbose=1,
-              epoch_to_train_rt_ccs=40, warmup_epoch_to_train_rt_ccs=10, batch_size_to_train_rt_ccs=1024, lr_to_train_rt_ccs=0.0001, torch_compile=False):
+              epoch_to_train_rt_ccs=40, warmup_epoch_to_train_rt_ccs=10, batch_size_to_train_rt_ccs=1024, lr_to_train_rt_ccs=0.0001, torch_compile=False,
+              pretrained_model: str = None):
     """Train CCS prediction model - replicates peptdeep exactly"""
     import pandas as pd
     import numpy as np
@@ -769,6 +802,14 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
     except Exception as e:
         print(f"Warning: Could not load pretrained models: {e}")
 
+    # Load user-provided pretrained model if available
+    if pretrained_model and os.path.exists(pretrained_model):
+        try:
+            print(f"Loading user-provided CCS model from: {pretrained_model}")
+            model_mgr.load_external_models(ccs_model_file=pretrained_model)
+        except Exception as e:
+            print(f"Error loading user-provided CCS model: {e}")
+
     logging.info(f"CCS Model Parameter Size: {model_mgr.ccs_model.get_parameter_num():,}")
 
     if auto_tune:
@@ -804,6 +845,8 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
         test_psm_df = psm_df.copy()
     
     logging.info(f"{len(tr_df)} PSMs for CCS model training/transfer learning")
+    steps = get_steps_per_epoch(len(tr_df), batch_size_to_train_rt_ccs)
+    logging.info(f"Training steps per epoch: {steps}")
 
     ccs_model = model_mgr.ccs_model
     if torch_compile:
@@ -1160,6 +1203,9 @@ if __name__ == "__main__":
     parser.add_argument("--threads", type=int, default=None, help="Number of CPU threads to use")
     parser.add_argument("--torch_compile", action="store_true", help="Compile model with torch.compile for speed (CPU/GPU)")
     parser.add_argument("--profile", action='store_true', help="Profile the script execution")
+    parser.add_argument("--ms2_model", type=str, default=None, help="Pretrained MS2 model path")
+    parser.add_argument("--rt_model", type=str, default=None, help="Pretrained RT model path")
+    parser.add_argument("--ccs_model", type=str, default=None, help="Pretrained CCS model path")
     args = parser.parse_args()
 
     # Early stopping requires best model checkpointing
@@ -1245,7 +1291,8 @@ if __name__ == "__main__":
             train_rt(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 device=args.device, threads=args.threads, use_best_model=args.use_best_model, 
                                 auto_tune=args.auto_tune, early_stop=args.early_stop, patience=args.patience, 
-                                verbose=args.verbose, torch_compile=args.torch_compile)
+                                verbose=args.verbose, torch_compile=args.torch_compile,
+                                pretrained_model=args.rt_model)
             plot_rt(in_dir, out_dir)
             # CCS training if data exists and has sufficient samples
             ccs_data_path = os.path.join(in_dir, "ccs_train_data.tsv")
@@ -1256,7 +1303,8 @@ if __name__ == "__main__":
                     train_ccs(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                             device=args.device, threads=args.threads, use_best_model=args.use_best_model,
                                             auto_tune=args.auto_tune, early_stop=args.early_stop, patience=args.patience, 
-                                            verbose=args.verbose, torch_compile=args.torch_compile)
+                                            verbose=args.verbose, torch_compile=args.torch_compile,
+                                            pretrained_model=args.ccs_model)
                     plot_mobility(out_dir)
             train_ms2(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 log_transform=args.log_transform,
@@ -1265,12 +1313,14 @@ if __name__ == "__main__":
                                 threads=args.threads, use_best_model=args.use_best_model, 
                                 auto_tune=args.auto_tune, early_stop=args.early_stop,
                                 patience=args.patience, verbose=args.verbose,
-                                torch_compile=args.torch_compile)
+                                torch_compile=args.torch_compile,
+                                pretrained_model=args.ms2_model)
         elif tf_type == "rt":
             train_rt(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 device=args.device, threads=args.threads, use_best_model=args.use_best_model, 
                                 auto_tune=args.auto_tune, early_stop=args.early_stop, patience=args.patience, 
-                                verbose=args.verbose, torch_compile=args.torch_compile)
+                                verbose=args.verbose, torch_compile=args.torch_compile,
+                                pretrained_model=args.rt_model)
             plot_rt(in_dir, out_dir)
         elif tf_type == "ms2":
             train_ms2(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
@@ -1280,12 +1330,14 @@ if __name__ == "__main__":
                                 threads=args.threads, use_best_model=args.use_best_model, 
                                 auto_tune=args.auto_tune, early_stop=args.early_stop,
                                 patience=args.patience, verbose=args.verbose,
-                                torch_compile=args.torch_compile)
+                                torch_compile=args.torch_compile,
+                                pretrained_model=args.ms2_model)
         elif tf_type == "ccs":
             train_ccs(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 device=args.device, threads=args.threads, use_best_model=args.use_best_model,
                                 auto_tune=args.auto_tune, early_stop=args.early_stop, patience=args.patience, 
-                                verbose=args.verbose, torch_compile=args.torch_compile)
+                                verbose=args.verbose, torch_compile=args.torch_compile,
+                                pretrained_model=args.ccs_model)
             plot_mobility(out_dir)
 
     if args.profile:
