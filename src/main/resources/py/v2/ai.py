@@ -204,6 +204,8 @@ def train_ms2(in_dir: str,
     except Exception as e:
         print(f"Warning: Could not load pretrained models: {e}")
     
+    logging.info(f"MS2 Model Parameter Size: {model_mgr.ms2_model.get_parameter_num():,}")
+    
     # Training parameters
     if auto_tune:
         epoch_to_train_ms2, lr_to_train_ms2 = get_auto_tune_params(a.shape[0], mode='ms2')
@@ -551,6 +553,8 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
     except Exception as e:
         print(f"Warning: Could not load pretrained models: {e}")
 
+    logging.info(f"RT Model Parameter Size: {model_mgr.rt_model.get_parameter_num():,}")
+
     # Training parameters
     if auto_tune:
         epoch_to_train_rt_ccs, lr_to_train_rt_ccs = get_auto_tune_params(a.shape[0], mode='rt_ccs')
@@ -764,6 +768,8 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
             model_mgr.load_installed_models('generic', model_list=['ccs'])
     except Exception as e:
         print(f"Warning: Could not load pretrained models: {e}")
+
+    logging.info(f"CCS Model Parameter Size: {model_mgr.ccs_model.get_parameter_num():,}")
 
     if auto_tune:
         epoch_to_train_rt_ccs, lr_to_train_rt_ccs = get_auto_tune_params(a.shape[0], mode='rt_ccs')
