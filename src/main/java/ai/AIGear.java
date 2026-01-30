@@ -2734,40 +2734,43 @@ public class AIGear {
      * @return The absolute path of the extracted Python script file.
      */
     static String get_py_path(String py_file_path, String prefix, boolean extract_dependencies) {
-        String py = "";
-        // Extract the Python script from the JAR
-        // e.g., "/py/v2/ai.py"
-        InputStream input = AIWorker.class.getResourceAsStream(py_file_path);
-        if (input != null) {
-            try {
-                File F = File.createTempFile(prefix, ".py");
+        try {
+            // Create a unique temporary directory
+            Path tempDir = Files.createTempDirectory(prefix + "_");
+            File F = new File(tempDir.toFile(), new File(py_file_path).getName());
+
+            InputStream input = AIWorker.class.getResourceAsStream(py_file_path);
+            if (input != null) {
                 Files.copy(input, F.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                py = F.getAbsolutePath();
 
                 if (extract_dependencies) {
-                    // Extract models.py to the same directory
-                    String parent_dir = F.getParent();
-                    File models_file = new File(parent_dir + File.separator + "models.py");
+                    File models_file = new File(tempDir.toFile(), "models.py");
                     InputStream models_input = AIWorker.class.getResourceAsStream("/py/v2/models.py");
                     if (models_input != null) {
                         try {
                             Files.copy(models_input, models_file.toPath(), StandardCopyOption.REPLACE_EXISTING);
                         } catch (IOException e) {
-                             // Ignore potential file lock issues if another thread is using it,
-                             // though this is rare for temp files
-                             e.printStackTrace();
+                            Cloger.getInstance().logger.warn("Could not copy models.py: " + e.getMessage());
                         }
                     } else {
                         Cloger.getInstance().logger.error(Thread.currentThread().getName() + ": AI error: models.py not found in JAR");
                     }
                 }
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+                // Register for deletion on exit
+                F.deleteOnExit();
+                if (extract_dependencies) {
+                    new File(tempDir.toFile(), "models.py").deleteOnExit();
+                }
+                tempDir.toFile().deleteOnExit();
+
+                return F.getAbsolutePath();
+            } else {
+                Cloger.getInstance().logger.error(Thread.currentThread().getName() + ": AI error: " + py_file_path + " not found");
+                return "";
             }
-        } else {
-            Cloger.getInstance().logger.error(Thread.currentThread().getName() + ": AI error: " + py_file_path + " not found");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
-        return py;
     }
 
     /**
@@ -5236,7 +5239,7 @@ public class AIGear {
                     }
 
                     // TODO: need to determine if this filter is necessary: index2peptideMatch.get(row_i).matched_ions.size()>=this.min_n_fragment_ions
-                    if(index2peptideMatch.get(row_i).max_fragment_ion_intensity>0 && index2peptideMatch.get(row_i).matched_ions.size()>=this.min_n_fragment_ions) {
+                    if(index2peptideMatch.containsKey(row_i) && index2peptideMatch.get(row_i).max_fragment_ion_intensity>0 && index2peptideMatch.get(row_i).matched_ions.size()>=this.min_n_fragment_ions) {
                         boolean fragment_export = false;
 
                         String [] out_mod = convert_modification(d[hIndex.get("modification")]);
@@ -5298,6 +5301,9 @@ public class AIGear {
                             }
                         }
                     } else {
+                        if(!index2peptideMatch.containsKey(row_i)){
+                            Cloger.getInstance().logger.error("PSM not matched to MS2 spectrum:"+row_i+" => "+line);
+                        }
                         n_less_than_min_n_fragment_ions++;
                     }
 
@@ -8659,11 +8665,6 @@ public class AIGear {
         if (!modification.equals("-")) {
             String[] m = modification.split(";");
             String n_term_char = "";
-            if (modification.contains("Acetyl of protein N-term")) {
-                // remove the first character
-                peptide = peptide.substring(1);
-                n_term_char = "5";
-            }
             String[] aa = peptide.split("");
             for (String ptm : m) {
                 String mod_name = ptm.split("@")[0];
@@ -8685,6 +8686,7 @@ public class AIGear {
                     // fixed modification.
                 } else if (mod_name.equalsIgnoreCase("Acetyl of protein N-term")) {
                     // no need to change
+                    n_term_char = "5";
                 }else{
                     if(CModification.getInstance().ptm_name2id.containsKey(mod_name)) {
                         aa[Integer.parseInt(pos) - 1] = String.valueOf(CModification.getInstance().ptm_name2id.get(mod_name));
