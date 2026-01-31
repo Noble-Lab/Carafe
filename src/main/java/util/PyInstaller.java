@@ -144,7 +144,8 @@ public class PyInstaller {
                 .GET()
                 .build();
 
-        HttpResponse<Path> resp = http.send(req, HttpResponse.BodyHandlers.ofFile(uvArchive));
+        HttpResponse<Path> resp = http.send(req, HttpResponse.BodyHandlers.ofFile(uvArchive, 
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING));
         if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
             throw new IOException("Failed to download uv zip. HTTP " + resp.statusCode());
         }
