@@ -398,17 +398,24 @@ public class DBGear {
         return ind;
     }
 
+    public static ArrayList<Enzyme> get_enzymes(){
+        return enzymes;
+    }
+
     private static ArrayList<Enzyme> enzymes = new ArrayList<>();
+
     public static void init_enzymes(){
 
         enzymes.clear();
         // 0 non-specific digestion
-        Enzyme enzyme = new Enzyme("NoEnzyme");
+        // Enzyme enzyme = new Enzyme("NoEnzyme");
+        Enzyme enzyme = new Enzyme("non-specific");
         String all_aas = "ABCDEFGHIKLMNPQRSTUVWXY";
         for(int i=0;i<all_aas.length();i++){
             enzyme.addAminoAcidBefore(all_aas.charAt(i));
         }
-        enzyme.setCvTerm(new CvTerm("PSI-MS", "MS:1001956", "NoEnzyme", null));
+        // enzyme.setCvTerm(new CvTerm("PSI-MS", "MS:1001956", "NoEnzyme", null));
+        enzyme.setCvTerm(new CvTerm("PSI-MS", "MS:1001956", "non-specific", null));
         enzymes.add(enzyme);
 
 

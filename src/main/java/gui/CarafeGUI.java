@@ -22,6 +22,7 @@ import java.util.prefs.Preferences;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
+import main.java.db.DBGear;
 import main.java.input.CModification;
 import org.apache.commons.lang3.StringUtils;
 
@@ -1827,19 +1828,28 @@ public class CarafeGUI extends JFrame {
         panel.add(createLabel("Enzyme:",
                 "The enzyme to consider for protein in-silico digestion during library generation."), gbc);
 
-        String[] enzymes = {
-                "1: Trypsin (default)",
-                "2: Trypsin (no P rule)",
-                "3: Arg-C",
-                "4: Arg-C (no P rule)",
-                "5: Arg-N",
-                "6: Glu-C",
-                "7: Lys-C",
-                "0: Non enzyme"
-        };
+        if(DBGear.get_enzymes().isEmpty()){
+            DBGear.init_enzymes();
+        }
+
+        String[] enzymes = new String[DBGear.get_enzymes().size()];
+        for(int i = 0; i < DBGear.get_enzymes().size(); i++){
+            enzymes[i] = i + ": " + DBGear.get_enzymes().get(i).getName();
+        }
+
+        // String[] enzymes = {
+        //         "1: Trypsin (default)",
+        //         "2: Trypsin (no P rule)",
+        //         "3: Arg-C",
+        //         "4: Arg-C (no P rule)",
+        //         "5: Arg-N",
+        //         "6: Glu-C",
+        //         "7: Lys-C",
+        //         "0: Non enzyme"
+        // };
         enzymeCombo = new JComboBox<>(enzymes);
         styleComboBox(enzymeCombo);
-        enzymeCombo.setSelectedIndex(1);
+        enzymeCombo.setSelectedIndex(DBGear.getEnzymeIndexByName("Trypsin (no P rule)"));
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(enzymeCombo, gbc);
@@ -5286,19 +5296,61 @@ public class CarafeGUI extends JFrame {
                     diannArgs.add("--peptidoforms");
                 }
             }
-
-            String enzyme = ((String) enzymeCombo.getSelectedItem()).split(":")[0];
-            if (enzyme.equals("1")) {
+            
+            String [] d_enzyme = ((String) enzymeCombo.getSelectedItem()).split(": ");
+            String enzyme = d_enzyme[0];
+            String enzymeName = d_enzyme[1];
+            if (enzymeName.equals("Trypsin")) {
+                // DIANN Trypsin: --cut K*,R*,!*P
                 diannArgs.add("--cut");
-                diannArgs.add("K*,R*");
-            } else if (enzyme.equals("2")) {
+                diannArgs.add("K*,R*,!*P");
+                diannArgs.add("--missed-cleavages");
+                diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
+            } else if (enzymeName.equals("Trypsin (no P rule)")) {
+                // DIANN Trypsin/P (default): --cut K*,R*
                 diannArgs.add("--cut");
                 diannArgs.add("K*,R*");
                 diannArgs.add("--missed-cleavages");
                 diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
+            } else if (enzymeName.equals("Lys-C (no P rule)")) {
+                // DIANN Lys-C: --cut K*
+                diannArgs.add("--cut");
+                diannArgs.add("K*");
+                diannArgs.add("--missed-cleavages");
+                diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
+            } else if (enzymeName.equals("Chymotrypsin")) {
+                // DIANN Chymotrypsin: --cut F*,Y*,W*,M*,L*,!*P
+                diannArgs.add("--cut");
+                diannArgs.add("F*,Y*,W*,M*,L*,!*P");
+                diannArgs.add("--missed-cleavages");
+                diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
+            } else if (enzymeName.equals("Asp-N")) {
+                // DIANN Asp-N: --cut *D
+                diannArgs.add("--cut");
+                diannArgs.add("*D");
+                diannArgs.add("--missed-cleavages");
+                diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
+            } else if (enzymeName.equals("Glu-C")) {
+                // DIANN Glu-C: --cut E*
+                diannArgs.add("--cut");
+                diannArgs.add("E*");
+                diannArgs.add("--missed-cleavages");
+                diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
+            } else if (enzymeName.equals("Arg-C (no P rule)")) {
+                // DIANN Arg-C: --cut R*
+                diannArgs.add("--cut");
+                diannArgs.add("R*");
+                diannArgs.add("--missed-cleavages");
+                diannArgs.add(String.valueOf(missCleavageSpinner.getValue()));
+            } else if (enzymeName.equals("non-specific")){
+                // DIANN non-specific: --cut ** --missed-cleavages 100
+                diannArgs.add("--cut");
+                diannArgs.add("**");
+                diannArgs.add("--missed-cleavages");
+                diannArgs.add("100");
             } else {
                 JOptionPane.showMessageDialog(this,
-                        "Unsupported enzyme settings. Please select '1' for trypsin or '2' for chymotrypsin.",
+                        "Unsupported enzyme setting for DIANN. Please select a supported enzyme.",
                         "Warning", JOptionPane.WARNING_MESSAGE);
                 return null;
             }
@@ -5397,6 +5449,8 @@ public class CarafeGUI extends JFrame {
                 for (String option : additionalOptionList) {
                     if (option.startsWith("--")) {
                         if (diannArgs.contains(option)) {
+                            // also show this to console panel
+                            logToConsole("The additional DIA-NN option " + option + " is redundant!\n");
                             // show warning message
                             JOptionPane.showMessageDialog(this,
                                     "The additional DIA-NN option " + option + " is redundant!", "DIA-NN setting",
