@@ -741,6 +741,11 @@ public class AIGear {
             }
         }
 
+        // for non-specific digestion, set the missed cleavages to be equal to 100
+        if(DBGear.getEnzymeByIndex(CParameter.enzyme).getName().equalsIgnoreCase("non-specific")){
+            CParameter.maxMissedCleavages = 100;
+        }
+
         if (cmd.hasOption("maxVar")) {
             CParameter.maxVarMods = Integer.parseInt(cmd.getOptionValue("maxVar"));
         }
