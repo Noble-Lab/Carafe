@@ -350,15 +350,21 @@ public class DBGear {
                 }
                 writer.write(line + "\t" + pep2proteins.get(d[hIndex.get("peptide")]) + "\t" + decoy + "\n");
             }else if(hIndex.containsKey("sequence")) {
-                String[] proIDs = pep2proteins.get(d[hIndex.get("sequence")]).split(";");
-                String decoy = "Yes";
-                for (String pro : proIDs) {
-                    if (!pro.startsWith(CParameter.decoy_prefix)) {
-                        decoy = "No";
-                        break;
+                if(pep2proteins.containsKey(d[hIndex.get("sequence")])){
+                    String[] proIDs = pep2proteins.get(d[hIndex.get("sequence")]).split(";");
+                    String decoy = "Yes";
+                    for (String pro : proIDs) {
+                        if (!pro.startsWith(CParameter.decoy_prefix)) {
+                            decoy = "No";
+                            break;
+                        }
                     }
+                    writer.write(line + "\t" + pep2proteins.get(d[hIndex.get("sequence")]) + "\t" + decoy + "\n");
+                }else{
+                    // print out the sequence, psm file name, line 
+                    Cloger.getInstance().logger.error("Peptide not found in protein database: " + d[hIndex.get("sequence")] + "\n" + old_psm_rank_file + "\n" + line);
+                    System.exit(1);
                 }
-                writer.write(line + "\t" + pep2proteins.get(d[hIndex.get("sequence")]) + "\t" + decoy + "\n");
             }else{
                 System.err.println("Please provide peptide column name in the psm file. The column name should be either \"peptide\" or \"sequence\".");
                 System.exit(1);

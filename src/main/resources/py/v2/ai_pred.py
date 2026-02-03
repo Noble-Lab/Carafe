@@ -90,12 +90,17 @@ def predict_ms2(model_dir:str,
         out_file = os.path.join(out_dir,out_prefix+"_ms2_pred.tsv")
         pred_res.to_csv(out_file,sep="\t",index=False)
 
+    # Drop internal preprocessing columns that contain numpy arrays
+    # These would corrupt TSV output due to numpy string formatting with newlines
+    internal_cols = ['_aa_indices', '_mod_id_list', '_mod_site_list']
+    output_df = a.drop(columns=[c for c in internal_cols if c in a.columns])
+    
     if fast_mode:
         out_file = os.path.join(out_dir,out_prefix+"_ms2_df.parquet")
-        a.to_parquet(out_file, compression='zstd')
+        output_df.to_parquet(out_file, compression='zstd')
     else:
         out_file = os.path.join(out_dir,out_prefix+"_ms2_df.tsv")
-        a.to_csv(out_file,sep="\t",index=False)
+        output_df.to_csv(out_file, sep="\t", index=False)
 
     if mod2mass is not None:
         from alphabase.constants.modification import MOD_MASS
@@ -194,12 +199,16 @@ def predict_rt(model_dir:str,
     pred_res = pred_df
     pred_res = model_mgr.rt_model.add_irt_column_to_precursor_df(pred_res)
 
+
+    internal_cols = ['_aa_indices', '_mod_id_list', '_mod_site_list']
+    output_df = pred_res.drop(columns=[c for c in internal_cols if c in pred_res.columns])
+
     if fast_mode:
         out_file = os.path.join(out_dir,out_prefix+"_rt_pred.parquet")
-        pred_res.to_parquet(out_file, compression='zstd')
+        output_df.to_parquet(out_file, compression='zstd')
     else:
         out_file = os.path.join(out_dir,out_prefix+"_rt_pred.tsv")
-        pred_res.to_csv(out_file,sep="\t",index=False)
+        output_df.to_csv(out_file,sep="\t",index=False)
 
 
 def predict_ccs(model_dir:str,
@@ -266,12 +275,15 @@ def predict_ccs(model_dir:str,
     pred_res = pred_df
     #pred_res = model_mgr.rt_model.add_irt_column_to_precursor_df(pred_res)
 
+    internal_cols = ['_aa_indices', '_mod_id_list', '_mod_site_list']
+    output_df = pred_res.drop(columns=[c for c in internal_cols if c in pred_res.columns])
+
     if fast_mode:
         out_file = os.path.join(out_dir,out_prefix+"_ccs_pred.parquet")
-        pred_res.to_parquet(out_file, compression='zstd')
+        output_df.to_parquet(out_file, compression='zstd')
     else:
         out_file = os.path.join(out_dir,out_prefix+"_ccs_pred.tsv")
-        pred_res.to_csv(out_file,sep="\t",index=False)
+        output_df.to_csv(out_file,sep="\t",index=False)
 
 
 
@@ -375,6 +387,9 @@ if __name__ == "__main__":
     
     import torch
     import numpy as np
+    # Prevent numpy from wrapping arrays with newlines when converting to strings
+    # This fixes TSV file corruption when arrays are written as cell values
+    np.set_printoptions(linewidth=np.inf)
     import pandas as pd
     from threadpoolctl import threadpool_limits
     from models import ModelManager, global_settings, add_user_defined_modifications

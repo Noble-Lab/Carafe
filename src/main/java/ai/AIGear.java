@@ -11919,9 +11919,10 @@ public class AIGear {
             Cloger.getInstance().logger.info(i);
             String ms2_file = res_files.get(i).get("ms2");
             if (ms2_file.endsWith("parquet")) {
-                // TODO
-                System.err.println("Parquet is not supported in this function!");
-                System.exit(1);
+                // This TSV-based method doesn't support Parquet - should use generate_spectral_library_parquet instead
+                // Skip with a warning (protein info is handled via dbGear.digest_protein in Parquet workflows)
+                Cloger.getInstance().logger.warn("Skipping Parquet file in TSV-based library generation (use generate_spectral_library_parquet instead): " + ms2_file);
+                continue;
             } else {
                 if (!get_column_name2index(ms2_file).containsKey("protein")) {
                     if (CParameter.db.toLowerCase().endsWith(".fa") || CParameter.db.toLowerCase().endsWith(".fasta")) {
@@ -12103,9 +12104,9 @@ public class AIGear {
             Cloger.getInstance().logger.info(i);
             String ms2_file = res_files.get(i).get("ms2");
             if (ms2_file.endsWith("parquet")) {
-                // TODO
-                System.err.println("Parquet is not supported in this function!");
-                System.exit(1);
+                // Parquet files handle protein info differently via dbGear.digest_protein in the spectral library generation
+                // Skip adding protein to Parquet PSM tables since it's handled during library generation
+                Cloger.getInstance().logger.info("Skipping protein annotation for Parquet file (handled during library generation): " + ms2_file);
             } else {
                 if (!get_column_name2index(ms2_file).containsKey("protein")) {
                     if (CParameter.db.toLowerCase().endsWith(".fa") || CParameter.db.toLowerCase().endsWith(".fasta")) {
