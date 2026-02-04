@@ -1828,7 +1828,9 @@ public class AIGear {
             }
         } else {
             double gpu_mem = get_gpu_mem();
-            int n_gpu_jobs = (int) Math.floor(gpu_mem / 2);
+            // Each prediction process loads MS2, RT, and CCS models which use ~3-4GB total
+            int n_gpu_jobs = (int) Math.floor(gpu_mem / 3);
+            n_gpu_jobs = Math.max(1, n_gpu_jobs); // Ensure at least 1 job
             n_gpu_jobs = Math.min(n_gpu_jobs, input_files.size());
             // check if this is on a windows system
             if (System.getProperty("os.name").toLowerCase().contains("win")) {
@@ -12168,7 +12170,11 @@ public class AIGear {
                     .build();
         } else {
             libWriter = new BufferedWriter(new FileWriter(out_library_file));
-            libWriter.write("ModifiedPeptide\tStrippedPeptide\tPrecursorMz\tPrecursorCharge\tTr_recalibrated\tProteinID\tDecoy\tFragmentMz\tRelativeIntensity\tFragmentType\tFragmentNumber\tFragmentCharge\tFragmentLossType\n");
+            if (this.ccs_enabled) {
+                libWriter.write("ModifiedPeptide\tStrippedPeptide\tPrecursorMz\tPrecursorCharge\tTr_recalibrated\tIonMobility\tProteinID\tDecoy\tFragmentMz\tRelativeIntensity\tFragmentType\tFragmentNumber\tFragmentCharge\tFragmentLossType\n");
+            } else {
+                libWriter.write("ModifiedPeptide\tStrippedPeptide\tPrecursorMz\tPrecursorCharge\tTr_recalibrated\tProteinID\tDecoy\tFragmentMz\tRelativeIntensity\tFragmentType\tFragmentNumber\tFragmentCharge\tFragmentLossType\n");
+            }
         }
 
         boolean export_diann_format = false;
@@ -12263,6 +12269,12 @@ public class AIGear {
             }
             // RT information
             HashMap<Integer, Double> pepID2rt = FileIO.load_rt_data(rt_file, this.rt_max);
+            // CCS information
+            HashMap<String, Double> pepID_charge2ccs = new HashMap<>();
+            if (ccs_enabled) {
+                String ccs_file = res_files.get(i).get("ccs");
+                pepID_charge2ccs = FileIO.load_ccs_data(ccs_file);
+            }
             // MS intensity
             ArrayList<double[]> ms2_intensity_lines = FileIO.load_matrix(ms2_intensity_file);
             // mz intensity
@@ -12297,6 +12309,12 @@ public class AIGear {
                 libFragment.ProteinID = protein;
                 libFragment.Decoy = 0;
                 libFragment.Tr_recalibrated = pepID2rt.get(pepID).floatValue();
+                if (ccs_enabled) {
+                    String ccsKey = pepID + String.valueOf(charge);
+                    libFragment.IonMobility = pepID_charge2ccs.getOrDefault(ccsKey, 0.0).floatValue();
+                } else {
+                    libFragment.IonMobility = 0.0f;
+                }
                 ArrayList<LibFragment> lines = get_fragment_ion_intensity4parquet_all(ms2_mz_lines,
                         ms2_intensity_lines,
                         fragment_ion_column_names,
@@ -12330,8 +12348,12 @@ public class AIGear {
                                 .append(sequence).append("\t")
                                 .append(mz).append("\t")
                                 .append(charge).append("\t")
-                                .append(rt_str).append("\t")
-                                .append(protein).append("\t")
+                                .append(rt_str).append("\t");
+                        if (ccs_enabled) {
+                            String ccsKey = pepID + String.valueOf(charge);
+                            ob.append(String.format("%.4f", pepID_charge2ccs.getOrDefault(ccsKey, 0.0))).append("\t");
+                        }
+                        ob.append(protein).append("\t")
                                 .append(decoy_label).append("\t")
                                 // FragmentMz	RelativeIntensity	FragmentType	FragmentNumber	FragmentCharge	FragmentLossType
                                 .append(l.FragmentMz).append("\t")

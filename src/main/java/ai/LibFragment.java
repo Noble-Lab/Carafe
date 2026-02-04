@@ -7,6 +7,7 @@ public class LibFragment {
     public float PrecursorMz;
     public int PrecursorCharge;
     public float Tr_recalibrated;
+    public float IonMobility;
     public String ProteinID;
     public int Decoy;
     public float FragmentMz;

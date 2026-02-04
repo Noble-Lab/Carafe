@@ -136,6 +136,37 @@ public class FileIO {
         return data;
     }
 
+    /**
+     * Load CCS (ion mobility) data from a parquet file.
+     * 
+     * @param file The parquet file containing CCS predictions
+     * @return A HashMap mapping "pepID_charge" to mobility_pred value
+     * @throws IOException If an I/O error occurs
+     */
+    public static HashMap<String, Double> load_ccs_data(String file) throws IOException {
+        Schema schema = SchemaBuilder.record("CCSData")
+                .fields()
+                .requiredInt("pepID")
+                .requiredInt("charge")
+                .requiredDouble("mobility_pred")
+                .endRecord();
+        Configuration conf = new Configuration();
+        conf.set(ReadSupport.PARQUET_READ_SCHEMA, schema.toString());
+        LocalInputFile inputFile = new LocalInputFile(Paths.get(file));
+        ParquetReader<GenericRecord> reader = AvroParquetReader.<GenericRecord>builder(inputFile).withConf(conf).build();
+        HashMap<String, Double> data = new HashMap<>();
+        GenericRecord record;
+        while ((record = reader.read()) != null) {
+            Integer pepID = (Integer) record.get("pepID");
+            Integer charge = (Integer) record.get("charge");
+            Double mobility = (Double) record.get("mobility_pred");
+            // Key format matches the TSV-based implementation
+            data.put(pepID.toString() + charge.toString(), mobility);
+        }
+        reader.close();
+        return data;
+    }
+
     public static String[] get_column_names_from_parquet(String file) throws IOException {
         LocalInputFile inputFile = new LocalInputFile(Paths.get(file));
         ArrayList<String> col_names = new ArrayList<>();
