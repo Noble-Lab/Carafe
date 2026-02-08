@@ -393,9 +393,9 @@ public class AIGear {
      */
     private String python_bin = "python";
     /**
-     * The version of ai scripts to use: v1 (default) or v2
+     * The version of ai scripts to use: v1 or v2 (default)
      */
-    public String ai_version = "v1";
+    public String ai_version = "v2";
 
     /**
      * Use torch.compile to speed up training and inference
@@ -645,7 +645,7 @@ public class AIGear {
         options.addOption("model_dir", true, "The directory of the model to use for spectral library generation");
 
         options.addOption("verbose", true, "The level of detail of the log: 1 (info, default), 2 (debug)");
-        options.addOption("ai_version", true, "The version of AI scripts to use: v1 (default), v2");
+        options.addOption("ai_version", true, "The version of AI scripts to use: v1, v2 (default)");
         options.addOption("torch_compile", false, "Use torch.compile to speed up training and inference");
 
         options.addOption("h", false, "Help");
