@@ -742,7 +742,7 @@ public class AIGear {
         }
 
         // for non-specific digestion, set the missed cleavages to be equal to 100
-        if(DBGear.getEnzymeByIndex(CParameter.enzyme).getName().equalsIgnoreCase("non-specific")){
+        if(DBGear.isNonSpecificEnzyme()){
             CParameter.maxMissedCleavages = 100;
         }
 
@@ -1830,6 +1830,15 @@ public class AIGear {
             double gpu_mem = get_gpu_mem();
             // Each prediction process loads MS2, RT, and CCS models which use ~3-4GB total
             int n_gpu_jobs = (int) Math.floor(gpu_mem / 3);
+            try {
+                if(DBGear.isNonSpecificEnzyme() || all_peptide_forms.size() >= 10_000_000){
+                    // If it is non-specific enzyme digestion, use 5GB per job
+                    n_gpu_jobs = (int) Math.floor(gpu_mem / 5);
+                }
+            } catch (Exception e) {
+                // If there is any error, use default
+                n_gpu_jobs = (int) Math.floor(gpu_mem / 3);
+            }
             n_gpu_jobs = Math.max(1, n_gpu_jobs); // Ensure at least 1 job
             n_gpu_jobs = Math.min(n_gpu_jobs, input_files.size());
             // check if this is on a windows system

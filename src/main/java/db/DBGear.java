@@ -385,6 +385,14 @@ public class DBGear {
 
         return(enzymes.get(ind));
     }
+    
+    /**
+     * Check if the current enzyme is non-specific
+     * @return true if the enzyme is non-specific, false otherwise
+     */
+    public static boolean isNonSpecificEnzyme(){
+        return DBGear.getEnzymeByIndex(CParameter.enzyme).getName().equalsIgnoreCase("non-specific");
+    }
 
     public static int getEnzymeIndexByName(String enzyme_name){
 
