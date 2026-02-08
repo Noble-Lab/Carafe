@@ -32,6 +32,7 @@ import com.formdev.flatlaf.FlatLightLaf;
 
 import ai.djl.util.cuda.CudaUtils;
 import main.java.input.CParameter;
+import main.java.util.Cloger;
 import main.java.util.GPUTools;
 import main.java.util.GenericUtils;
 import main.java.util.PyInstaller;
@@ -4975,6 +4976,7 @@ public class CarafeGUI extends JFrame {
 
             // String diann_path = "\"" + diannPath.toString().trim() + "\"";
             String diann_path = diannPath.toString().trim();
+            updateDIANNpermission(diann_path);
             diannArgs.add(diann_path);
 
             String version = getDIANNVersion(diann_path);
@@ -5474,6 +5476,30 @@ public class CarafeGUI extends JFrame {
             JOptionPane.showMessageDialog(this, "Please provide a valid DIA-NN executable path.", "Input Required",
                     JOptionPane.WARNING_MESSAGE);
             return null;
+        }
+    }
+
+    /**
+     * Update the executable permission of the DIA-NN executable.
+     * @param diannPath The path to the DIA-NN executable.
+     */
+    private void updateDIANNpermission(String diannPath){
+        String osName = System.getProperty("os.name").toLowerCase();
+        boolean isWindows = osName.contains("win");
+        File f = new File(diannPath);
+        if (f.exists()) {
+            // Set executable permission on Linux/macOS
+            if (!isWindows && !f.canExecute()) {
+                boolean success = f.setExecutable(true);
+                if (success) {
+                    Cloger.getInstance().logger.info("Set executable permission for: " + diannPath);
+                } else {
+                    Cloger.getInstance().logger.warn("Failed to set executable permission for: " + diannPath);
+                }
+            }
+            Cloger.getInstance().logger.info("DIANN found at: " + diannPath);
+        }else{
+            Cloger.getInstance().logger.error("DIANN not found at: " + diannPath);
         }
     }
 
