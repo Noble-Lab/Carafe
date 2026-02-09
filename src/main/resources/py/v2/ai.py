@@ -1215,7 +1215,7 @@ def plot_mobility(out_dir, test_file="mobility_test.tsv", output_plot="mobility_
         print(f"Error generating mobility plot: {e}")
 
 
-def generate_html_report(out_dir, in_dir=None, tf_type="all", args_dict=None):
+def generate_html_report(out_dir, in_dir=None, tf_type="all", args_dict=None, command_line=None):
     """Generate a self-contained HTML report with all training plots and metrics."""
     import base64
     import pandas as pd
@@ -1332,6 +1332,8 @@ def generate_html_report(out_dir, in_dir=None, tf_type="all", args_dict=None):
 
     # --- Configuration summary ---
     config_html = f'<p><strong>Date:</strong> {timestamp}</p>'
+    if command_line:
+        config_html += f'<p><strong>Command:</strong></p><pre style="background:#eee;padding:10px;border-radius:4px;overflow-x:auto;">{command_line}</pre>'
     if args_dict:
         config_rows = "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in sorted(args_dict.items()))
         config_html += f'<table class="metrics"><tr><th>Parameter</th><th>Value</th></tr>{config_rows}</table>'
@@ -1614,7 +1616,8 @@ if __name__ == "__main__":
 
         # Generate HTML report
         args_dict = {k: str(v) for k, v in vars(args).items()}
-        generate_html_report(out_dir, in_dir=in_dir, tf_type=tf_type, args_dict=args_dict)
+        command_line = sys.executable + ' ' + ' '.join(sys.argv)
+        generate_html_report(out_dir, in_dir=in_dir, tf_type=tf_type, args_dict=args_dict, command_line=command_line)
 
     if args.profile:
         import cProfile
