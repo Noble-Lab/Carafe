@@ -1215,6 +1215,242 @@ def plot_mobility(out_dir, test_file="mobility_test.tsv", output_plot="mobility_
         print(f"Error generating mobility plot: {e}")
 
 
+def generate_html_report(out_dir, in_dir=None, tf_type="all", args_dict=None):
+    """Generate a self-contained HTML report with all training plots and metrics."""
+    import base64
+    import pandas as pd
+    from datetime import datetime
+
+    def img_to_base64(path):
+        if not os.path.exists(path):
+            return None
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+
+    def read_metrics_csv(path, sep=","):
+        if not os.path.exists(path):
+            return None
+        try:
+            return pd.read_csv(path, sep=sep)
+        except Exception:
+            return None
+
+    def metrics_summary_html(df, metrics_cols=None):
+        """Generate an HTML table summarizing median/mean for key columns."""
+        if df is None or df.empty:
+            return ""
+        if metrics_cols is None:
+            metrics_cols = [c for c in df.columns if c in ('PCC', 'COS', 'SA', 'SPC')]
+        if not metrics_cols:
+            return ""
+        rows = []
+        for col in metrics_cols:
+            vals = df[col].dropna()
+            if len(vals) == 0:
+                continue
+            rows.append(f"<tr><td>{col}</td><td>{vals.median():.4f}</td><td>{vals.mean():.4f}</td>"
+                        f"<td>{vals.min():.4f}</td><td>{vals.max():.4f}</td></tr>")
+        if not rows:
+            return ""
+        return (f'<table class="metrics"><tr><th>Metric</th><th>Median</th><th>Mean</th>'
+                f'<th>Min</th><th>Max</th></tr>{"".join(rows)}</table>')
+
+    def rt_metrics_html(path):
+        """Generate HTML for RT test metrics from a TSV file."""
+        df = read_metrics_csv(path, sep="\t")
+        if df is None or df.empty:
+            return ""
+        html = ""
+        try:
+            import numpy as np
+            y_obs = df['rt_norm'].values
+            y_pred = df['rt_pred'].values
+            from scipy.stats import pearsonr
+            from sklearn.metrics import median_absolute_error, r2_score
+            pcc = pearsonr(y_obs, y_pred)[0]
+            mae = median_absolute_error(y_obs, y_pred)
+            r2 = r2_score(y_obs, y_pred)
+            html = (f'<table class="metrics"><tr><th>Metric</th><th>Value</th></tr>'
+                    f'<tr><td>PCC</td><td>{pcc:.4f}</td></tr>'
+                    f'<tr><td>R²</td><td>{r2:.4f}</td></tr>'
+                    f'<tr><td>MAE (normalized)</td><td>{mae:.4f}</td></tr>'
+                    f'<tr><td>N</td><td>{len(df)}</td></tr></table>')
+        except Exception:
+            pass
+        return html
+
+    def mobility_metrics_html(path):
+        """Generate HTML for mobility test metrics from a TSV file."""
+        df = read_metrics_csv(path, sep="\t")
+        if df is None or df.empty:
+            return ""
+        html = ""
+        try:
+            import numpy as np
+            from scipy.stats import pearsonr
+            from sklearn.metrics import median_absolute_error, r2_score
+            rows = []
+            for obs_col, pred_col, label in [('mobility', 'mobility_pred', 'Mobility'),
+                                              ('ccs', 'ccs_pred', 'CCS')]:
+                if obs_col in df.columns and pred_col in df.columns:
+                    y_obs = df[obs_col].dropna().values
+                    y_pred = df[pred_col].dropna().values
+                    n = min(len(y_obs), len(y_pred))
+                    if n > 0:
+                        y_obs, y_pred = y_obs[:n], y_pred[:n]
+                        pcc = pearsonr(y_obs, y_pred)[0]
+                        mae = median_absolute_error(y_obs, y_pred)
+                        r2 = r2_score(y_obs, y_pred)
+                        rows.append(f'<tr><td>{label} PCC</td><td>{pcc:.4f}</td></tr>')
+                        rows.append(f'<tr><td>{label} R²</td><td>{r2:.4f}</td></tr>')
+                        rows.append(f'<tr><td>{label} MAE</td><td>{mae:.4f}</td></tr>')
+            if rows:
+                rows.append(f'<tr><td>N</td><td>{len(df)}</td></tr>')
+                html = f'<table class="metrics"><tr><th>Metric</th><th>Value</th></tr>{"".join(rows)}</table>'
+        except Exception:
+            pass
+        return html
+
+    def history_table_html(path, sep="\t"):
+        """Generate an HTML summary of training history."""
+        df = read_metrics_csv(path, sep=sep)
+        if df is None or df.empty:
+            return ""
+        last = df.iloc[-1]
+        best_idx = df['test_loss'].idxmin() if 'test_loss' in df.columns and df['test_loss'].sum() > 0 else None
+        rows = [f'<tr><td>Total epochs</td><td>{len(df)}</td></tr>',
+                f'<tr><td>Final train loss</td><td>{last.get("train_loss", "N/A"):.6f}</td></tr>']
+        if 'test_loss' in df.columns and df['test_loss'].sum() > 0:
+            rows.append(f'<tr><td>Final test loss</td><td>{last["test_loss"]:.6f}</td></tr>')
+            if best_idx is not None:
+                rows.append(f'<tr><td>Best test loss</td><td>{df.loc[best_idx, "test_loss"]:.6f} (epoch {df.loc[best_idx, "epoch"]})</td></tr>')
+        return f'<table class="metrics"><tr><th>Training</th><th>Value</th></tr>{"".join(rows)}</table>'
+
+    # Build sections
+    sections = []
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # --- Configuration summary ---
+    config_html = f'<p><strong>Date:</strong> {timestamp}</p>'
+    if args_dict:
+        config_rows = "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in sorted(args_dict.items()))
+        config_html += f'<table class="metrics"><tr><th>Parameter</th><th>Value</th></tr>{config_rows}</table>'
+    sections.append(("Configuration", config_html))
+
+    # --- RT section ---
+    if tf_type in ("all", "test", "rt"):
+        rt_html = ""
+        # Pretrained
+        rt_pre_metrics = rt_metrics_html(os.path.join(out_dir, "rt_test_pretrained.tsv"))
+        if rt_pre_metrics:
+            rt_html += "<h3>Pretrained Model</h3>" + rt_pre_metrics
+        rt_pre_img = img_to_base64(os.path.join(out_dir, "rt_performance_pretrained.png"))
+        if rt_pre_img:
+            rt_html += f'<img src="data:image/png;base64,{rt_pre_img}" alt="RT Pretrained">'
+        # Fine-tuned
+        rt_post_metrics = rt_metrics_html(os.path.join(out_dir, "rt_test.tsv"))
+        if rt_post_metrics:
+            rt_html += "<h3>Fine-tuned Model</h3>" + rt_post_metrics
+        rt_post_img = img_to_base64(os.path.join(out_dir, "rt_performance_test.png"))
+        if rt_post_img:
+            rt_html += f'<img src="data:image/png;base64,{rt_post_img}" alt="RT Fine-tuned">'
+        # Training history
+        rt_hist = history_table_html(os.path.join(out_dir, "rt_history.tsv"))
+        if rt_hist:
+            rt_html += "<h3>Training History</h3>" + rt_hist
+        rt_hist_img = img_to_base64(os.path.join(out_dir, "rt_history.png"))
+        if rt_hist_img:
+            rt_html += f'<img src="data:image/png;base64,{rt_hist_img}" alt="RT History">'
+        if rt_html:
+            sections.append(("RT Model", rt_html))
+
+    # --- CCS/Mobility section ---
+    if tf_type in ("all", "test", "ccs"):
+        ccs_html = ""
+        mob_pre_metrics = mobility_metrics_html(os.path.join(out_dir, "mobility_test_pretrained.tsv"))
+        if mob_pre_metrics:
+            ccs_html += "<h3>Pretrained Model</h3>" + mob_pre_metrics
+        mob_pre_img = img_to_base64(os.path.join(out_dir, "mobility_performance_pretrained.png"))
+        if mob_pre_img:
+            ccs_html += f'<img src="data:image/png;base64,{mob_pre_img}" alt="Mobility Pretrained">'
+        mob_post_metrics = mobility_metrics_html(os.path.join(out_dir, "mobility_test.tsv"))
+        if mob_post_metrics:
+            ccs_html += "<h3>Fine-tuned Model</h3>" + mob_post_metrics
+        mob_post_img = img_to_base64(os.path.join(out_dir, "mobility_performance_test.png"))
+        if mob_post_img:
+            ccs_html += f'<img src="data:image/png;base64,{mob_post_img}" alt="Mobility Fine-tuned">'
+        ccs_hist = history_table_html(os.path.join(out_dir, "ccs_history.tsv"))
+        if ccs_hist:
+            ccs_html += "<h3>Training History</h3>" + ccs_hist
+        ccs_hist_img = img_to_base64(os.path.join(out_dir, "ccs_history.png"))
+        if ccs_hist_img:
+            ccs_html += f'<img src="data:image/png;base64,{ccs_hist_img}" alt="CCS History">'
+        if ccs_html:
+            sections.append(("CCS / Mobility Model", ccs_html))
+
+    # --- MS2 section ---
+    if tf_type in ("all", "test", "ms2"):
+        ms2_html = ""
+        # Pretrained
+        ms2_pre = read_metrics_csv(os.path.join(out_dir, "test_res_pretrained.csv"))
+        if ms2_pre is not None and not ms2_pre.empty:
+            ms2_html += "<h3>Pretrained Model</h3>" + metrics_summary_html(ms2_pre)
+        # Fine-tuned
+        ms2_post = read_metrics_csv(os.path.join(out_dir, "test_res_fine_tuned.csv"))
+        if ms2_post is not None and not ms2_post.empty:
+            ms2_html += "<h3>Fine-tuned Model</h3>" + metrics_summary_html(ms2_post)
+        # Training history
+        ms2_hist = history_table_html(os.path.join(out_dir, "ms2_history.tsv"))
+        if ms2_hist:
+            ms2_html += "<h3>Training History</h3>" + ms2_hist
+        ms2_hist_img = img_to_base64(os.path.join(out_dir, "ms2_history.png"))
+        if ms2_hist_img:
+            ms2_html += f'<img src="data:image/png;base64,{ms2_hist_img}" alt="MS2 History">'
+        if ms2_html:
+            sections.append(("MS2 Model", ms2_html))
+
+    # --- Assemble HTML ---
+    sections_html = ""
+    for title, content in sections:
+        sections_html += f'<div class="section"><h2>{title}</h2>{content}</div>\n'
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model Fine-tuning Report</title>
+<style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           max-width: 960px; margin: 0 auto; padding: 20px; background: #f5f5f5; color: #333; }}
+    h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
+    h2 {{ color: #2c3e50; border-bottom: 1px solid #bdc3c7; padding-bottom: 6px; margin-top: 30px; }}
+    h3 {{ color: #7f8c8d; margin-top: 18px; }}
+    .section {{ background: white; border-radius: 8px; padding: 20px; margin: 16px 0;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+    .metrics {{ border-collapse: collapse; margin: 10px 0; }}
+    .metrics th, .metrics td {{ border: 1px solid #ddd; padding: 8px 14px; text-align: left; }}
+    .metrics th {{ background: #3498db; color: white; }}
+    .metrics tr:nth-child(even) {{ background: #f9f9f9; }}
+    .metrics tr:hover {{ background: #eaf2f8; }}
+    img {{ max-width: 480px; height: auto; margin: 10px 4px; border: 1px solid #ddd;
+           border-radius: 4px; }}
+    .footer {{ text-align: center; color: #999; font-size: 0.85em; margin-top: 30px; }}
+</style>
+</head>
+<body>
+<h1>Model Fine-tuning Report</h1>
+{sections_html}
+<div class="footer">Generated on {timestamp}</div>
+</body>
+</html>"""
+
+    report_path = os.path.join(out_dir, "training_report.html")
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    logging.info(f"HTML report saved to {report_path}")
+    return report_path
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1375,6 +1611,10 @@ if __name__ == "__main__":
                                 verbose=args.verbose, torch_compile=args.torch_compile,
                                 pretrained_model=args.ccs_model)
             plot_mobility(out_dir)
+
+        # Generate HTML report
+        args_dict = {k: str(v) for k, v in vars(args).items()}
+        generate_html_report(out_dir, in_dir=in_dir, tf_type=tf_type, args_dict=args_dict)
 
     if args.profile:
         import cProfile
