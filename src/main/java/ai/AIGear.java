@@ -4925,7 +4925,27 @@ public class AIGear {
         int frag_stop_idx = 0;
         BufferedWriter psmWriter = new BufferedWriter(new FileWriter(this.out_dir+"/psm_pdv.txt"));
         //psmWriter.write(this.psm_head_line+"\tspectrum_title\tmz\tcharge\tpeptide\tmodification\tmods\tmod_sites\tmax_fragment_ion_valid\tmax_cor_mz\tfrag_start_idx\tfrag_stop_idx\n");
-        psmWriter.write("psm_id\tspectrum_title\tms2_scan\tmz\tcharge\tpeptide\tmodification\tmods\tmod_sites\tmax_fragment_ion_valid\tmax_cor_mz\tfrag_start_idx\tfrag_stop_idx\tn_valid_fragment_ions\tn_total_matched_ions\tvalid\n");
+        boolean ce_present = false;
+        int ce_column_index = -1;
+        if(hIndex.containsKey("ce")){
+            ce_present = true;
+            ce_column_index = hIndex.get("ce");
+        }else if(hIndex.containsKey("nce")){
+            ce_present = true;
+            ce_column_index = hIndex.get("nce");
+        }else if(hIndex.containsKey("CE")) {
+            ce_present = true;
+            ce_column_index = hIndex.get("CE");
+        }else if(hIndex.containsKey("NCE")) {
+            ce_present = true;
+            ce_column_index = hIndex.get("NCE");
+        }
+
+        if(ce_present) {
+            psmWriter.write("psm_id\tspectrum_title\tms2_scan\tmz\tcharge\tpeptide\tmodification\tmods\tmod_sites\tnce\tmax_fragment_ion_valid\tmax_cor_mz\tfrag_start_idx\tfrag_stop_idx\tn_valid_fragment_ions\tn_total_matched_ions\tvalid\n");
+        }else{
+            psmWriter.write("psm_id\tspectrum_title\tms2_scan\tmz\tcharge\tpeptide\tmodification\tmods\tmod_sites\tmax_fragment_ion_valid\tmax_cor_mz\tfrag_start_idx\tfrag_stop_idx\tn_valid_fragment_ions\tn_total_matched_ions\tvalid\n");
+        }
         BufferedWriter msWriter = new BufferedWriter(new FileWriter(this.out_dir+"/ms_pdv.mgf"));
         BufferedWriter fragWriter = new BufferedWriter(new FileWriter(this.out_dir+"/fragment_intensity_df.tsv"));
         fragWriter.write(this.fragment_ion_intensity_head_line+"\n");
@@ -5274,16 +5294,26 @@ public class AIGear {
                             n_total_psm_matches_valid++;
                             frag_start_idx = frag_stop_idx;
                             frag_stop_idx = frag_start_idx + index2peptideMatch.get(row_i).ion_intensity_matrix.length;
-                            psmWriter.write(index2peptideMatch.get(row_i).id+"\t"+spectrum_title+"\t"+index2peptideMatch.get(row_i).scan+ "\t" +pdv_precursor_mz +"\t" +pdv_precursor_charge +"\t" +pdv_peptide + "\t" +pdv_modification+  "\t" + out_mod[0] + "\t" + out_mod[1] + "\t1\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
-                                    "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t1\n");
+                            if(ce_present){
+                                psmWriter.write(index2peptideMatch.get(row_i).id + "\t" + spectrum_title + "\t" + index2peptideMatch.get(row_i).scan + "\t" + pdv_precursor_mz + "\t" + pdv_precursor_charge + "\t" + pdv_peptide + "\t" + pdv_modification + "\t" + out_mod[0] + "\t" + out_mod[1] + "\t"+d[ce_column_index]+ "\t1\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
+                                        "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t1\n");
+                            }else {
+                                psmWriter.write(index2peptideMatch.get(row_i).id + "\t" + spectrum_title + "\t" + index2peptideMatch.get(row_i).scan + "\t" + pdv_precursor_mz + "\t" + pdv_precursor_charge + "\t" + pdv_peptide + "\t" + pdv_modification + "\t" + out_mod[0] + "\t" + out_mod[1] + "\t1\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
+                                        "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t1\n");
+                            }
                             fragment_export = true;
                         } else {
                             n_total_matches_max_fragment_ion_invalid++;
                             if (!this.export_valid_matches_only) {
                                 frag_start_idx = frag_stop_idx;
                                 frag_stop_idx = frag_start_idx + index2peptideMatch.get(row_i).ion_intensity_matrix.length;
-                                psmWriter.write(index2peptideMatch.get(row_i).id+"\t"+spectrum_title+ "\t"+index2peptideMatch.get(row_i).scan+ "\t" +pdv_precursor_mz +"\t" +pdv_precursor_charge +"\t" +pdv_peptide + "\t" +pdv_modification+ "\t" + out_mod[0] + "\t" + out_mod[1] + "\t0\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
-                                        "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t0\n");
+                                if(ce_present){
+                                    psmWriter.write(index2peptideMatch.get(row_i).id + "\t" + spectrum_title + "\t" + index2peptideMatch.get(row_i).scan + "\t" + pdv_precursor_mz + "\t" + pdv_precursor_charge + "\t" + pdv_peptide + "\t" + pdv_modification + "\t" + out_mod[0] + "\t" + out_mod[1] + "\t"+d[ce_column_index]+ "\t0\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
+                                            "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t0\n");
+                                }else {
+                                    psmWriter.write(index2peptideMatch.get(row_i).id + "\t" + spectrum_title + "\t" + index2peptideMatch.get(row_i).scan + "\t" + pdv_precursor_mz + "\t" + pdv_precursor_charge + "\t" + pdv_peptide + "\t" + pdv_modification + "\t" + out_mod[0] + "\t" + out_mod[1] + "\t0\t" + index2peptideMatch.get(row_i).max_cor_mz + "\t" + frag_start_idx + "\t" + frag_stop_idx +
+                                            "\t" + n_valid_fragment_ions + "\t" + n_total_fragment_ions + "\t0\n");
+                                }
                                 fragment_export = true;
                             }
                         }
