@@ -95,6 +95,18 @@ def get_steps_per_epoch(num_samples: int, batch_size: int) -> int:
     return math.ceil(num_samples / batch_size)
 
 
+def adjust_batch_size(num_samples: int, current_batch_size: int, min_batch_size: int=32, min_steps_per_epoch: int=40) -> int:
+    """Adjust batch size to ensure at least 40 steps per epoch."""
+    steps = get_steps_per_epoch(num_samples, current_batch_size)
+    if steps < min_steps_per_epoch:
+        adjusted_batch_size = max(min_batch_size, math.ceil(num_samples / min_steps_per_epoch))
+        # 2^floor(log2(adjusted_batch_size))
+        adjusted_batch_size = 2 ** math.floor(math.log2(adjusted_batch_size))
+        adjusted_batch_size = max(min_batch_size, adjusted_batch_size)
+        logging.info(f"Adjusted batch size to {adjusted_batch_size} for at least {min_steps_per_epoch} steps/epoch.")
+        return adjusted_batch_size
+    return current_batch_size
+
 def get_auto_tune_params(num_peptides: int, mode='ms2'):
     """
     Hybrid steps-based auto-tuning for consistent training effort.
@@ -165,7 +177,8 @@ def train_ms2(in_dir: str,
               batch_size_to_train_ms2=512,
               lr_to_train_ms2=0.0001,
               torch_compile=False,
-              pretrained_model: str = None):
+              pretrained_model: str = None,
+              adjust_batch_size_for_steps=True):
     """Train MS2 prediction model - replicates peptdeep exactly"""
     import torch
     from models import (ModelManager, psm_sampling_with_important_mods, 
@@ -220,20 +233,22 @@ def train_ms2(in_dir: str,
             print(f"Error loading user-provided MS2 model: {e}")
     
     logging.info(f"MS2 Model Parameter Size: {model_mgr.ms2_model.get_parameter_num():,}")
-    
-    # Training parameters
-    if auto_tune:
-        epoch_to_train_ms2, lr_to_train_ms2 = get_auto_tune_params(a.shape[0], mode='ms2')
-        warmup_epoch_to_train_ms2 = get_warmup_epochs(epoch_to_train_ms2)
-        logging.info(f"[Auto-Tune] Scaling MS2 params for {a.shape[0]} peptides: epochs={epoch_to_train_ms2}, lr={lr_to_train_ms2:.1e}, batch={batch_size_to_train_ms2}")
-    
-    psm_num_per_mod_to_train_ms2 = 50
-    top_n_mods_to_train = 10
-    
+
     # Calculate split sizes
     n_test_ms2 = np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)])
     psm_num_to_test_ms2 = n_test_ms2
     psm_num_to_train_ms2 = a.shape[0] - n_test_ms2
+    
+    # Training parameters
+    if auto_tune:
+        epoch_to_train_ms2, lr_to_train_ms2 = get_auto_tune_params(psm_num_to_train_ms2, mode='ms2')
+        warmup_epoch_to_train_ms2 = get_warmup_epochs(epoch_to_train_ms2)
+        logging.info(f"[Auto-Tune] Scaling MS2 params for {psm_num_to_train_ms2} peptides: epochs={epoch_to_train_ms2}, lr={lr_to_train_ms2:.1e}, batch={batch_size_to_train_ms2}")
+    elif adjust_batch_size_for_steps:
+        batch_size_to_train_ms2 = adjust_batch_size(psm_num_to_train_ms2, batch_size_to_train_ms2)
+    
+    psm_num_per_mod_to_train_ms2 = 50
+    top_n_mods_to_train = 10
     
     # EXACT PARITY: PeptDeep v1 Sequence-Unique splitting
     # 1. Sample training data with important modifications (uses library default seed 1337)
@@ -529,7 +544,7 @@ def train_ms2(in_dir: str,
 
 def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threads=1, use_best_model=False, auto_tune=False, early_stop=False, patience=10, verbose=1,
              epoch_to_train_rt_ccs=40, warmup_epoch_to_train_rt_ccs=10, batch_size_to_train_rt_ccs=1024, lr_to_train_rt_ccs=0.0001, torch_compile=False,
-             pretrained_model: str = None):
+             pretrained_model: str = None, adjust_batch_size_for_steps=True):
     """Train RT prediction model - replicates peptdeep exactly"""
     import pandas as pd
     import numpy as np
@@ -585,18 +600,21 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
 
     logging.info(f"RT Model Parameter Size: {model_mgr.rt_model.get_parameter_num():,}")
 
-    # Training parameters
-    if auto_tune:
-        epoch_to_train_rt_ccs, lr_to_train_rt_ccs = get_auto_tune_params(a.shape[0], mode='rt_ccs')
-        warmup_epoch_to_train_rt_ccs = get_warmup_epochs(epoch_to_train_rt_ccs)
-        logging.info(f"[Auto-Tune] Scaling RT params for {a.shape[0]} peptides: epochs={epoch_to_train_rt_ccs}, lr={lr_to_train_rt_ccs:.1e}, batch={batch_size_to_train_rt_ccs}")
-        
     psm_num_per_mod_to_train_rt_ccs = 50
     top_n_mods_to_train = 10
 
     n_test_rt = np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)])
     psm_num_to_test_rt_ccs = n_test_rt
     psm_num_to_train_rt_ccs = a.shape[0] - n_test_rt
+
+    # Training parameters
+    if auto_tune:
+        epoch_to_train_rt_ccs, lr_to_train_rt_ccs = get_auto_tune_params(psm_num_to_train_rt_ccs, mode='rt_ccs')
+        warmup_epoch_to_train_rt_ccs = get_warmup_epochs(epoch_to_train_rt_ccs)
+        logging.info(f"[Auto-Tune] Scaling RT params for {psm_num_to_train_rt_ccs} peptides: epochs={epoch_to_train_rt_ccs}, lr={lr_to_train_rt_ccs:.1e}, batch={batch_size_to_train_rt_ccs}")
+    elif adjust_batch_size_for_steps:
+        batch_size_to_train_rt_ccs = adjust_batch_size(psm_num_to_train_rt_ccs, batch_size_to_train_rt_ccs)
+        
 
     print(f"The number of peptides to train RT model: {psm_num_to_train_rt_ccs}")
     print(f"The number of peptides to test RT model: {psm_num_to_test_rt_ccs}")
@@ -762,7 +780,8 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
 
 def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', threads=1, use_best_model=False, auto_tune=False, early_stop=False, patience=10, verbose=1,
               epoch_to_train_rt_ccs=40, warmup_epoch_to_train_rt_ccs=10, batch_size_to_train_rt_ccs=1024, lr_to_train_rt_ccs=0.0001, torch_compile=False,
-              pretrained_model: str = None):
+              pretrained_model: str = None,
+              adjust_batch_size_for_steps=True):
     """Train CCS prediction model - replicates peptdeep exactly"""
     import pandas as pd
     import numpy as np
@@ -812,13 +831,15 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
 
     logging.info(f"CCS Model Parameter Size: {model_mgr.ccs_model.get_parameter_num():,}")
 
-    if auto_tune:
-        epoch_to_train_rt_ccs, lr_to_train_rt_ccs = get_auto_tune_params(a.shape[0], mode='rt_ccs')
-        warmup_epoch_to_train_rt_ccs = get_warmup_epochs(epoch_to_train_rt_ccs)
-
     n_test_ccs = np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)])
     psm_num_to_test_rt_ccs = n_test_ccs
     psm_num_to_train_rt_ccs = a.shape[0] - n_test_ccs
+
+    if auto_tune:
+        epoch_to_train_rt_ccs, lr_to_train_rt_ccs = get_auto_tune_params(psm_num_to_train_rt_ccs, mode='rt_ccs')
+        warmup_epoch_to_train_rt_ccs = get_warmup_epochs(epoch_to_train_rt_ccs)
+    elif adjust_batch_size_for_steps:
+        batch_size_to_train_rt_ccs = adjust_batch_size(psm_num_to_train_rt_ccs, batch_size_to_train_rt_ccs)
 
     print(f"The number of peptides to train CCS model: {psm_num_to_train_rt_ccs}")
     print(f"The number of peptides to test CCS model: {psm_num_to_test_rt_ccs}")
