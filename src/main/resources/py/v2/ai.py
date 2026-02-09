@@ -129,7 +129,7 @@ def get_auto_tune_params(num_peptides: int, mode='ms2'):
         # Larger batches with more data benefit from slightly higher LR
         log_count = math.log10(max(1000, min(100000, num_peptides)))
         progress = (log_count - 3) / 2  # 0.0 at 1k, 1.0 at 100k
-        lr = 1e-4 + (progress * 1e-4)  # 1e-4 â†’ 2e-4
+        lr = 1e-4 + (progress * 1e-4)  # 1e-4 -> 2e-4
     else:  # RT or CCS
         target_steps = 1000
         batch_size = 1024 # Conservative default for logic, but overridden below
@@ -137,7 +137,7 @@ def get_auto_tune_params(num_peptides: int, mode='ms2'):
         max_epochs = 60
         log_count = math.log10(max(1000, min(100000, num_peptides)))
         progress = (log_count - 3) / 2
-        lr = 1e-4 + (progress * 1.5e-4) # 1e-4 â†’ 2.5e-4
+        lr = 1e-4 + (progress * 1.5e-4) # 1e-4 -> 2.5e-4
     
     # Calculate epochs based on target budget
     # steps = (num_peptides / batch_size) * epochs
@@ -235,7 +235,7 @@ def train_ms2(in_dir: str,
     logging.info(f"MS2 Model Parameter Size: {model_mgr.ms2_model.get_parameter_num():,}")
 
     # Calculate split sizes
-    n_test_ms2 = np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)])
+    n_test_ms2 = max(1, np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)]))
     psm_num_to_test_ms2 = n_test_ms2
     psm_num_to_train_ms2 = a.shape[0] - n_test_ms2
     
@@ -316,8 +316,7 @@ def train_ms2(in_dir: str,
 
     # Set NCE and instrument
     model_mgr_settings = settings['model_mgr']
-    # use_grid_nce_search = model_mgr_settings['transfer']['grid_nce_search'] # Logic from ai.py uses arg
-    use_grid_nce_search = args.use_grid_nce_search
+    # use_grid_nce_search is already passed as a function parameter
     
     if use_grid_nce_search:
         print("Perform grid search for NCE and instrument ...")
@@ -603,7 +602,7 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
     psm_num_per_mod_to_train_rt_ccs = 50
     top_n_mods_to_train = 10
 
-    n_test_rt = np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)])
+    n_test_rt = max(1, np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)]))
     psm_num_to_test_rt_ccs = n_test_rt
     psm_num_to_train_rt_ccs = a.shape[0] - n_test_rt
 
@@ -726,7 +725,14 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
                 break
         torch.cuda.empty_cache()
 
-    run_training_loop()
+    if device == 'cpu':
+        from threadpoolctl import threadpool_limits
+        with threadpool_limits(limits=threads, user_api="blas"):
+            with threadpool_limits(limits=threads, user_api="openmp"):
+                torch.set_num_threads(threads)
+                run_training_loop()
+    else:
+        run_training_loop()
     if use_best_model and os.path.exists(out_dir + "/rt_model.pt"):
         rt_model.load(out_dir + "/rt_model.pt")
     
@@ -761,14 +767,15 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
                         print(f"Unknown metric: {metric}")
                         continue
                     delta = post - pre
+                    # For R2, higher is better; for MAE, lower is better
                     if metric.lower().startswith("r2"):
-                        sign = "+" if delta >= 0 else "-"
+                        improved = "+" if delta >= 0 else ""
                     elif metric.lower().startswith("mae"):
-                        sign = "-" if delta >= 0 else "+"
+                        improved = "+" if delta <= 0 else ""
                     else:
                         print(f"Unknown metric: {metric}")
                         continue
-                    logging.info(f"{metric:<20} {pre:>12.4f} {post:>12.4f} {sign}{delta:>11.4f}")
+                    logging.info(f"{metric:<20} {pre:>12.4f} {post:>12.4f} {improved}{delta:>11.4f}")
             
             test_psm_df.to_csv(os.path.join(out_dir, "rt_test.tsv"), sep="\t", index=False)
         except Exception as e:
@@ -831,7 +838,7 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
 
     logging.info(f"CCS Model Parameter Size: {model_mgr.ccs_model.get_parameter_num():,}")
 
-    n_test_ccs = np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)])
+    n_test_ccs = max(1, np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)]))
     psm_num_to_test_rt_ccs = n_test_ccs
     psm_num_to_train_rt_ccs = a.shape[0] - n_test_ccs
 
@@ -958,7 +965,14 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
                 break
         torch.cuda.empty_cache()
 
-    run_training_loop()
+    if device == 'cpu':
+        from threadpoolctl import threadpool_limits
+        with threadpool_limits(limits=threads, user_api="blas"):
+            with threadpool_limits(limits=threads, user_api="openmp"):
+                torch.set_num_threads(threads)
+                run_training_loop()
+    else:
+        run_training_loop()
     if use_best_model and os.path.exists(out_dir + "/ccs_model.pt"):
         ccs_model.load(out_dir + "/ccs_model.pt")
     
@@ -1003,14 +1017,15 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
                     elif metric == 'MAE (mobility)':
                         post = post_mae_mobility
                     delta = post - pre
+                    # For R2, higher is better; for MAE, lower is better
                     if metric.lower().startswith("r2"):
-                        sign = "+" if delta >= 0 else "-"
+                        improved = "+" if delta >= 0 else ""
                     elif metric.lower().startswith("mae"):
-                        sign = "-" if delta >= 0 else "+"
+                        improved = "+" if delta <= 0 else ""
                     else:
                         print(f"Unknown metric: {metric}")
                         continue
-                    logging.info(f"{metric:<20} {pre:>12.4f} {post:>12.4f} {sign}{delta:>11.4f}")
+                    logging.info(f"{metric:<20} {pre:>12.4f} {post:>12.4f} {improved}{delta:>11.4f}")
             
             test_psm_df.to_csv(os.path.join(out_dir, "mobility_test.tsv"), sep="\t", index=False)
         except Exception as e:
