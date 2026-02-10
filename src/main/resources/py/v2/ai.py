@@ -176,9 +176,11 @@ def train_ms2(in_dir: str,
               warmup_epoch_to_train_ms2=10,
               batch_size_to_train_ms2=512,
               lr_to_train_ms2=0.0001,
+              ms2_max_test_samples=1000,
               torch_compile=False,
               pretrained_model: str = None,
-              adjust_batch_size_for_steps=True):
+              adjust_batch_size_for_steps=True,
+              from_scratch=False):
     """Train MS2 prediction model - replicates peptdeep exactly"""
     import torch
     from models import (ModelManager, psm_sampling_with_important_mods, 
@@ -211,31 +213,34 @@ def train_ms2(in_dir: str,
     if device == 'cpu':
         torch.set_num_threads(threads)
     # Load pretrained models
-    try:
-        if mode_type == 'general':
-            model_mgr.load_installed_models('generic', model_list=['ms2'])
-        elif mode_type == 'phos' or mode_type == 'phospho' or mode_type == 'phosphorylation':
-            model_mgr.load_installed_models('phos', model_list=['ms2'])
-        elif mode_type == 'ubi' or mode_type == 'ubiquitination' or mode_type == 'kGG' or mode_type == 'kgg':
-            model_mgr.load_installed_models('ubi', model_list=['ms2'])
-        else:
-            print(f"Warning: Unknown mode_type: {mode_type}, loading generic model")
-            model_mgr.load_installed_models('generic', model_list=['ms2'])
-    except Exception as e:
-        print(f"Warning: Could not load pretrained models: {e}")
-
-    # Load user-provided pretrained model if available
-    if pretrained_model and os.path.exists(pretrained_model):
+    if from_scratch:
+        logging.info("Training from scratch (skipping all pretrained model loading)")
+    else:
         try:
-            print(f"Loading user-provided MS2 model from: {pretrained_model}")
-            model_mgr.load_external_models(ms2_model_file=pretrained_model)
+            if mode_type == 'general':
+                model_mgr.load_installed_models('generic', model_list=['ms2'])
+            elif mode_type == 'phos' or mode_type == 'phospho' or mode_type == 'phosphorylation':
+                model_mgr.load_installed_models('phos', model_list=['ms2'])
+            elif mode_type == 'ubi' or mode_type == 'ubiquitination' or mode_type == 'kGG' or mode_type == 'kgg':
+                model_mgr.load_installed_models('ubi', model_list=['ms2'])
+            else:
+                print(f"Warning: Unknown mode_type: {mode_type}, loading generic model")
+                model_mgr.load_installed_models('generic', model_list=['ms2'])
         except Exception as e:
-            print(f"Error loading user-provided MS2 model: {e}")
+            print(f"Warning: Could not load pretrained models: {e}")
+
+        # Load user-provided pretrained model if available
+        if pretrained_model and os.path.exists(pretrained_model):
+            try:
+                print(f"Loading user-provided MS2 model from: {pretrained_model}")
+                model_mgr.load_external_models(ms2_model_file=pretrained_model)
+            except Exception as e:
+                print(f"Error loading user-provided MS2 model: {e}")
     
     logging.info(f"MS2 Model Parameter Size: {model_mgr.ms2_model.get_parameter_num():,}")
 
     # Calculate split sizes
-    n_test_ms2 = max(1, np.min([1000, int(math.ceil(a.shape[0] * 0.1) - 10)]))
+    n_test_ms2 = max(1, np.min([ms2_max_test_samples, int(math.ceil(a.shape[0] * 0.1) - 10)]))
     psm_num_to_test_ms2 = n_test_ms2
     psm_num_to_train_ms2 = a.shape[0] - n_test_ms2
     
@@ -543,7 +548,7 @@ def train_ms2(in_dir: str,
 
 def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threads=1, use_best_model=False, auto_tune=False, early_stop=False, patience=10, verbose=1,
              epoch_to_train_rt_ccs=40, warmup_epoch_to_train_rt_ccs=10, batch_size_to_train_rt_ccs=1024, lr_to_train_rt_ccs=0.0001, torch_compile=False,
-             pretrained_model: str = None, adjust_batch_size_for_steps=True):
+             pretrained_model: str = None, adjust_batch_size_for_steps=True, from_scratch=False):
     """Train RT prediction model - replicates peptdeep exactly"""
     import pandas as pd
     import numpy as np
@@ -576,26 +581,29 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
     if device == 'cpu':
         torch.set_num_threads(threads)
     # Load pretrained models
-    try:
-        if mode_type == 'general':
-            model_mgr.load_installed_models('generic', model_list=['rt'])
-        elif mode_type == 'phos' or mode_type == 'phospho' or mode_type == 'phosphorylation':
-            model_mgr.load_installed_models('phos', model_list=['rt'])
-        elif mode_type == 'ubi' or mode_type == 'ubiquitination' or mode_type == 'kGG' or mode_type == 'kgg':
-            model_mgr.load_installed_models('ubi', model_list=['rt'])
-        else:
-            print(f"Warning: Unknown mode_type: {mode_type}, loading generic model")
-            model_mgr.load_installed_models('generic', model_list=['rt'])
-    except Exception as e:
-        print(f"Warning: Could not load pretrained models: {e}")
-
-    # Load user-provided pretrained model if available
-    if pretrained_model and os.path.exists(pretrained_model):
+    if from_scratch:
+        logging.info("Training from scratch (skipping all pretrained model loading)")
+    else:
         try:
-            print(f"Loading user-provided RT model from: {pretrained_model}")
-            model_mgr.load_external_models(rt_model_file=pretrained_model)
+            if mode_type == 'general':
+                model_mgr.load_installed_models('generic', model_list=['rt'])
+            elif mode_type == 'phos' or mode_type == 'phospho' or mode_type == 'phosphorylation':
+                model_mgr.load_installed_models('phos', model_list=['rt'])
+            elif mode_type == 'ubi' or mode_type == 'ubiquitination' or mode_type == 'kGG' or mode_type == 'kgg':
+                model_mgr.load_installed_models('ubi', model_list=['rt'])
+            else:
+                print(f"Warning: Unknown mode_type: {mode_type}, loading generic model")
+                model_mgr.load_installed_models('generic', model_list=['rt'])
         except Exception as e:
-            print(f"Error loading user-provided RT model: {e}")
+            print(f"Warning: Could not load pretrained models: {e}")
+
+        # Load user-provided pretrained model if available
+        if pretrained_model and os.path.exists(pretrained_model):
+            try:
+                print(f"Loading user-provided RT model from: {pretrained_model}")
+                model_mgr.load_external_models(rt_model_file=pretrained_model)
+            except Exception as e:
+                print(f"Error loading user-provided RT model: {e}")
 
     logging.info(f"RT Model Parameter Size: {model_mgr.rt_model.get_parameter_num():,}")
 
@@ -788,7 +796,7 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
 def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', threads=1, use_best_model=False, auto_tune=False, early_stop=False, patience=10, verbose=1,
               epoch_to_train_rt_ccs=40, warmup_epoch_to_train_rt_ccs=10, batch_size_to_train_rt_ccs=1024, lr_to_train_rt_ccs=0.0001, torch_compile=False,
               pretrained_model: str = None,
-              adjust_batch_size_for_steps=True):
+              adjust_batch_size_for_steps=True, from_scratch=False):
     """Train CCS prediction model - replicates peptdeep exactly"""
     import pandas as pd
     import numpy as np
@@ -816,25 +824,28 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
     
     if device == 'cpu':
         torch.set_num_threads(threads)
-    try:
-        if mode_type == 'general':
-            model_mgr.load_installed_models('generic', model_list=['ccs'])
-        elif mode_type == 'phos' or mode_type == 'phospho' or mode_type == 'phosphorylation':
-            model_mgr.load_installed_models('phos', model_list=['ccs'])
-        elif mode_type == 'ubi' or mode_type == 'ubiquitination' or mode_type == 'kGG' or mode_type == 'kgg':
-            model_mgr.load_installed_models('ubi', model_list=['ccs'])
-        else:
-            model_mgr.load_installed_models('generic', model_list=['ccs'])
-    except Exception as e:
-        print(f"Warning: Could not load pretrained models: {e}")
-
-    # Load user-provided pretrained model if available
-    if pretrained_model and os.path.exists(pretrained_model):
+    if from_scratch:
+        logging.info("Training from scratch (skipping all pretrained model loading)")
+    else:
         try:
-            print(f"Loading user-provided CCS model from: {pretrained_model}")
-            model_mgr.load_external_models(ccs_model_file=pretrained_model)
+            if mode_type == 'general':
+                model_mgr.load_installed_models('generic', model_list=['ccs'])
+            elif mode_type == 'phos' or mode_type == 'phospho' or mode_type == 'phosphorylation':
+                model_mgr.load_installed_models('phos', model_list=['ccs'])
+            elif mode_type == 'ubi' or mode_type == 'ubiquitination' or mode_type == 'kGG' or mode_type == 'kgg':
+                model_mgr.load_installed_models('ubi', model_list=['ccs'])
+            else:
+                model_mgr.load_installed_models('generic', model_list=['ccs'])
         except Exception as e:
-            print(f"Error loading user-provided CCS model: {e}")
+            print(f"Warning: Could not load pretrained models: {e}")
+
+        # Load user-provided pretrained model if available
+        if pretrained_model and os.path.exists(pretrained_model):
+            try:
+                print(f"Loading user-provided CCS model from: {pretrained_model}")
+                model_mgr.load_external_models(ccs_model_file=pretrained_model)
+            except Exception as e:
+                print(f"Error loading user-provided CCS model: {e}")
 
     logging.info(f"CCS Model Parameter Size: {model_mgr.ccs_model.get_parameter_num():,}")
 
@@ -1480,6 +1491,13 @@ if __name__ == "__main__":
     parser.add_argument("--ms2_model", type=str, default=None, help="Pretrained MS2 model path")
     parser.add_argument("--rt_model", type=str, default=None, help="Pretrained RT model path")
     parser.add_argument("--ccs_model", type=str, default=None, help="Pretrained CCS model path")
+    parser.add_argument("--from_scratch", action="store_true", help="Train from scratch (random initialization, skip all pretrained model loading)")
+    parser.add_argument("--ms2_epoch", type=int, default=20, help="Number of epochs for MS2 model training (default: 20)")
+    parser.add_argument("--ms2_batch_size", type=int, default=512, help="Batch size for MS2 model training (default: 512)")
+    parser.add_argument("--ms2_lr", type=float, default=0.0001, help="Learning rate for MS2 model training (default: 0.0001)")
+    parser.add_argument("--ms2_warmup_epoch", type=int, default=10, help="Number of warmup epochs for MS2 model training (default: 10)")
+    # the max number of samples to use for testing ms2
+    parser.add_argument("--ms2_max_test_samples", type=int, default=1000, help="Number of samples to use for testing MS2 model (default: 1000)")
     args = parser.parse_args()
 
     # Early stopping requires best model checkpointing
@@ -1566,7 +1584,7 @@ if __name__ == "__main__":
                                 device=args.device, threads=args.threads, use_best_model=args.use_best_model, 
                                 auto_tune=args.auto_tune, early_stop=args.early_stop, patience=args.patience, 
                                 verbose=args.verbose, torch_compile=args.torch_compile,
-                                pretrained_model=args.rt_model)
+                                pretrained_model=args.rt_model, from_scratch=args.from_scratch)
             plot_rt(in_dir, out_dir)
             # CCS training if data exists and has sufficient samples
             ccs_data_path = os.path.join(in_dir, "ccs_train_data.tsv")
@@ -1578,7 +1596,7 @@ if __name__ == "__main__":
                                             device=args.device, threads=args.threads, use_best_model=args.use_best_model,
                                             auto_tune=args.auto_tune, early_stop=args.early_stop, patience=args.patience, 
                                             verbose=args.verbose, torch_compile=args.torch_compile,
-                                            pretrained_model=args.ccs_model)
+                                            pretrained_model=args.ccs_model, from_scratch=args.from_scratch)
                     plot_mobility(out_dir)
             train_ms2(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 log_transform=args.log_transform,
@@ -1588,13 +1606,18 @@ if __name__ == "__main__":
                                 auto_tune=args.auto_tune, early_stop=args.early_stop,
                                 patience=args.patience, verbose=args.verbose,
                                 torch_compile=args.torch_compile,
-                                pretrained_model=args.ms2_model)
+                                pretrained_model=args.ms2_model, from_scratch=args.from_scratch,
+                                epoch_to_train_ms2=args.ms2_epoch,
+                                batch_size_to_train_ms2=args.ms2_batch_size,
+                                lr_to_train_ms2=args.ms2_lr,
+                                ms2_max_test_samples=args.ms2_max_test_samples,
+                                warmup_epoch_to_train_ms2=args.ms2_warmup_epoch)
         elif tf_type == "rt":
             train_rt(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 device=args.device, threads=args.threads, use_best_model=args.use_best_model, 
                                 auto_tune=args.auto_tune, early_stop=args.early_stop, patience=args.patience, 
                                 verbose=args.verbose, torch_compile=args.torch_compile,
-                                pretrained_model=args.rt_model)
+                                pretrained_model=args.rt_model, from_scratch=args.from_scratch)
             plot_rt(in_dir, out_dir)
         elif tf_type == "ms2":
             train_ms2(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
@@ -1605,13 +1628,18 @@ if __name__ == "__main__":
                                 auto_tune=args.auto_tune, early_stop=args.early_stop,
                                 patience=args.patience, verbose=args.verbose,
                                 torch_compile=args.torch_compile,
-                                pretrained_model=args.ms2_model)
+                                pretrained_model=args.ms2_model, from_scratch=args.from_scratch,
+                                epoch_to_train_ms2=args.ms2_epoch,
+                                batch_size_to_train_ms2=args.ms2_batch_size,
+                                lr_to_train_ms2=args.ms2_lr,
+                                ms2_max_test_samples=args.ms2_max_test_samples,
+                                warmup_epoch_to_train_ms2=args.ms2_warmup_epoch)
         elif tf_type == "ccs":
             train_ccs(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 device=args.device, threads=args.threads, use_best_model=args.use_best_model,
                                 auto_tune=args.auto_tune, early_stop=args.early_stop, patience=args.patience, 
                                 verbose=args.verbose, torch_compile=args.torch_compile,
-                                pretrained_model=args.ccs_model)
+                                pretrained_model=args.ccs_model, from_scratch=args.from_scratch)
             plot_mobility(out_dir)
 
         # Generate HTML report

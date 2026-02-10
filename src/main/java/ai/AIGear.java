@@ -522,6 +522,11 @@ public class AIGear {
     public String model_dir = "";
 
     /**
+     * User-provided pretrained MS2 model path
+     */
+    public String ms2_model = "";
+
+    /**
      * The exported file format of spectral library: tsv or parquet
      */
     public String export_spectral_library_file_format = "tsv";
@@ -643,6 +648,7 @@ public class AIGear {
 
         // This is the fine-tuned model directory
         options.addOption("model_dir", true, "The directory of the model to use for spectral library generation");
+        options.addOption("ms2_model", true, "User-provided pretrained MS2 model path");
 
         options.addOption("verbose", true, "The level of detail of the log: 1 (info, default), 2 (debug)");
         options.addOption("ai_version", true, "The version of AI scripts to use: v1, v2 (default)");
@@ -1024,6 +1030,11 @@ public class AIGear {
         Runtime rt = Runtime.getRuntime();
         System.out.printf("Xms (current heap) = %.2f MB%n", rt.totalMemory() / 1024.0 / 1024.0);
         System.out.printf("Xmx (max heap) = %.2f GB%n", rt.maxMemory() / 1024.0 / 1024.0 / 1024.0);
+
+        if (cmd.hasOption("ms2_model")) {
+            aiGear.ms2_model = cmd.getOptionValue("ms2_model");
+            Cloger.getInstance().logger.info("Use user-provided ms2 model: " + aiGear.ms2_model);
+        }
 
         if (cmd.hasOption("ms") && !cmd.hasOption("model_dir")) {
             String ms_file = cmd.getOptionValue("ms");
@@ -2716,6 +2727,11 @@ public class AIGear {
             cmd_list.add("--user_mod");
             cmd_list.add("\"" + CParameter.user_var_mods + "\"");
             // cmd = cmd + " --user_mod \""+CParameter.user_var_mods + "\"";
+        }
+
+        if(!this.ms2_model.isEmpty()){
+            cmd_list.add("--ms2_model");
+            cmd_list.add(this.ms2_model);
         }
         // convert cmd_list to String []
         String[] cmd = new String[cmd_list.size()];
