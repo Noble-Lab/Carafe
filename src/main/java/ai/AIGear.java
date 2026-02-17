@@ -942,6 +942,11 @@ public class AIGear {
             aiGear.use_user_provided_ms_instrument = true;
         }
 
+        if (cmd.hasOption("nce")) {
+            aiGear.nce = Double.parseDouble(cmd.getOptionValue("nce"));
+            CParameter.NCE = aiGear.nce;
+        }
+
         if (cmd.hasOption("xic")) {
             aiGear.export_xic = true;
         }
