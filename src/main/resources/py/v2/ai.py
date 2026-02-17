@@ -186,6 +186,7 @@ def train_ms2(in_dir: str,
     from models import (ModelManager, psm_sampling_with_important_mods, 
                         normalize_fragment_intensities, calc_ms2_similarity_mask,
                         calc_ms2_similarity, settings)
+    import alphabase.peptide.fragment as fragment
     import numpy as np
     import pandas as pd
     import math
@@ -357,6 +358,35 @@ def train_ms2(in_dir: str,
         )
         out_test_res_to_file = os.path.join(out_dir, 'test_res_pretrained.csv')
         test_res[0].to_csv(out_test_res_to_file, index=False)
+        # Determine output columns based on mask_modloss
+        if mask_modloss:
+            out_frag_cols = ['b_z1', 'b_z2', 'y_z1', 'y_z2']
+        else:
+            out_frag_cols = ['b_z1', 'b_z2', 'y_z1', 'y_z2',
+                            'b_modloss_z1', 'b_modloss_z2', 'y_modloss_z1', 'y_modloss_z2']
+        
+        # Export predicted intensity matrix for pretrained model (test PSMs only)
+        test_frag_rows = []
+        truth_frag_rows = []
+        valid_test_df = test_psm_df.dropna(subset=['frag_start_idx', 'frag_stop_idx'])
+        for _, row in valid_test_df.iterrows():
+            start, stop = int(row['frag_start_idx']), int(row['frag_stop_idx'])
+            test_frag_rows.append(pred_frag_df.iloc[start:stop])
+            truth_frag_rows.append(tr_inten_df.iloc[start:stop])
+        if test_frag_rows:
+            pd.concat(test_frag_rows, ignore_index=True)[out_frag_cols].to_csv(
+                os.path.join(out_dir, 'test_pred_intensity_pretrained.tsv'), sep='\t', index=False)
+            pd.concat(truth_frag_rows, ignore_index=True)[out_frag_cols].to_csv(
+                os.path.join(out_dir, 'test_true_intensity.tsv'), sep='\t', index=False)
+        
+        # Export fragment m/z for test PSMs
+        mz_df = fragment.create_fragment_mz_dataframe(
+            valid_test_df[['sequence', 'mods', 'mod_sites', 'charge', 'nAA']],
+            out_frag_cols,
+            reference_fragment_df=None
+        )
+        mz_df.to_csv(os.path.join(out_dir, 'test_fragment_mz.tsv'), sep='\t', index=False)
+        logging.info(f"Saved pretrained predicted intensity, ground truth, and fragment m/z for {len(valid_test_df)} test PSMs")
         # Store pretrained metrics for comparison
         pretrained_metrics = {
             'PCC': test_res[0]['PCC'].median(),
@@ -517,6 +547,22 @@ def train_ms2(in_dir: str,
         )
         out_test_res_to_file = os.path.join(out_dir, 'test_res_fine_tuned.csv')
         test_res[0].to_csv(out_test_res_to_file, index=False)
+        # Export predicted intensity matrix for fine-tuned model (test PSMs only)
+        # Reuse out_frag_cols from pretrained export
+        if mask_modloss:
+            out_frag_cols = ['b_z1', 'b_z2', 'y_z1', 'y_z2']
+        else:
+            out_frag_cols = ['b_z1', 'b_z2', 'y_z1', 'y_z2',
+                            'b_modloss_z1', 'b_modloss_z2', 'y_modloss_z1', 'y_modloss_z2']
+        test_frag_rows = []
+        valid_test_df = test_psm_df.dropna(subset=['frag_start_idx', 'frag_stop_idx'])
+        for _, row in valid_test_df.iterrows():
+            start, stop = int(row['frag_start_idx']), int(row['frag_stop_idx'])
+            test_frag_rows.append(pred_frag_df.iloc[start:stop])
+        if test_frag_rows:
+            pd.concat(test_frag_rows, ignore_index=True)[out_frag_cols].to_csv(
+                os.path.join(out_dir, 'test_pred_intensity_fine_tuned.tsv'), sep='\t', index=False)
+        logging.info(f"Saved fine-tuned predicted intensity for {len(valid_test_df)} test PSMs")
         
         eval_label = "Final Evaluation (Best Model)" if use_best_model else "Final Evaluation (Last Model)"
         logging.info(f"{eval_label}:\n" + str(test_res[-1]))
