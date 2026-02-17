@@ -7545,7 +7545,7 @@ public class AIGear {
                 }
                 if (!tmp_psm_query_list.isEmpty()) {
                     // Pretty-printed JSON string
-                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, JSONWriter.Feature.PrettyFormat);
+                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, JSONWriter.Feature.PrettyFormat, JSONWriter.Feature.LargeObject);
                     // Write to file
                     String tmp_psm_query_file = this.out_dir + File.separator + "invalid_max_fragment_ion_intensity_psm_query.json";
                     try (FileWriter writer = new FileWriter(tmp_psm_query_file)) {
@@ -7561,7 +7561,7 @@ public class AIGear {
                 }
                 if (!tmp_psm_query_list.isEmpty()) {
                     // Pretty-printed JSON string
-                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, JSONWriter.Feature.PrettyFormat);
+                    String tmp_json = JSON.toJSONString(tmp_psm_query_list, JSONWriter.Feature.PrettyFormat, JSONWriter.Feature.LargeObject);
                     // Write to file
                     String tmp_psm_query_file = this.out_dir + File.separator + "invalid_min_n_high_quality_fragment_ions_psm_query.json";
                     try (FileWriter writer = new FileWriter(tmp_psm_query_file)) {
