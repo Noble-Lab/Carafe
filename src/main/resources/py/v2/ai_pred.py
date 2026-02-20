@@ -131,7 +131,14 @@ def predict_ms2(model_dir:str,
         mz_df.to_parquet(out_file, compression='zstd')
     else:
         out_file = os.path.join(out_dir,out_prefix+"_ms2_mz_df.tsv")
-        mz_df.to_csv(out_file,sep="\t",index=False)    
+        mz_df.to_csv(out_file,sep="\t",index=False)
+
+    import gc
+    import torch
+    del model_mgr
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     
 
 def predict_rt(model_dir:str,
@@ -210,6 +217,13 @@ def predict_rt(model_dir:str,
         out_file = os.path.join(out_dir,out_prefix+"_rt_pred.tsv")
         output_df.to_csv(out_file,sep="\t",index=False)
 
+    import gc
+    import torch
+    del model_mgr
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
 
 def predict_ccs(model_dir:str,
                pred_file:str,
@@ -284,6 +298,13 @@ def predict_ccs(model_dir:str,
     else:
         out_file = os.path.join(out_dir,out_prefix+"_ccs_pred.tsv")
         output_df.to_csv(out_file,sep="\t",index=False)
+
+    import gc
+    import torch
+    del model_mgr
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 

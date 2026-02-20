@@ -1847,7 +1847,7 @@ public class AIGear {
             // Each prediction process loads MS2, RT, and CCS models which use ~3-4GB total
             int n_gpu_jobs = (int) Math.floor(gpu_mem / 3);
             try {
-                if(DBGear.isNonSpecificEnzyme() || all_peptide_forms.size() >= 10_000_000){
+                if(DBGear.isNonSpecificEnzyme() || all_peptide_forms.size() >= 10_000_000 || this.mod_ai.equalsIgnoreCase("phosphorylation")){
                     // If it is non-specific enzyme digestion, use 5GB per job
                     n_gpu_jobs = (int) Math.floor(gpu_mem / 5);
                 }

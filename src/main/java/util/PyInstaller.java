@@ -249,6 +249,16 @@ public class PyInstaller {
                 "--index-url", torchIndexUrl
         ), installRoot);
 
+        // ---------------- Install greenlet first (binary-only, no C++ build) ----------------
+        // greenlet 3.2.4+ dropped pre-built cp39-win_amd64 wheels on PyPI.
+        // Pin to 3.2.3 (the last version with a cp39-win_amd64 wheel) and
+        // force binary-only to avoid a source-build that needs MSVC.
+        cmd.run(List.of(
+                uvExe.toString(), "pip", "install",
+                "--only-binary", "greenlet",
+                "greenlet==3.2.3"
+        ), installRoot);
+
         // ---------------- Install your pinned deps (in-code list) ----------------
         // Do one big install command. If you have a LOT of pins, you can chunk it.
         {
