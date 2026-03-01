@@ -5080,6 +5080,9 @@ public class CarafeGUI extends JFrame {
             fixModSelected = fixModSelected.replaceAll(",$", "");
             if (fixModSelected.equalsIgnoreCase("1")) {
                 diannArgs.add("--unimod4");
+            }else if (fixModSelected.equalsIgnoreCase("0")) {
+                // console output
+                consoleArea.append("Fixed modifications disabled\n");
             } else {
                 JOptionPane.showMessageDialog(this,
                         "Unsupported modification settings. Please select '1' for Fixed modifications.", "Warning",
