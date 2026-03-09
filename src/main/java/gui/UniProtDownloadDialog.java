@@ -49,7 +49,7 @@ public class UniProtDownloadDialog extends JDialog {
 
     private SwingWorker<Integer, String> downloadWorker;
 
-    private static final String contaminants_protein_file = "camprotR_240512_cRAP_20190401_full_tags.fasta";
+    private static final String contaminants_protein_file = "contaminants.fasta";
 
     public UniProtDownloadDialog(Frame owner, JTextField targetField, JTextField outputDirField) {
         super(owner, "Download Protein Database", true);
