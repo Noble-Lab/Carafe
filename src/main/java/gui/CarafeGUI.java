@@ -8,6 +8,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
@@ -5252,6 +5253,31 @@ public class CarafeGUI extends JFrame {
                 // --var-mod UniMod:1,42.010565,*n
                 diannArgs.add("UniMod:1,42.010565,*n");
                 diannArgs.add("--peptidoforms");
+            } else if (varModSelected.equalsIgnoreCase("3,4") || varModSelected.equalsIgnoreCase("4,3")) {
+                // This modification is not supported in 1.8.1, 1.9.1, 1.9.2, 2.0, 2.0.2, 2.1.0, 2.2.0
+                // It is supported started from 2.3.0
+                // --var-mods 1 --var-mod UniMod:7,0.984016,NQ
+                if(diannVersion.startsWith("2.3")) {
+                    diannArgs.add("--var-mods");
+                    if ((int) maxVarSpinner.getValue() >= 1) {
+                        diannArgs.add(String.valueOf(maxVarSpinner.getValue()));
+                    } else {
+                        // show warning message
+                        JOptionPane.showMessageDialog(this,
+                                "Please set maximum number of variable modifications to at least 1 when variable modification is set.",
+                                "Warning", JOptionPane.WARNING_MESSAGE);
+                        return null;
+                    }
+                    diannArgs.add("--var-mod");
+                    diannArgs.add("UniMod:7,0.984016,NQ");
+                    diannArgs.add("--peptidoforms");
+                }else{
+                    // show warning message
+                    JOptionPane.showMessageDialog(this,
+                            "The selected variable modification (deamidation on N/Q) is only supported in DIANN version 2.3.0 or later. Please select DIANN version 2.3.0 or later to use this modification. The current DIANN version is: " + diannVersion,
+                            "Warning", JOptionPane.WARNING_MESSAGE);
+                    return null;
+                }
             } else {
                 if (isV2) {
                     diannArgs.add("--var-mods");
@@ -5266,12 +5292,18 @@ public class CarafeGUI extends JFrame {
                     }
                     String[] var_int_list = varModSelected.split(",");
                     ArrayList<String> phos_var_mods = new ArrayList<>();
+                    // For N/Q
+                    ArrayList<String> deamidation_var_mods = new ArrayList<>();
                     for (String var_int : var_int_list) {
                         if (var_int.trim().equalsIgnoreCase("0")) {
                             // no modification
                         } else if (var_int.trim().equalsIgnoreCase("2")) {
                             diannArgs.add("--var-mod");
                             diannArgs.add("UniMod:35,15.994915,M");
+                        } else if (var_int.trim().equalsIgnoreCase("3")) {
+                            deamidation_var_mods.add("N");
+                        } else if (var_int.trim().equalsIgnoreCase("4")) {
+                            deamidation_var_mods.add("Q");
                         } else if (var_int.trim().equalsIgnoreCase("5")) {
                             diannArgs.add("--var-mod");
                             diannArgs.add("UniMod:1,42.010565,*n");
@@ -5297,6 +5329,11 @@ public class CarafeGUI extends JFrame {
                     if (!phos_var_mods.isEmpty()) {
                         diannArgs.add("--var-mod");
                         diannArgs.add("UniMod:21,79.966331," + String.join(",", phos_var_mods));
+                    }
+                    if (!deamidation_var_mods.isEmpty()) {
+                        diannArgs.add("--var-mod");
+                        // --var-mods 1 --var-mod UniMod:7,0.984016,NQ
+                        diannArgs.add("UniMod:7,0.984016," + String.join(",", deamidation_var_mods));
                     }
                     diannArgs.add("--peptidoforms");
                 }
