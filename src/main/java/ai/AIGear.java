@@ -12473,15 +12473,13 @@ public class AIGear {
         SkylineIO skylineIO = new SkylineIO(out_library_file);
         skylineIO.add_SpectrumSourceFiles();
         skylineIO.add_ScoreTypes();
+        skylineIO.add_IonMobilityTypes();
         skylineIO.add_RefSpectraPeakAnnotations();
         skylineIO.create_RefSpectra();
         skylineIO.create_Modifications();
         skylineIO.create_RetentionTimes();
         skylineIO.pStatementRefSpectra.setNull(5, Types.CHAR);
         skylineIO.pStatementRefSpectra.setNull(6, Types.CHAR);
-        skylineIO.pStatementRefSpectra.setNull(8, Types.DOUBLE);
-        skylineIO.pStatementRefSpectra.setNull(9, Types.DOUBLE);
-        skylineIO.pStatementRefSpectra.setNull(10, Types.DOUBLE);
         skylineIO.pStatementRefSpectra.setNull(13, Types.VARCHAR);
         skylineIO.create_RefSpectraPeaks();
         skylineIO.connection.setAutoCommit(false);
@@ -12568,6 +12566,12 @@ public class AIGear {
             }
             // RT information
             HashMap<Integer, Double> pepID2rt = FileIO.load_rt_data(rt_file, this.rt_max);
+            // Ion mobility information
+            HashMap<String, Double> pepIDCharge2IonMobility = new HashMap<>();
+            if (ccs_enabled) {
+                String ccs_file = res_files.get(i).get("ccs");
+                pepIDCharge2IonMobility = FileIO.load_ccs_data(ccs_file);
+            }
             // MS intensity
             ArrayList<double[]> ms2_intensity_lines = FileIO.load_matrix(ms2_intensity_file);
             // mz intensity
@@ -12580,6 +12584,7 @@ public class AIGear {
             LocalInputFile inputFile = new LocalInputFile(Paths.get(ms2_file));
             ParquetReader<GenericRecord> reader = AvroParquetReader.<GenericRecord>builder(inputFile).withConf(conf).build();
             GenericRecord record;
+            double ionMobility;
             while ((record = reader.read()) != null) {
                 // get column "pepID"
                 pepID = (int) record.get("pepID");
@@ -12631,10 +12636,18 @@ public class AIGear {
                     // skylineIO.pStatementRefSpectra.setString(5, ""); // prevAA CHAR(1)
                     // skylineIO.pStatementRefSpectra.setString(6, ""); // nextAA CHAR(1)
                     skylineIO.pStatementRefSpectra.setInt(7, lines.size()); // numPeaks INTEGER
-                    // skylineIO.pStatementRefSpectra.setDouble(9, null); // ionMobility REAL
-                    // skylineIO.pStatementRefSpectra.setDouble(10, null); // collisionalCrossSectionSqA REAL
-                    // skylineIO.pStatementRefSpectra.setDouble(11, null); // ionMobilityHighEnergyOffset REAL
-                    skylineIO.pStatementRefSpectra.setInt(11, 0); // ionMobilityType TINYINT
+                    if (ccs_enabled) {
+                        ionMobility = pepIDCharge2IonMobility.get(pepID + String.valueOf(charge));
+                        skylineIO.pStatementRefSpectra.setDouble(8, ionMobility); // ionMobility REAL
+                        skylineIO.pStatementRefSpectra.setNull(9, Types.DOUBLE); // collisionalCrossSectionSqA REAL
+                        skylineIO.pStatementRefSpectra.setNull(10, Types.DOUBLE); // ionMobilityHighEnergyOffset REAL
+                        skylineIO.pStatementRefSpectra.setInt(11, SkylineIO.ION_MOBILITY_TYPE_INVERSE_K0); // ionMobilityType TINYINT
+                    } else {
+                        skylineIO.pStatementRefSpectra.setNull(8, Types.DOUBLE); // ionMobility REAL
+                        skylineIO.pStatementRefSpectra.setNull(9, Types.DOUBLE); // collisionalCrossSectionSqA REAL
+                        skylineIO.pStatementRefSpectra.setNull(10, Types.DOUBLE); // ionMobilityHighEnergyOffset REAL
+                        skylineIO.pStatementRefSpectra.setInt(11, SkylineIO.ION_MOBILITY_TYPE_NONE); // ionMobilityType TINYINT
+                    }
                     skylineIO.pStatementRefSpectra.setDouble(12, pepID2rt.get(pepID)); // retentionTime REAL
                     // skylineIO.pStatementRefSpectra.setInt(14, 1); // fileID INTEGER DEFAULT 1
                     // skylineIO.pStatementRefSpectra.setString(15, null); // SpecIDinFile VARCHAR(256)
@@ -12659,7 +12672,19 @@ public class AIGear {
 
                 // RT
                 skylineIO.pStatementRetentionTimes.setInt(1, RefSpectraID); // RefSpectraID INTEGER
-                skylineIO.pStatementRetentionTimes.setDouble(2, pepID2rt.get(pepID)); // mz BLOB
+                if (ccs_enabled) {
+                    ionMobility = pepIDCharge2IonMobility.get(pepID + String.valueOf(charge));
+                    skylineIO.pStatementRetentionTimes.setDouble(2, ionMobility); // ionMobility DOUBLE
+                    skylineIO.pStatementRetentionTimes.setNull(3, Types.DOUBLE); // collisionalCrossSectionSqA DOUBLE
+                    skylineIO.pStatementRetentionTimes.setNull(4, Types.DOUBLE); // ionMobilityHighEnergyOffset DOUBLE
+                    skylineIO.pStatementRetentionTimes.setInt(5, SkylineIO.ION_MOBILITY_TYPE_INVERSE_K0); // ionMobilityType INTEGER
+                } else {
+                    skylineIO.pStatementRetentionTimes.setNull(2, Types.DOUBLE); // ionMobility DOUBLE
+                    skylineIO.pStatementRetentionTimes.setNull(3, Types.DOUBLE); // collisionalCrossSectionSqA DOUBLE
+                    skylineIO.pStatementRetentionTimes.setNull(4, Types.DOUBLE); // ionMobilityHighEnergyOffset DOUBLE
+                    skylineIO.pStatementRetentionTimes.setInt(5, SkylineIO.ION_MOBILITY_TYPE_NONE); // ionMobilityType INTEGER
+                }
+                skylineIO.pStatementRetentionTimes.setDouble(6, pepID2rt.get(pepID)); // retentionTime DOUBLE
                 skylineIO.pStatementRetentionTimes.addBatch();
 
                 // modification

@@ -23,6 +23,10 @@ import java.util.regex.Pattern;
 
 public class SkylineIO {
 
+    public static final int ION_MOBILITY_TYPE_NONE = 0;
+    public static final int ION_MOBILITY_TYPE_DRIFT_TIME_MSEC = 1;
+    public static final int ION_MOBILITY_TYPE_INVERSE_K0 = 2;
+    public static final int ION_MOBILITY_TYPE_COMPENSATION_V = 3;
 
     public Connection connection = null;
     private Statement statement = null;
@@ -167,6 +171,35 @@ public class SkylineIO {
         }
     }
 
+    public void add_IonMobilityTypes() {
+        try {
+            statement.executeUpdate("drop table if exists IonMobilityTypes;");
+            String createTableSQL = "CREATE TABLE IonMobilityTypes ("
+                    + "id INTEGER PRIMARY KEY, "
+                    + "ionMobilityType VARCHAR(128)"
+                    + ");";
+            statement.executeUpdate(createTableSQL);
+
+            PreparedStatement preparedStatement = connection.prepareStatement(
+                    "INSERT INTO IonMobilityTypes (id, ionMobilityType) VALUES (?, ?)");
+            preparedStatement.setInt(1, ION_MOBILITY_TYPE_NONE);
+            preparedStatement.setString(2, "none");
+            preparedStatement.executeUpdate();
+            preparedStatement.setInt(1, ION_MOBILITY_TYPE_DRIFT_TIME_MSEC);
+            preparedStatement.setString(2, "driftTime(msec)");
+            preparedStatement.executeUpdate();
+            preparedStatement.setInt(1, ION_MOBILITY_TYPE_INVERSE_K0);
+            preparedStatement.setString(2, "inverseK0(Vsec/cm^2)");
+            preparedStatement.executeUpdate();
+            preparedStatement.setInt(1, ION_MOBILITY_TYPE_COMPENSATION_V);
+            preparedStatement.setString(2, "compensation(V)");
+            preparedStatement.executeUpdate();
+            preparedStatement.close();
+        } catch (Exception e) {
+            System.out.println("Error creating IonMobilityTypes table: " + e.getMessage());
+        }
+    }
+
     public void add_SpectrumSourceFiles() {
         PreparedStatement preparedStatement = null;
         try {
@@ -241,7 +274,14 @@ public class SkylineIO {
             // Execute the SQL statement to create the table
             statement.executeUpdate(createTableSQL);
             // SQL for inserting data into RetentionTimes table
-            String insertSQL = "INSERT INTO RetentionTimes (RefSpectraID, retentionTime) VALUES (?, ?);";
+            String insertSQL = "INSERT INTO RetentionTimes ("
+                    + "RefSpectraID, "
+                    + "ionMobility, "
+                    + "collisionalCrossSectionSqA, "
+                    + "ionMobilityHighEnergyOffset, "
+                    + "ionMobilityType, "
+                    + "retentionTime"
+                    + ") VALUES (?, ?, ?, ?, ?, ?);";
             pStatementRetentionTimes = connection.prepareStatement(insertSQL);
 
         } catch (Exception e) {
