@@ -1029,6 +1029,11 @@ public class AIGear {
         if (cmd.hasOption("ccs")) {
             aiGear.ccs_enabled = true;
             AIWorker.ccs_enabled = true;
+        }else if(cmd.hasOption("i") && cmd.hasOption("ms")){
+            if(aiGear.is_timsTOF(cmd.getOptionValue("i"),cmd.getOptionValue("ms"))){
+                aiGear.ccs_enabled = true;
+                AIWorker.ccs_enabled = true;
+            }
         }
 
         GenericUtils.get_system_memory_available();
@@ -2893,6 +2898,15 @@ public class AIGear {
         }
     }
 
+    /**
+     * Checks if the provided file path corresponds to a timsTOF mass spectrometry file.
+     * The method determines this by looking for the presence of an "analysis.tdf" file
+     * in the specified directory or its nested subdirectories.
+     *
+     * @param ms_file The path to the mass spectrometry file or directory to be checked.
+     * @return {@code true} if the provided path corresponds to a timsTOF mass spectrometry file;
+     *         {@code false} otherwise.
+     */
     private boolean is_timsTOF_ms_file(String ms_file) {
         boolean is_timsTOF = false;
         File F = new File(ms_file);
@@ -2918,6 +2932,72 @@ public class AIGear {
                 }
             }
         }
+        return is_timsTOF;
+    }
+
+    /**
+     * Determines if the data is from a timsTOF instrument based on the provided
+     * DIA-NN report file and mass spectrometry (MS) file.
+     *
+     * @param diann_report_file The path to the DIA-NN report file.
+     * @param ms_file The path to the mass spectrometry raw data file.
+     * @return {@code true} if the data is determined to be from a timsTOF instrument; {@code false} otherwise.
+     */
+    private boolean is_timsTOF(String diann_report_file, String ms_file){
+        boolean is_timsTOF = false;
+        if(diann_report_file.endsWith(".tsv")){
+            try (BufferedReader reader = new BufferedReader(new FileReader(diann_report_file))) {
+                String headLine = reader.readLine();
+                if (headLine != null) {
+                    HashMap<String, Integer> hIndex = this.get_column_name2index_from_head_line(headLine.trim());
+                    if (hIndex.containsKey("IM")) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            if (line.isBlank()) {
+                                continue;
+                            }
+                            String[] d = line.trim().split("\t");
+                            if (d.length <= hIndex.get("IM")) {
+                                continue;
+                            }
+                            String imValue = d[hIndex.get("IM")].trim();
+                            if (imValue.isEmpty()) {
+                                continue;
+                            }
+                            try {
+                                if (Double.parseDouble(imValue) > 0) {
+                                    is_timsTOF = true;
+                                    break;
+                                }
+                            } catch (NumberFormatException ignored) {
+                            }
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }else if(diann_report_file.endsWith(".parquet")){
+            try {
+                Table reportTable = new TablesawParquetReader().read(new Source(new File(diann_report_file)));
+                if (reportTable.columnNames().contains("IM")) {
+                    for (int i = 0; i < reportTable.rowCount(); i++) {
+                        Object imObject = reportTable.column("IM").get(i);
+                        if (imObject instanceof Number && ((Number) imObject).doubleValue() > 0) {
+                            is_timsTOF = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        if (!is_timsTOF && ms_file != null && !ms_file.isEmpty()) {
+            is_timsTOF = is_timsTOF_ms_file(ms_file);
+        }
+
         return is_timsTOF;
     }
 
