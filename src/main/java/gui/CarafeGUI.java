@@ -3712,6 +3712,13 @@ public class CarafeGUI extends JFrame {
             Collections.addAll(additionalOptionList, additional_options);
         }
 
+        Object selectedPython = pythonPathCombo != null ? pythonPathCombo.getSelectedItem() : null;
+        String pythonPath = selectedPython != null ? selectedPython.toString().trim() : "";
+        if (!pythonPath.isEmpty()) {
+            commandArgs.add("-python");
+            commandArgs.add(pythonPath);
+        }
+
         String libraryDb = libraryDbFileField.getText().trim();
         if (!libraryDb.isEmpty()) {
             // cmd.append("-db \"").append(libraryDb).append("\" ");
@@ -4026,6 +4033,12 @@ public class CarafeGUI extends JFrame {
         if (!additionalOptionList.isEmpty()) {
             // remove additional options that are already in diannArgs
             // Sort indexes in descending order
+            int pythonIndex = additionalOptionList.indexOf("-python");
+            if (pythonIndex >= 0) {
+                JOptionPane.showMessageDialog(this, "Please use the Python Executable field instead of adding -python manually.",
+                        "Carafe setting", JOptionPane.ERROR_MESSAGE);
+                return null;
+            }
             additionalOptionInGuiList.sort(Collections.reverseOrder());
             for (int index : additionalOptionInGuiList) {
                 if (index >= 0 && index < additionalOptionList.size()) {

@@ -407,6 +407,85 @@ public class AIGear {
      */
     private int n_peptides_per_batch = 200000;
 
+    public AIGear() {
+        setPythonBin();
+    }
+
+    /**
+     * Set the Python executable used by Carafe.
+     *
+     * If a non-empty path is provided, that path is used directly. Otherwise, this
+     * method tries to resolve the default Python installed by PyInstaller under the
+     * user's home directory (`~/.carafe/.venv`). If that interpreter is not found,
+     * it falls back to `python`.
+     *
+     * @param pythonPath The Python executable path to use, or null/blank to use the
+     *                   default installed location.
+     */
+    public void setPythonBin(String pythonPath) {
+        if (isValidPythonPath(pythonPath)) {
+            this.python_bin = pythonPath.trim();
+            return;
+        }
+
+        this.python_bin = resolveDefaultPythonBin();
+    }
+
+    /**
+     * Resolve and set the Python executable using the default install layout from
+     * PyInstaller.
+     */
+    public void setPythonBin() {
+        this.python_bin = resolveDefaultPythonBin();
+    }
+
+    /**
+     * Resolve the default Python executable path based on the install layout used
+     * by PyInstaller.
+     *
+     * Windows: ~/.carafe/.venv/Scripts/python.exe
+     * Linux/macOS: ~/.carafe/.venv/bin/python3 (fallback to bin/python)
+     *
+     * If the expected interpreter is not present, return the generic `python`
+     * command so existing PATH-based behavior still works.
+     *
+     * @return Absolute path to the installed Python executable, or `python` as a
+     *         fallback.
+     */
+    public static String resolveDefaultPythonBin() {
+        String userHome = System.getProperty("user.home");
+        Path installRoot = Paths.get(userHome, ".carafe");
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+
+        if (os.contains("win")) {
+            Path winPython = installRoot.resolve(".venv").resolve("Scripts").resolve("python.exe");
+            if (Files.isRegularFile(winPython)) {
+                return winPython.toAbsolutePath().toString();
+            }
+        } else {
+            Path unixPython3 = installRoot.resolve(".venv").resolve("bin").resolve("python3");
+            if (Files.isRegularFile(unixPython3)) {
+                return unixPython3.toAbsolutePath().toString();
+            }
+
+            Path unixPython = installRoot.resolve(".venv").resolve("bin").resolve("python");
+            if (Files.isRegularFile(unixPython)) {
+                return unixPython.toAbsolutePath().toString();
+            }
+        }
+
+        return "python";
+    }
+
+    private static boolean isValidPythonPath(String pythonPath) {
+        if (pythonPath == null || pythonPath.trim().isEmpty()) {
+            return false;
+        }
+
+        Path path = Paths.get(pythonPath.trim());
+        return Files.isRegularFile(path);
+    }
+
     /**
      * The precursor charge states to consider for spectral library generation
      */
@@ -639,6 +718,7 @@ public class AIGear {
         options.addOption("tf", true, "Fine tune type: ms2, rt, all (default)");
         options.addOption("seed", true, "Random seed, 2024 in default");
         options.addOption("fast", false, "Save data to parquet format for speeding up reading and writing");
+        options.addOption("python", true, "Path to Python executable");
         options.addOption("mod2mass",true,"Change the mass of a modification. The format is like: 2@0");
         // Format: mod_name@aa[mass][composition];mod_name@aa[mass][composition]
         // These modifications will be treated as variable modifications and add to the analysis
@@ -805,6 +885,9 @@ public class AIGear {
         ModificationUtils.getInstance();
 
         AIGear aiGear = new AIGear();
+        if (cmd.hasOption("python")) {
+            aiGear.setPythonBin(cmd.getOptionValue("python"));
+        }
         aiGear.load_mod_map();
 
         if (cmd.hasOption("ai_version")) {
