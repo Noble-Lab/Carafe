@@ -5,6 +5,34 @@ import os
 import argparse
 import importlib.util
 import re
+import json
+
+
+def load_model_evaluation_metrics(model_dir: str) -> dict:
+    """Load model evaluation metrics JSON from the model directory."""
+    metrics_path = os.path.join(model_dir, "model_evaluation_metrics.json")
+    if not os.path.exists(metrics_path):
+        return {}
+    try:
+        with open(metrics_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        print(f"Warning: Could not read {metrics_path}: {e}")
+        return {}
+
+
+def load_installed_model_by_mode(model_mgr, mode_type: str, model_name: str):
+    """Load an installed pretrained model that matches the requested mode."""
+    if mode_type == 'general':
+        model_mgr.load_installed_models('generic', model_list=[model_name])
+    elif mode_type == 'phosphorylation' or mode_type == 'phos' or mode_type == 'phospho':
+        model_mgr.load_installed_models('phos', model_list=[model_name])
+    elif mode_type == 'ubi' or mode_type == 'ubiquitination' or mode_type == 'kGG' or mode_type == 'kgg':
+        model_mgr.load_installed_models('ubi', model_list=[model_name])
+    else:
+        print(f"Warning: Unknown mode_type: {mode_type}, loading generic model")
+        model_mgr.load_installed_models('generic', model_list=[model_name])
 
 
 def predict_ms2(model_dir:str,
@@ -35,21 +63,24 @@ def predict_ms2(model_dir:str,
 
     if model_dir == "generic":
         print("Load generic model!")
-        if mode_type == 'general':
-            model_mgr.load_installed_models('generic', model_list=['ms2'])
-        elif mode_type == 'phosphorylation' or mode_type == 'phos' or mode_type == 'phospho':
-            model_mgr.load_installed_models('phos', model_list=['ms2'])
-        elif mode_type == 'ubi' or mode_type == 'ubiquitination' or mode_type == 'kGG' or mode_type == 'kgg':
-            model_mgr.load_installed_models('ubi', model_list=['ms2'])
-        else:
-            print(f"Warning: Unknown mode_type: {mode_type}, loading generic model")
-            model_mgr.load_installed_models('generic', model_list=['ms2'])
+        load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
     else:
-        if os.path.exists(model_dir+"/ms2_model.pt"):
-            model_mgr.load_external_models(ms2_model_file=model_dir+"/ms2_model.pt")
+        metrics = load_model_evaluation_metrics(model_dir)
+        ms2_metrics = metrics.get("ms2", {}) if isinstance(metrics, dict) else {}
+        use_finetuned_for_prediction = bool(ms2_metrics.get("use_finetuned_for_prediction", False))
+        ms2_model_path = model_dir + "/ms2_model.pt"
+        if use_finetuned_for_prediction and os.path.exists(ms2_model_path):
+            print("Using fine-tuned MS2 model based on evaluation metrics")
+            model_mgr.load_external_models(ms2_model_file=ms2_model_path)
+        elif os.path.exists(ms2_model_path) and not metrics:
+            print(f"Warning: {model_dir}/model_evaluation_metrics.json not found, loading generic MS2 model")
+            load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
+        elif os.path.exists(ms2_model_path):
+            print("Using pretrained MS2 model because fine-tuned metrics did not improve across all tracked metrics")
+            load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
         else:
             print(f"Warning: {model_dir}/ms2_model.pt not found, loading generic model")
-            model_mgr.load_installed_models('generic', model_list=['ms2'])
+            load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
 
     model_mgr.instrument = instrument
     model_mgr.nce = nce

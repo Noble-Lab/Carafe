@@ -7,6 +7,7 @@ import sys
 import re
 import logging
 import math
+import json
 
 # Set up peptdeep-style logging with timestamps
 logging.basicConfig(
@@ -154,6 +155,78 @@ def get_auto_tune_params(num_peptides: int, mode='ms2'):
 def get_warmup_epochs(epochs):
     """Warmup: min 5, max 10, otherwise ~25% of epochs"""
     return min(10, max(5, epochs // 4))
+
+
+def _to_serializable_metric(value):
+    """Convert numpy scalars and non-finite values to JSON-safe Python values."""
+    if value is None:
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return value
+
+
+def load_model_evaluation_metrics(out_dir: str) -> dict:
+    """Load persisted model evaluation metrics if present."""
+    metrics_path = os.path.join(out_dir, "model_evaluation_metrics.json")
+    if not os.path.exists(metrics_path):
+        return {}
+    try:
+        with open(metrics_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        logging.warning(f"Could not load model evaluation metrics from {metrics_path}: {e}")
+        return {}
+
+
+def save_model_evaluation_metrics(out_dir: str, metrics: dict) -> str:
+    """Persist model evaluation metrics to JSON."""
+    metrics_path = os.path.join(out_dir, "model_evaluation_metrics.json")
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2, sort_keys=True)
+    logging.info(f"Saved model evaluation metrics JSON to {metrics_path}")
+    return metrics_path
+
+
+def update_model_evaluation_metrics(out_dir: str,
+                                    model_key: str,
+                                    pretrained_metrics: dict = None,
+                                    finetuned_metrics: dict = None,
+                                    extra_metrics: dict = None) -> dict:
+    """Merge metrics for a model and write them to the shared JSON manifest."""
+    metrics = load_model_evaluation_metrics(out_dir)
+    model_metrics = metrics.get(model_key, {})
+
+    if pretrained_metrics is not None:
+        model_metrics["pretrained"] = {
+            key: _to_serializable_metric(value) for key, value in pretrained_metrics.items()
+        }
+    if finetuned_metrics is not None:
+        model_metrics["finetuned"] = {
+            key: _to_serializable_metric(value) for key, value in finetuned_metrics.items()
+        }
+    if extra_metrics:
+        for key, value in extra_metrics.items():
+            if isinstance(value, dict):
+                model_metrics[key] = {
+                    sub_key: _to_serializable_metric(sub_value) for sub_key, sub_value in value.items()
+                }
+            else:
+                model_metrics[key] = value
+
+    metrics[model_key] = model_metrics
+    save_model_evaluation_metrics(out_dir, metrics)
+    return model_metrics
+
+
+def reset_model_evaluation_metrics(out_dir: str) -> str:
+    """Start a run with a fresh model evaluation metrics JSON file."""
+    return save_model_evaluation_metrics(out_dir, {})
 
 
 def train_ms2(in_dir: str,
@@ -389,11 +462,12 @@ def train_ms2(in_dir: str,
         logging.info(f"Saved pretrained predicted intensity, ground truth, and fragment m/z for {len(valid_test_df)} test PSMs")
         # Store pretrained metrics for comparison
         pretrained_metrics = {
-            'PCC': test_res[0]['PCC'].median(),
-            'COS': test_res[0]['COS'].median(),
-            'SA': test_res[0]['SA'].median(),
-            'SPC': test_res[0]['SPC'].median()
+            'pcc': test_res[0]['PCC'].median(),
+            'cos': test_res[0]['COS'].median(),
+            'sa': test_res[0]['SA'].median(),
+            'spc': test_res[0]['SPC'].median()
         }
+        update_model_evaluation_metrics(out_dir, "ms2", pretrained_metrics=pretrained_metrics)
         logging.info("Testing pretrained MS2 model:\n" + str(test_res[-1]))
     
     # Training with per-epoch test evaluation
@@ -570,20 +644,34 @@ def train_ms2(in_dir: str,
         # Print improvement summary comparing pretrained vs fine-tuned
         if pretrained_metrics is not None:
             finetuned_metrics = {
-                'PCC': test_res[0]['PCC'].median(),
-                'COS': test_res[0]['COS'].median(),
-                'SA': test_res[0]['SA'].median(),
-                'SPC': test_res[0]['SPC'].median()
+                'pcc': test_res[0]['PCC'].median(),
+                'cos': test_res[0]['COS'].median(),
+                'sa': test_res[0]['SA'].median(),
+                'spc': test_res[0]['SPC'].median()
             }
+            use_finetuned_for_prediction = all(
+                finetuned_metrics[metric] > pretrained_metrics[metric]
+                for metric in ['pcc', 'cos', 'sa', 'spc']
+            )
+            update_model_evaluation_metrics(
+                out_dir,
+                "ms2",
+                pretrained_metrics=pretrained_metrics,
+                finetuned_metrics=finetuned_metrics,
+                extra_metrics={"use_finetuned_for_prediction": use_finetuned_for_prediction}
+            )
             logging.info("\n=== Improvement Summary (Median) ===")
             logging.info(f"{'Metric':<6} {'Pretrained':>12} {'Fine-tuned':>12} {'Improvement':>12}")
             logging.info("-" * 44)
-            for metric in ['PCC', 'COS', 'SA', 'SPC']:
+            for metric in ['pcc', 'cos', 'sa', 'spc']:
                 pre = pretrained_metrics[metric]
                 post = finetuned_metrics[metric]
                 delta = post - pre
                 sign = "+" if delta >= 0 else ""
-                logging.info(f"{metric:<6} {pre:>12.4f} {post:>12.4f} {sign}{delta:>11.4f}")
+                logging.info(f"{metric.upper():<6} {pre:>12.4f} {post:>12.4f} {sign}{delta:>11.4f}")
+            logging.info(f"MS2 prediction model selection: {'fine-tuned' if use_finetuned_for_prediction else 'pretrained'}")
+        #elif pretrained_metrics is not None:
+        #    update_model_evaluation_metrics(out_dir, "ms2", pretrained_metrics=pretrained_metrics)
     
     model_mgr.ms2_model.save(out_dir + "/ms2_model.pt")
     model_mgr.ms2_model.save_training_history(os.path.join(out_dir, "ms2_history.tsv"))
@@ -714,7 +802,8 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
             pre_r = scipy.stats.pearsonr(y_obs, y_pred)[0]
             pre_mae = median_absolute_error(y_obs, y_pred)
             r2 = r2_score(y_obs, y_pred)
-            pretrained_metrics = {'R2': r2, 'MAE (normalized)': pre_mae}
+            pretrained_metrics = {'r2': r2, 'mae_normalized': pre_mae}
+            update_model_evaluation_metrics(out_dir, "rt", pretrained_metrics=pretrained_metrics)
             logging.info(f"Testing pretrained RT model: R2={r2:.4f}, MAE (normalized)={pre_mae:.4f}")
             
             # Save pretrained results and generate plot
@@ -807,24 +896,32 @@ def train_rt(in_dir: str, out_dir: str, mode_type="general", device='gpu', threa
             eval_label = "Final Evaluation (Best Model)" if use_best_model else "Final Evaluation (Last Model)"
             logging.info(f"{eval_label}: R2={post_r2:.4f}, MAE (normalized)={post_mae:.4f}")
             
+            finetuned_metrics = {'r2': post_r2, 'mae_normalized': post_mae}
+            update_model_evaluation_metrics(
+                out_dir,
+                "rt",
+                pretrained_metrics=pretrained_metrics,
+                finetuned_metrics=finetuned_metrics
+            )
+
             if pretrained_metrics is not None:
                 logging.info("\n=== Improvement Summary (RT) ===")
                 logging.info(f"{'Metric':<20} {'Pretrained':>12} {'Fine-tuned':>12} {'Improvement':>12}")
                 logging.info("-" * 60)
-                for metric in ['R2', 'MAE (normalized)']:
+                for metric in ['r2', 'mae_normalized']:
                     pre = pretrained_metrics[metric]
-                    if metric.lower().startswith("r2"):
+                    if metric.startswith("r2"):
                         post = post_r2
-                    elif metric.lower().startswith("mae"):
+                    elif metric.startswith("mae"):
                         post = post_mae
                     else:
                         print(f"Unknown metric: {metric}")
                         continue
                     delta = post - pre
                     # For R2, higher is better; for MAE, lower is better
-                    if metric.lower().startswith("r2"):
+                    if metric.startswith("r2"):
                         improved = "+" if delta >= 0 else ""
-                    elif metric.lower().startswith("mae"):
+                    elif metric.startswith("mae"):
                         improved = "+" if delta <= 0 else ""
                     else:
                         print(f"Unknown metric: {metric}")
@@ -959,7 +1056,13 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
             pre_mae_mobility = median_absolute_error(y_obs_mobility, y_pred_mobility)
             pre_r2_mobility = r2_score(y_obs_mobility, y_pred_mobility)
             
-            pretrained_metrics = {'R2 (CCS)': pre_r2_ccs, 'MAE (CCS)': pre_mae_ccs, 'R2 (mobility)': pre_r2_mobility, 'MAE (mobility)': pre_mae_mobility}
+            pretrained_metrics = {
+                'r2_ccs': pre_r2_ccs,
+                'mae_ccs': pre_mae_ccs,
+                'r2_mobility': pre_r2_mobility,
+                'mae_mobility': pre_mae_mobility
+            }
+            update_model_evaluation_metrics(out_dir, "im", pretrained_metrics=pretrained_metrics)
             logging.info(f"Testing pretrained CCS model (CCS space): R2 (CCS)={pre_r2_ccs:.4f}, MAE (CCS)={pre_mae_ccs:.4f}, R2 (mobility)={pre_r2_mobility:.4f}, MAE (mobility)={pre_mae_mobility:.4f}")
             
             # Save pretrained results and generate plot
@@ -1059,25 +1162,38 @@ def train_ccs(in_dir: str, out_dir: str, mode_type="general", device='gpu', thre
             eval_label = "Final Evaluation (Best Model)" if use_best_model else "Final Evaluation (Last Model)"
             logging.info(f"{eval_label}: R2 (CCS)={post_r2_ccs:.4f}, MAE (CCS)={post_mae_ccs:.4f}, R2 (mobility)={post_r2_mobility:.4f}, MAE (mobility)={post_mae_mobility:.4f}")
             
+            finetuned_metrics = {
+                'r2_ccs': post_r2_ccs,
+                'mae_ccs': post_mae_ccs,
+                'r2_mobility': post_r2_mobility,
+                'mae_mobility': post_mae_mobility
+            }
+            update_model_evaluation_metrics(
+                out_dir,
+                "im",
+                pretrained_metrics=pretrained_metrics,
+                finetuned_metrics=finetuned_metrics
+            )
+
             if pretrained_metrics is not None:
                 logging.info("\n=== Improvement Summary (CCS) ===")
                 logging.info(f"{'Metric':<20} {'Pretrained':>12} {'Fine-tuned':>12} {'Improvement':>12}")
                 logging.info("-" * 60)
-                for metric in ['R2 (CCS)', 'MAE (CCS)', 'R2 (mobility)', 'MAE (mobility)']:
+                for metric in ['r2_ccs', 'mae_ccs', 'r2_mobility', 'mae_mobility']:
                     pre = pretrained_metrics[metric]
-                    if metric == 'R2 (CCS)':
+                    if metric == 'r2_ccs':
                         post = post_r2_ccs
-                    elif metric == 'MAE (CCS)':
+                    elif metric == 'mae_ccs':
                         post = post_mae_ccs
-                    elif metric == 'R2 (mobility)':
+                    elif metric == 'r2_mobility':
                         post = post_r2_mobility
-                    elif metric == 'MAE (mobility)':
+                    elif metric == 'mae_mobility':
                         post = post_mae_mobility
                     delta = post - pre
                     # For R2, higher is better; for MAE, lower is better
-                    if metric.lower().startswith("r2"):
+                    if metric.startswith("r2"):
                         improved = "+" if delta >= 0 else ""
-                    elif metric.lower().startswith("mae"):
+                    elif metric.startswith("mae"):
                         improved = "+" if delta <= 0 else ""
                     else:
                         print(f"Unknown metric: {metric}")
@@ -1569,6 +1685,7 @@ if __name__ == "__main__":
     in_dir = args.in_dir
     out_dir = args.out_dir
     os.makedirs(out_dir, exist_ok=True)
+    reset_model_evaluation_metrics(out_dir)
 
     import numpy as np
     import torch
