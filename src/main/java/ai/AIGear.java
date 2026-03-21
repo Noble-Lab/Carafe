@@ -697,7 +697,7 @@ public class AIGear {
         options.addOption("lf_min_n_frag", true, "The minimum number of fragment ions to consider for library generation, default is 2");
         options.addOption("lf_frag_n_min", true, "The minimum fragment ion number to consider for library generation, default is 2");
         options.addOption("rf", false, "Refine peak boundary or not");
-        options.addOption("rf_rt_win", true, "RT window for refine peak boundary, default is 3 minutes");
+        options.addOption("rf_rt_win", true, "RT window for refine peak boundary, default is to determine automatically");
         options.addOption("rt_win_offset", true, "RT window offset for XIC extraction, default is 1 minute");
         options.addOption("rt_max", true, "The max RT, default is 0.0, meaning using the max RT from the input MS file");
         options.addOption("xic", false, "Export XIC to file or not");
@@ -878,6 +878,9 @@ public class AIGear {
             } else {
                 CParameter.rt_win = Double.parseDouble(cmd.getOptionValue("rf_rt_win"));
             }
+        }else{
+            // will determine rt window based on LC gradient length
+            CParameter.rt_win = 0;
         }
 
         String psm_file = cmd.getOptionValue("i");
