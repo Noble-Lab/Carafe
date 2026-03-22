@@ -651,7 +651,7 @@ public class AIGear {
         long startTime = System.currentTimeMillis();
         Options options = new Options();
         options.addOption("i", true, "Peptide detection file from DIA-NN (e.g., report.tsv or report.parquet) or Skyline");
-        options.addOption("ms", true, "MS file in mzML format: a single mzML or a folder containing mzML files.");
+        options.addOption("ms", true, "Training MS data in mzML or Bruker raw (.d) format: a single MS/MS file or a folder containing multiple MS/MS files.");
         options.addOption("fixMod", true, "Fixed modification, the format is like : 1,2,3. Use '-printPTM' to show all supported modifications. Default is 1 (Carbamidomethylation(C)[57.02]). " +
                 "If there is no fixed modification, set it as '-fixMod no' or '-fixMod 0'.");
         options.addOption("varMod",true,"Variable modification, the format is the same with -fixMod. Default is 2 (Oxidation(M)[15.99]). "+
