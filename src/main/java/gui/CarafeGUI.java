@@ -1056,7 +1056,7 @@ public class CarafeGUI extends JFrame {
 
         trainDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train Protein Database:",
                 "Protein database or a DIA-NN library used for peptide detection on the train MS file(s).\n" +
-                        "Supported formats: FASTA. (e.g. protein.fasta, protein.fa or *.speclib)",
+                        "Supported formats: FASTA or DIA-NN's speclib (e.g. protein.fasta, protein.fa or *.speclib).",
                 trainDbFileField = createTextField("Path to protein FASTA or DIA-NN library for searching the train MS file(s)"),
                 createDbButtonsPanel(trainDbFileField, true, "Select a protein database or a DIA-NN library used for peptide detection on the train MS file(s)."));
 
