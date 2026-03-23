@@ -65,4 +65,32 @@ public class ConvertModificationTest {
         // '1' for Oxidation of M at pos 1
         Assert.assertEquals(result, "51ADAEKNAVAEK-", "Should handle both N-term acetyl and Oxidation correctly");
     }
+
+    @Test
+    public void testSkylineProteinNTermAcetylFormatting() throws Exception {
+        AIGear aiGear = new AIGear();
+
+        Method peptideMethod = AIGear.class.getDeclaredMethod("get_modified_peptide_skyline", String.class, String.class, String.class);
+        peptideMethod.setAccessible(true);
+
+        String peptide = "AANSGLDSK";
+        String mods = "Acetyl@Protein_N-term";
+        String modSites = "0";
+
+        String result = (String) peptideMethod.invoke(aiGear, peptide, mods, modSites);
+
+        Assert.assertEquals(result, "A[42.0105646837]ANSGLDSK", "Skyline peptideModSeq should place protein N-term acetylation on the first residue.");
+    }
+
+    @Test
+    public void testSkylineProteinNTermAcetylPosition() throws Exception {
+        AIGear aiGear = new AIGear();
+
+        Method positionMethod = AIGear.class.getDeclaredMethod("get_skyline_modification_position", String.class, int.class);
+        positionMethod.setAccessible(true);
+
+        int result = (int) positionMethod.invoke(aiGear, "Acetyl@Protein_N-term", 0);
+
+        Assert.assertEquals(result, 1, "Skyline Modifications.position should store protein N-term acetylation at position 1.");
+    }
 }

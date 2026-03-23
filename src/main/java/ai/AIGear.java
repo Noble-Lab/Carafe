@@ -12859,7 +12859,7 @@ public class AIGear {
                     String[] pos = mod_sites.split(";");
                     for (int j = 0; j < pos.length; j++) {
                         skylineIO.pStatementModifications.setInt(1, RefSpectraID); // RefSpectraID INTEGER
-                        skylineIO.pStatementModifications.setInt(2, Integer.parseInt(pos[j])); // position INTEGER
+                        skylineIO.pStatementModifications.setInt(2, get_skyline_modification_position(names[j], Integer.parseInt(pos[j]))); // position INTEGER
                         skylineIO.pStatementModifications.setDouble(3, CModification.getInstance().get_mod_mass_by_psi_name_site(names[j])); // mass REAL
                         skylineIO.pStatementModifications.addBatch();
                     }
@@ -13267,6 +13267,23 @@ public class AIGear {
     }
 
     /**
+     * Determines the position of a skyline modification based on its name and position.
+     * If the modification name is "Acetyl@Protein_N-term" and the provided position is 0,
+     * the method returns 1. Otherwise, it returns the provided position.
+     *
+     * @param modName The name of the modification to evaluate.
+     * @param modPos The position of the modification to evaluate.
+     * @return The adjusted position of the modification. Returns 1 if the modification
+     * name is "Acetyl@Protein_N-term" and the position is 0; otherwise, returns the original position.
+     */
+    int get_skyline_modification_position(String modName, int modPos) {
+        if ("Acetyl@Protein_N-term".equals(modName) && modPos == 0) {
+            return 1;
+        }
+        return modPos;
+    }
+
+    /**
      * Peptide string format conversion for Skyline (.blib) library generation.
      * 
      * @param peptide   A Peptide object
@@ -13285,7 +13302,7 @@ public class AIGear {
             String[] aa = peptide.split("");
             for (int i = 0; i < names.length; i++) {
                 String ptm_name = "";
-                int ptm_pos = Integer.parseInt(pos[i]) - 1;
+                int ptm_pos = get_skyline_modification_position(names[i], Integer.parseInt(pos[i])) - 1;
                 switch (names[i]) {
                     case "Oxidation@M":
                         ptm_name = "M[+15.994915]";
