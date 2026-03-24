@@ -65,6 +65,30 @@ public class PSMConfig {
 
     public static String ms_file_column_name = "File.Name";
 
+    /**
+     * Configures the column names to match the default output format of the DIA-NN search engine.
+     * This method assigns predefined values to the class fields representing specific report column names
+     * used in DIA-NN output. It also sets the search engine name to "DIA-NN".
+     */
+    public static void use_diann_report_column_names() {
+        precursor_id_column_name = "Precursor.Id";
+        stripped_peptide_sequence_column_name = "Stripped.Sequence";
+        peptide_modification_column_name = "Modified.Sequence";
+        precursor_charge_column_name = "Precursor.Charge";
+        precursor_mz_column_name = "Precursor.MZ";
+        rt_column_name = "RT";
+        rt_start_column_name = "RT.Start";
+        rt_end_column_name = "RT.Stop";
+        ms2_index_column_name = "MS2.Scan";
+        ptm_site_confidence_column_name = "PTM.Site.Confidence";
+        ptm_site_qvalue_column_name = "PTM.Q.Value";
+        qvalue_column_name = "Q.Value";
+        PEP_column_name = "PEP";
+        im_column_name = "IM";
+        ms_file_column_name = "File.Name";
+        search_engine_name = "DIA-NN";
+    }
+
     public static void use_skyline_report_column_names(){
         stripped_peptide_sequence_column_name = "Peptide";
         peptide_modification_column_name = "Peptide Modified Sequence Unimod Ids";

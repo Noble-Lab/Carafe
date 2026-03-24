@@ -1176,9 +1176,17 @@ public class AIGear {
                 // DIA skyline
                 CModification.getInstance();
                 PSMConfig.use_skyline_report_column_names();
-                String new_psm_file = aiGear.add_ms2spectrum_index(psm_file, ms_file);
-                aiGear.load_data(new_psm_file, ms_file, aiGear.fdr_cutoff);
-                aiGear.get_ms2_matches_diann();
+                if(aiGear.ccs_enabled) {
+                    String new_psm_file = aiGear.convert_skyline_precursor_table_to_diann_like(psm_file, ms_file);
+                    PSMConfig.use_diann_report_column_names();
+                    aiGear.search_engine = "DIA-NN";
+                    aiGear.load_data(new_psm_file, ms_file, aiGear.fdr_cutoff);
+                    aiGear.get_ms2_matches_diann_ccs_rust();
+                }else{
+                    String new_psm_file = aiGear.add_ms2spectrum_index(psm_file, ms_file);
+                    aiGear.load_data(new_psm_file, ms_file, aiGear.fdr_cutoff);
+                    aiGear.get_ms2_matches_diann();
+                }
             } else {
                 aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
                 // TODO: need to update for CCS
@@ -8099,6 +8107,196 @@ public class AIGear {
     }
 
     /**
+     * Retrieves the index of the first column found in the given map that matches any of the provided candidate names.
+     * If none of the candidate names are found in the map, an exception is thrown.
+     *
+     * @param cIndex a map where the keys are column names and the values are their respective indices
+     * @param candidateNames a vararg array of candidate column names to search for
+     * @return the index of the first candidate column name found in the map
+     * @throws IllegalArgumentException if none of the candidate names are found in the map
+     */
+    private int get_required_column_index(HashMap<String, Integer> cIndex, String... candidateNames) {
+        for (String candidateName : candidateNames) {
+            if (cIndex.containsKey(candidateName)) {
+                return cIndex.get(candidateName);
+            }
+        }
+        throw new IllegalArgumentException("Missing required column. Expected one of: " + String.join(", ", candidateNames));
+    }
+
+    /**
+     * Retrieves the index of the first matching column name from the provided list of candidate names.
+     * If none of the candidate names are found in the column index map, returns -1.
+     *
+     * @param cIndex a map where the key is the column name and the value is the column index.
+     * @param candidateNames a varargs parameter representing candidate column names to search for.
+     * @return the index of the first matching column name found in the map, or -1 if no match is found.
+     */
+    private int get_optional_column_index(HashMap<String, Integer> cIndex, String... candidateNames) {
+        for (String candidateName : candidateNames) {
+            if (cIndex.containsKey(candidateName)) {
+                return cIndex.get(candidateName);
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Checks if the given string is a non-numeric value.
+     *
+     * @param value the string to be evaluated
+     * @return true if the string is null, empty, or cannot be parsed as a numeric value;
+     *         false otherwise
+     */
+    private boolean is_non_numeric_value(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return true;
+        }
+        try {
+            Double.parseDouble(value.trim());
+            return false;
+        } catch (NumberFormatException e) {
+            return true;
+        }
+    }
+
+    /**
+     * Normalizes the modified sequence string for DIA-NN by replacing "unimod:" with "UniMod:"
+     * and optionally updates the sequence to include a protein N-terminal acetylation modification
+     * if specified in the sequence and peptide inputs.
+     *
+     * @param modifiedSequence The input modified sequence string that may contain modification tags
+     *                         in the "unimod:" format which need replacement.
+     *                         Can be null, in which case the method returns null.
+     * @param peptide          The peptide sequence corresponding to the modified sequence.
+     *                         Used to determine if a protein N-terminal acetylation modification
+     *                         should be adjusted in the normalized sequence. Can be null or empty.
+     * @return A normalized representation of the modified sequence with "unimod:" replaced by "UniMod:"
+     *         and adjusted for protein N-terminal acetylation if applicable.
+     *         Returns null if the input modified sequence is null.
+     */
+    private String normalize_skyline_modified_sequence_for_diann(String modifiedSequence, String peptide) {
+        if (modifiedSequence == null) {
+            return null;
+        }
+        String normalizedSequence = modifiedSequence.replace("unimod:", "UniMod:");
+        if (peptide != null && !peptide.isEmpty()) {
+            String proteinNTermAcetylOnFirstResidue = peptide.charAt(0) + "(UniMod:1)";
+            if (normalizedSequence.startsWith(proteinNTermAcetylOnFirstResidue)) {
+                normalizedSequence = "(UniMod:1)" + peptide.charAt(0) + normalizedSequence.substring(proteinNTermAcetylOnFirstResidue.length());
+            }
+        }
+        return normalizedSequence;
+    }
+
+    /**
+     * Converts a Skyline precursor table into a DIA-NN-like format file.
+     * This method processes a given Skyline precursor table file (`psm_file`)
+     * along with an associated mass spectrometry file (`ms_file`) and generates
+     * a transformed output in a DIA-NN compatible tab-delimited format.
+     * This is used for Skyline precursor report file generated from timsTOF DIA data.
+     * @param psm_file Path to the input Skyline precursor table file.
+     *                 The file is expected to be in tab-delimited format.
+     * @param ms_file  Path to the associated mass spectrometry file. This file
+     *                 is utilized for indexing and retrieving spectral data.
+     * @return         Path to the generated output file in DIA-NN-like format.
+     * @throws IOException If an I/O error occurs while reading the input files
+     *                     or writing the output file.
+     */
+    public String convert_skyline_precursor_table_to_diann_like(String psm_file, String ms_file) throws IOException {
+        HashMap<String, Integer> cIndex = get_column_name2index(psm_file);
+
+        int strippedSequenceIndex = get_required_column_index(cIndex, "Peptide");
+        int modifiedSequenceIndex = get_required_column_index(cIndex, "Peptide Modified Sequence Unimod Ids");
+        int precursorChargeIndex = get_required_column_index(cIndex, "Precursor Charge");
+        int rtIndex = get_required_column_index(cIndex, "Best Retention Time");
+        int rtStartIndex = get_required_column_index(cIndex, "Min Start Time");
+        int rtStopIndex = get_required_column_index(cIndex, "Max End Time");
+        int fileNameIndex = get_required_column_index(cIndex, "File Name");
+        int qValueIndex = get_required_column_index(cIndex, "Detection Q Value");
+        int ionMobilityIndex = ccs_enabled ? get_required_column_index(cIndex, "Ion Mobility MS1") : get_optional_column_index(cIndex, "Ion Mobility MS1");
+        int precursorMzIndex = get_optional_column_index(cIndex, "Precursor Mz", "Precursor m/z", "Precursor MZ");
+
+        String out_prefix = new File(psm_file).getName();
+        if (out_prefix.endsWith(".csv")) {
+            out_prefix = out_prefix.replaceAll(".csv", "");
+        } else if (out_prefix.endsWith(".tsv")) {
+            out_prefix = out_prefix.replaceAll(".tsv", "");
+        } else if (out_prefix.endsWith(".txt")) {
+            out_prefix = out_prefix.replaceAll(".txt", "");
+        }
+        String out_file = out_dir + File.separator + out_prefix + "_diann_like.tsv";
+        Cloger.getInstance().logger.info("Convert Skyline precursor table to DIA-NN-like format: " + out_file);
+
+        BufferedReader reader = new BufferedReader(new FileReader(psm_file));
+        BufferedWriter writer = new BufferedWriter(new FileWriter(out_file));
+        reader.readLine();
+        writer.write("Precursor.Id\tStripped.Sequence\tModified.Sequence\tPrecursor.Charge\tPrecursor.MZ\tRT\tRT.Start\tRT.Stop\tQ.Value\tPEP\tIM\tFile.Name\n");
+
+        String line;
+        DBGear dbGear = new DBGear();
+        int validRows = 0;
+        int ignoredRows = 0;
+        while ((line = reader.readLine()) != null) {
+            line = line.trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+            String[] d = line.split("\t");
+
+            String strippedSequence = d[strippedSequenceIndex];
+            String modifiedSequence = normalize_skyline_modified_sequence_for_diann(d[modifiedSequenceIndex], strippedSequence);
+            String precursorCharge = d[precursorChargeIndex];
+            String rt = d[rtIndex];
+            String rtStart = d[rtStartIndex];
+            String rtStop = d[rtStopIndex];
+            if (is_non_numeric_value(rtStart) || is_non_numeric_value(rtStop)) {
+                ignoredRows++;
+                continue;
+            }
+            String qValue = d[qValueIndex];
+            String im = ionMobilityIndex >= 0 ? d[ionMobilityIndex] : "0";
+            String fileName = d[fileNameIndex];
+
+            String precursorMz;
+            if (precursorMzIndex >= 0) {
+                precursorMz = d[precursorMzIndex];
+            } else {
+                String modification = this.get_modification_diann(modifiedSequence, strippedSequence);
+                this.add_peptide(strippedSequence, modification);
+                precursorMz = String.valueOf(dbGear.get_mz(
+                        this.get_peptide(strippedSequence, modification).getMass(),
+                        Integer.parseInt(precursorCharge)
+                ));
+            }
+            String precursorId = modifiedSequence + precursorCharge;
+
+            writer.write(String.join("\t",
+                    precursorId,
+                    strippedSequence,
+                    modifiedSequence,
+                    precursorCharge,
+                    precursorMz,
+                    rt,
+                    rtStart,
+                    rtStop,
+                    qValue,
+                    "0",
+                    im,
+                    fileName
+            ));
+            writer.write("\n");
+            validRows++;
+        }
+
+        reader.close();
+        writer.close();
+        Cloger.getInstance().logger.info("Valid Skyline precursor rows converted: " + validRows);
+        Cloger.getInstance().logger.info("Ignored Skyline precursor rows with non-numeric RT.Start or RT.Stop: " + ignoredRows);
+        return out_file;
+    }
+
+    /**
      * Check if the m/z value is within the isolation window.
      * 
      * @param mz     m/z value to check
@@ -8659,7 +8857,7 @@ public class AIGear {
                     mod_seq = mod_seq.replace("(UniMod:1)",CModification.getInstance().unimod2modification_code.get(unimod));
                     n_term_mods = n_term_mods + 1;
                 } else {
-                    System.err.println("Unrecognized modification:" + mod_seq + "," + peptide);
+                    Cloger.getInstance().logger.error("Unrecognized modification:" + mod_seq + "," + peptide);
                     System.exit(1);
                 }
             }
@@ -8861,7 +9059,7 @@ public class AIGear {
                     mod_name_list.add(this.mod_map.get(mod_name));
                     mod_pos_list.add(pos);
                 } else {
-                    System.err.println("Unrecognized modification:" + mod_name);
+                    Cloger.getInstance().logger.error("Unrecognized modification:" + mod_name);
                     System.exit(1);
                 }
 
