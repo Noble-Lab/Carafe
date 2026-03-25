@@ -83,6 +83,23 @@ public class ConvertModificationTest {
     }
 
     @Test
+    public void testSkylineProteinNTermAcetylAndFirstResidueOxidationFormatting() throws Exception {
+        AIGear aiGear = new AIGear();
+
+        Method peptideMethod = AIGear.class.getDeclaredMethod("get_modified_peptide_skyline", String.class, String.class, String.class);
+        peptideMethod.setAccessible(true);
+
+        String peptide = "MAAAAAAAAAGAAGGR";
+        String mods = "Acetyl@Protein_N-term;Oxidation@M";
+        String modSites = "0;1";
+
+        String result = (String) peptideMethod.invoke(aiGear, peptide, mods, modSites);
+        System.out.println("Result: " + result);
+
+        Assert.assertEquals(result, "M[58.00547930326]AAAAAAAAAGAAGGR", "Skyline peptideModSeq should combine protein N-term acetylation with first-residue oxidation.");
+    }
+
+    @Test
     public void testSkylineProteinNTermAcetylPosition() throws Exception {
         AIGear aiGear = new AIGear();
 

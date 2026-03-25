@@ -10,6 +10,7 @@ import main.java.util.Cloger;
 import org.apache.commons.io.IOUtils;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -52,6 +53,7 @@ public final class CModification {
      * PTM name -> PTM id
      */
     public HashMap<String,Integer> ptm_name2id = new HashMap<>();
+    private final HashMap<String, BigDecimal> preferredMassByModName = new HashMap<>();
 
     private boolean one_time_message = true;
 
@@ -183,10 +185,19 @@ public final class CModification {
     }
 
     public double get_mod_mass_by_psi_name_site(String psi_name_site){
+        return get_mod_mass_bigdecimal_by_psi_name_site(psi_name_site).doubleValue();
+    }
+
+    public BigDecimal get_mod_mass_bigdecimal_by_psi_name_site(String psi_name_site){
+        String mod_name = get_mod_name_by_site_unimod_acc(psi_name_site2site_unimod_acc.get(psi_name_site));
+        BigDecimal preferredMass = preferredMassByModName.get(mod_name);
+        if (preferredMass != null) {
+            return preferredMass;
+        }
         String site_unimod_acc = psi_name_site2site_unimod_acc.get(psi_name_site);
         String mod_code = unimod2modification_code.get(site_unimod_acc);
         int mod_id = Integer.parseInt(mod_code);
-        return ModificationFactory.getInstance().getModification(id2ptmname.get(mod_id)).getMass();
+        return BigDecimal.valueOf(ModificationFactory.getInstance().getModification(id2ptmname.get(mod_id)).getMass());
     }
 
     private void load_UniMods(){
@@ -264,6 +275,7 @@ public final class CModification {
                 }
                 for (int i = 1; i < mods.size(); i++) {
                     String[] line = mods.get(i).split("\t");
+                    preferredMassByModName.put(line[column2index.get("mod_name")], new BigDecimal(line[column2index.get("mod_mass")]));
                     ptm_names.add(line[column2index.get("mod_name")]);
                 }
 

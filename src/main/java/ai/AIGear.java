@@ -71,6 +71,7 @@ import tech.tablesaw.io.csv.CsvReadOptions;
 import tech.tablesaw.io.csv.CsvWriteOptions;
 
 import java.io.*;
+import java.math.BigDecimal;
 import java.lang.management.MemoryUsage;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
@@ -13482,6 +13483,17 @@ public class AIGear {
     }
 
     /**
+     * Formats a given residue and delta mass into a standardized string representation.
+     *
+     * @param residue The character representing the residue.
+     * @param deltaMass The delta mass associated with the residue, provided as a BigDecimal.
+     * @return A formatted string combining the residue and the delta mass in the form "residue[deltaMass]".
+     */
+    private String format_skyline_residue(char residue, BigDecimal deltaMass) {
+        return residue + "[" + deltaMass.stripTrailingZeros().toPlainString() + "]";
+    }
+
+    /**
      * Peptide string format conversion for Skyline (.blib) library generation.
      * 
      * @param peptide   A Peptide object
@@ -13497,43 +13509,35 @@ public class AIGear {
         } else {
             String[] names = mods.split(";");
             String[] pos = mod_sites.split(";");
-            String[] aa = peptide.split("");
+            char[] residues = peptide.toCharArray();
+            BigDecimal[] deltaMasses = new BigDecimal[residues.length];
+            boolean[] modified = new boolean[residues.length];
+            Arrays.fill(deltaMasses, BigDecimal.ZERO);
             for (int i = 0; i < names.length; i++) {
-                String ptm_name = "";
                 int ptm_pos = get_skyline_modification_position(names[i], Integer.parseInt(pos[i])) - 1;
-                switch (names[i]) {
-                    case "Oxidation@M":
-                        ptm_name = "M[+15.994915]";
-                        aa[ptm_pos] = ptm_name;
-                        break;
-                    case "Carbamidomethyl@C":
-                        ptm_name = "C[57.021464]";
-                        aa[ptm_pos] = ptm_name;
-                        break;
-                    case "Phospho@S":
-                        ptm_name = "S[+79.966331]";
-                        aa[ptm_pos] = ptm_name;
-                        break;
-                    case "Phospho@T":
-                        ptm_name = "T[+79.966331]";
-                        aa[ptm_pos] = ptm_name;
-                        break;
-                    case "Phospho@Y":
-                        ptm_name = "Y[+79.966331]";
-                        aa[ptm_pos] = ptm_name;
-                        break;
-                    default:
-                        String psi_name_site = names[i]; // "Phospho@S"
-                        if (CModification.getInstance().psi_name_site2skyline_mod_name.containsKey(psi_name_site)) {
-                            ptm_name = CModification.getInstance().psi_name_site2skyline_mod_name.get(psi_name_site);
-                            aa[ptm_pos] = ptm_name;
-                        } else {
-                            System.out.println("Error: modification " + names[i] + " is not supported yet!");
-                            System.exit(1);
-                        }
+                String psi_name_site = names[i];
+                if (!CModification.getInstance().psi_name_site2skyline_mod_name.containsKey(psi_name_site)) {
+                    System.out.println("Error: modification " + names[i] + " is not supported yet!");
+                    System.exit(1);
+                }
+                if (ptm_pos < 0 || ptm_pos >= residues.length) {
+                    System.out.println("Error: invalid Skyline modification position " + (ptm_pos + 1) + " for peptide " + peptide);
+                    System.exit(1);
+                }
+                deltaMasses[ptm_pos] = deltaMasses[ptm_pos].add(
+                        CModification.getInstance().get_mod_mass_bigdecimal_by_psi_name_site(psi_name_site)
+                );
+                modified[ptm_pos] = true;
+            }
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < residues.length; i++) {
+                if (modified[i]) {
+                    builder.append(format_skyline_residue(residues[i], deltaMasses[i]));
+                } else {
+                    builder.append(residues[i]);
                 }
             }
-            return StringUtils.join(aa, "");
+            return builder.toString();
         }
 
     }
