@@ -350,6 +350,21 @@ The workflow can be run on both Windows and Linux systems. It can also be run on
 
 Details are available at https://nf-carafe-ai-ms.readthedocs.io.
 
+### Visualize timsTOF DIA data with fine-tuned spectral libraries from Carafe2
+
+Timsviewer allows users to visualize the extracted ion chromatograms (XICs) for both peptide precursors and their corresponding fragment ions from Carafe2-generated spectral libraries against a timsTOF DIA data file. Timsviewer is available at https://github.com/TalusBio/timsbuktoolkit/releases.
+
+The main inputs:
+
+1. **timsTOF DIA data file**: A single timsTOF DIA run in Bruker raw format (.d) is supported.
+2. **spectral library**: A Carafe2-generated spectral library file in tsv format compatible with DIA-NN.
+
+ <img src="docs/images/timsquery_viewer_parameters.png" alt="Carafe2 GUI install" width="60%">
+
+Below is an example screenshot of the Timsviewer visualization of a timsTOF DIA data file with a Carafe2-generated spectral library. The XICs for both precursor and fragment ions are shown in the viewer.
+
+ <img src="docs/images/timsquery_viewer.png" alt="Carafe2 GUI install" width="80%">
+
 ## How to cite:
 
 Wen, B., Hsu, C., Shteynberg, D. et al. [Carafe enables high quality *in silico* spectral library generation for data-independent acquisition proteomics](https://doi.org/10.1038/s41467-025-64928-4). **Nat Commun** 16, 9815 (2025). 
