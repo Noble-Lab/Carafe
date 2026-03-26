@@ -363,7 +363,7 @@ The main inputs:
 
 Below is an example screenshot of the Timsviewer visualization of a timsTOF DIA data file with a Carafe2-generated spectral library. The XICs for both precursor and fragment ions are shown in the viewer.
 
- <img src="docs/images/timsquery_viewer.png" alt="Carafe2 GUI install" width="80%">
+ <img src="docs/images/timsquery_viewer.png" alt="Carafe2 GUI install" width="90%">
 
 ## How to cite:
 
