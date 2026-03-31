@@ -1,4 +1,4 @@
-# [Carafe2](https://doi.org/10.1038/s41467-025-64928-4)
+# [Carafe2](https://doi.org/10.64898/2026.03.27.714846)
 
 ![Downloads](https://img.shields.io/github/downloads/Noble-Lab/Carafe/total.svg) ![Release](https://img.shields.io/github/release/Noble-Lab/Carafe.svg)![Downloads](https://img.shields.io/github/downloads/Noble-Lab/Carafe/latest/total)
 
@@ -6,7 +6,7 @@
 
 Wen, B., Hsu, C., Shteynberg, D. et al. [Carafe enables high quality *in silico* spectral library generation for data-independent acquisition proteomics](https://doi.org/10.1038/s41467-025-64928-4). **Nat Commun** 16, 9815 (2025). 
 
-Wen, B., Paez, J., Hsu, C. et al. [Carafe2 enables high quality *in silico* spectral library generation for timsTOF data-independent acquisition proteomics](). **bioRxiv** 2026. (Coming soon)
+Wen, B., Paez, J., Hsu, C. et al. [Carafe2 enables high quality *in silico* spectral library generation for timsTOF data-independent acquisition proteomics](https://doi.org/10.64898/2026.03.27.714846). **bioRxiv** 2026.
 
 ## Installation
 
@@ -369,4 +369,4 @@ Below is an example screenshot of the Timsviewer visualization of a timsTOF DIA 
 
 Wen, B., Hsu, C., Shteynberg, D. et al. [Carafe enables high quality *in silico* spectral library generation for data-independent acquisition proteomics](https://doi.org/10.1038/s41467-025-64928-4). **Nat Commun** 16, 9815 (2025). 
 
-Wen, B., Paez, J., Hsu, C. et al. [Carafe2 enables high quality *in silico* spectral library generation for timsTOF data-independent acquisition proteomics](). **bioRxiv** 2026.
+Wen, B., Paez, J., Hsu, C. et al. [Carafe2 enables high quality *in silico* spectral library generation for timsTOF data-independent acquisition proteomics](https://doi.org/10.64898/2026.03.27.714846). **bioRxiv** 2026.
