@@ -7,12 +7,14 @@ class Label {
     public boolean fully_detected = false;
 
     /**
-     * A flag to indicate if the peptide a in the pair is detected or not
+     * A flag to indicate if the peptide a in the pair is detected or not.
+     * It must be false in default
      */
     public boolean a_detected = false;
 
     /**
-     * A flag to indicate if the peptide b in the pair is detected or not
+     * A flag to indicate if the peptide b in the pair is detected or not.
+     * It must be false in default
      */
     public boolean b_detected = false;
 }

@@ -651,7 +651,8 @@ class  RankLabelGenerator{
                                          localPairs.get(pair).b_detected = true;
                                      }else{
                                          localPairs.get(pair).a_detected = true;
-                                         localPairs.get(pair).b_detected = false;
+                                         // we don't need this since it is false in default
+                                         // localPairs.get(pair).b_detected = false;
                                      }
                                  }else if(intensity_a < intensity_b){
                                      localPairs.get(pair).n_neg++;
@@ -660,7 +661,8 @@ class  RankLabelGenerator{
                                          localPairs.get(pair).a_detected = true;
                                          localPairs.get(pair).b_detected = true;
                                      }else{
-                                         localPairs.get(pair).a_detected = false;
+                                         // we don't need this since it is false in default
+                                         // localPairs.get(pair).a_detected = false;
                                          localPairs.get(pair).b_detected = true;
                                      }
                                  }
@@ -681,7 +683,8 @@ class  RankLabelGenerator{
                                          localPairs.get(pair).b_detected = true;
                                      }else{
                                          localPairs.get(pair).a_detected = true;
-                                         localPairs.get(pair).b_detected = false;
+                                         // we don't need this since it is false in default
+                                         // localPairs.get(pair).b_detected = false;
                                      }
                                  }else if(intensity_a < intensity_b){
                                      localPairs.get(pair).n_neg++;
@@ -690,7 +693,8 @@ class  RankLabelGenerator{
                                          localPairs.get(pair).a_detected = true;
                                          localPairs.get(pair).b_detected = true;
                                      }else{
-                                         localPairs.get(pair).a_detected = false;
+                                         // we don't need this since it is false in default
+                                         // localPairs.get(pair).a_detected = false;
                                          localPairs.get(pair).b_detected = true;
                                      }
                                  }
