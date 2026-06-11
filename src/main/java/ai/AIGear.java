@@ -986,6 +986,9 @@ public class AIGear {
         if (aiGear.device.toLowerCase().contains("gpu")) {
             if (!CudaUtils.hasCuda()) {
                 GPUTools tools = new GPUTools();
+                if (aiGear.python_bin != null && !aiGear.python_bin.isBlank()) {
+                    tools.py_path = aiGear.python_bin;
+                }
                 GPUTools.TorchGpuStatus st = tools.checkTorchGpu();
                 if (st.gpuAvailable) {
                     System.out.println("GPU is enabled!");
@@ -1884,6 +1887,9 @@ public class AIGear {
                 Cloger.getInstance().logger.info(mem.toString());
             } else {
                 GPUTools tools = new GPUTools();
+                if (this.python_bin != null && !this.python_bin.isBlank()) {
+                    tools.py_path = this.python_bin;
+                }
                 GPUTools.TorchGpuStatus st = tools.checkTorchGpu();
                 if (st.gpuAvailable) {
                     Cloger.getInstance().logger.info("GPU memory: " + st.gpu_memory);
@@ -2029,6 +2035,9 @@ public class AIGear {
             return 1.0 * mem.getMax() / 1024 / 1024 / 1024;
         } else {
             GPUTools tools = new GPUTools();
+            if (this.python_bin != null && !this.python_bin.isBlank()) {
+                tools.py_path = this.python_bin;
+            }
             GPUTools.TorchGpuStatus st = tools.checkTorchGpu();
             return 1.0 * st.gpu_memory / 1024 / 1024 / 1024;
         }
