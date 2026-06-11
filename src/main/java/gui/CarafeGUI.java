@@ -290,15 +290,26 @@ public class CarafeGUI extends JFrame {
         return c != null ? c : fallback;
     }
 
+    /** Matches ANSI/VT escape sequences (e.g. log4j2 %highlight color codes) so they can be stripped. */
+    private static final java.util.regex.Pattern ANSI_ESCAPE = java.util.regex.Pattern.compile("\\e\\[[0-9;]*[A-Za-z]");
+
     private synchronized void logToConsole(String message) {
+        // log4j2's %highlight emits ANSI color codes when stdout is piped (as the GUI captures the
+        // DIA-NN/Carafe subprocess output). The JTextArea and log file would otherwise show them as
+        // literal characters, so strip them here. Colors are preserved for anyone running the CLI
+        // directly in a terminal (that path does not go through this method).
+        if (message != null && message.indexOf(27) >= 0) {
+            message = ANSI_ESCAPE.matcher(message).replaceAll("");
+        }
+        final String msg = message;
         SwingUtilities.invokeLater(() -> {
-            consoleArea.append(message);
+            consoleArea.append(msg);
             consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
         });
 
         if (logWriter != null) {
             try {
-                logWriter.write(message);
+                logWriter.write(msg);
                 logWriter.flush();
             } catch (IOException e) {
                 e.printStackTrace();

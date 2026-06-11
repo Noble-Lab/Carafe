@@ -17,6 +17,9 @@
         <Logger name="software.amazon.awssdk.request" level="INFO" />
         <Logger name="org.apache.http.wire" level="INFO" />
         <Logger name="org.apache.parquet.hadoop.InternalParquetRecordReader" level="WARN" additivity="false" />
+        <!-- DIA-NN writes a trailing empty row group; ParquetFileReader logs a benign WARN when it
+             skips it. Hide it (keep ERROR so real read errors still surface). -->
+        <Logger name="org.apache.parquet.hadoop.ParquetFileReader" level="ERROR" additivity="false" />
         <Logger name="uk.ac.ebi.pride.utilities.pridemod.io.unimod.xml.unmarshaller.UnimodUnmarshallerFactory" level="WARN" additivity="false" />
     </Loggers>
 

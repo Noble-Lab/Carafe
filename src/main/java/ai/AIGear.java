@@ -40,7 +40,6 @@ import main.java.xic.SGFilter;
 import main.java.xic.SGFilter3points;
 import main.java.xic.SGFilter5points;
 import main.java.xic.SGFilter7points;
-import net.tlabs.tablesaw.parquet.TablesawParquetReader;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.reflect.ReflectData;
@@ -66,7 +65,6 @@ import tech.tablesaw.aggregate.AggregateFunctions;
 import tech.tablesaw.api.DoubleColumn;
 import tech.tablesaw.api.IntColumn;
 import tech.tablesaw.api.Table;
-import tech.tablesaw.io.Source;
 import tech.tablesaw.io.csv.CsvReadOptions;
 import tech.tablesaw.io.csv.CsvWriteOptions;
 
@@ -3074,7 +3072,7 @@ public class AIGear {
             }
         }else if(diann_report_file.endsWith(".parquet")){
             try {
-                Table reportTable = new TablesawParquetReader().read(new Source(new File(diann_report_file)));
+                Table reportTable = FileIO.readParquetToTable(diann_report_file);
                 if (reportTable.columnNames().contains("IM")) {
                     for (int i = 0; i < reportTable.rowCount(); i++) {
                         Object imObject = reportTable.column("IM").get(i);
@@ -11618,7 +11616,7 @@ public class AIGear {
         if (psm_file.endsWith(".parquet")) {
             System.out.println("The input file format is DIA-NN parquet format:" + psm_file);
             // There is no File.Name column in the parquet file
-            psmTable = new TablesawParquetReader().read(new Source(new File(psm_file)));
+            psmTable = FileIO.readParquetToTable(psm_file);
             // if "File.Name" column is not in the parquet file, then we need to use "Run"
             if (!psmTable.columnNames().contains(PSMConfig.ms_file_column_name)) {
                 if (psmTable.columnNames().contains("Run")) {

@@ -23,6 +23,14 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Force a newer classgraph (pulled transitively by tablesaw-core). 4.8.179+ disables
+                 jar memory-mapping on JDK 24+, avoiding the deprecated sun.misc.Unsafe::invokeCleaner
+                 call and its runtime warning. -->
+            <dependency>
+                <groupId>io.github.classgraph</groupId>
+                <artifactId>classgraph</artifactId>
+                <version>4.8.184</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -59,25 +67,25 @@
     <dependency>
         <groupId>com.alibaba.fastjson2</groupId>
         <artifactId>fastjson2</artifactId>
-        <version>2.0.60</version>
+        <version>2.0.62</version>
     </dependency>
 
 
     <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-api</artifactId>
-        <version>2.25.4</version>
+        <version>2.26.0</version>
     </dependency>
     <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-core</artifactId>
-        <version>2.25.4</version>
+        <version>2.26.0</version>
     </dependency>
     <!-- This is important for aws sdk logging -->
     <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-slf4j-impl</artifactId>
-        <version>2.25.4</version>
+        <version>2.26.0</version>
     </dependency>
 
     <dependency>
@@ -344,6 +352,14 @@
                         <addClasspath>true</addClasspath>
                         <classpathPrefix>lib</classpathPrefix>
                     </manifest>
+                    <manifestEntries>
+                        <!-- JDK 24+ (JEP 472): honored only for `java -jar carafe.jar` launches.
+                             Lets CLI users avoid the zstd-jni System.load native-access warning
+                             without passing the enable-native-access flag. The packaged .exe/.msi
+                             launches via classpath (not -jar), so it relies on the jpackage
+                             java-options flag in the generate_installer_*.bat scripts instead. -->
+                        <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+                    </manifestEntries>
                 </archive>
                 <outputDirectory>${project.build.directory}/${project.artifactId}-${project.version}
                 </outputDirectory>

@@ -2,16 +2,21 @@ package main.java.ai;
 
 import org.apache.avro.Schema;
 import org.apache.avro.reflect.ReflectData;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.avro.AvroParquetWriter;
+import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.example.data.Group;
+import org.apache.parquet.example.data.simple.convert.GroupRecordConverter;
+import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetFileWriter;
-import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.hadoop.ParquetWriter;
-import org.apache.parquet.hadoop.example.GroupReadSupport;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
+import org.apache.parquet.io.ColumnIOFactory;
+import org.apache.parquet.io.LocalInputFile;
 import org.apache.parquet.io.LocalOutputFile;
+import org.apache.parquet.io.MessageColumnIO;
 import org.apache.parquet.io.OutputFile;
+import org.apache.parquet.io.RecordReader;
+import org.apache.parquet.schema.MessageType;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -164,23 +169,17 @@ public class LibOutputWorker implements Runnable{
         }
         // MS2 information
         String line;
-        Configuration conf = new Configuration();
-        // Set the configuration to use built-in Java classes
-        conf.set("fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem");
-        conf.set("fs.hdfs.impl", "org.apache.hadoop.hdfs.DistributedFileSystem");
-        org.apache.hadoop.fs.Path path = new org.apache.hadoop.fs.Path(ms2_file);
-        ParquetReader<Group> reader = null;
-        try {
-            reader = ParquetReader.builder(new GroupReadSupport(), path)
-                    .withConf(conf)
-                    .build();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        // Read the records one row at a time
-        Group group;
-        try {
-            while ((group = reader.read()) != null) {
+        // Read MS2 records using LocalInputFile (Hadoop-free) so this works on Java 24+,
+        // where Hadoop's UserGroupInformation/Subject.getSubject() throws UnsupportedOperationException.
+        try (ParquetFileReader pqReader = ParquetFileReader.open(new LocalInputFile(Paths.get(ms2_file)))) {
+            MessageType pqSchema = pqReader.getFooter().getFileMetaData().getSchema();
+            MessageColumnIO columnIO = new ColumnIOFactory().getColumnIO(pqSchema);
+            PageReadStore pages;
+            while ((pages = pqReader.readNextRowGroup()) != null) {
+                long pqRowCount = pages.getRowCount();
+                RecordReader<Group> recordReader = columnIO.getRecordReader(pages, new GroupRecordConverter(pqSchema));
+                for (long pqRow = 0; pqRow < pqRowCount; pqRow++) {
+                Group group = recordReader.read();
                 // get column "pepID"
                 pepID = group.getInteger("pepID",0);
                 frag_start_idx = (int)group.getLong("frag_start_idx",0);
@@ -251,12 +250,8 @@ public class LibOutputWorker implements Runnable{
                         pWriter.write(libFragment);
                     }
                 }
+                }
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        try {
-            reader.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

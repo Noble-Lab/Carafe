@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.math.BigInteger;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,9 +29,8 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.hadoop.ParquetFileReader;
-import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.LocalInputFile;
 import org.apache.parquet.schema.MessageType;
 
 import com.compomics.util.experiment.biology.enzymes.Enzyme;
@@ -41,8 +41,7 @@ import net.sf.jfasta.FASTAElement;
 import net.sf.jfasta.FASTAFileReader;
 import net.sf.jfasta.impl.FASTAElementIterator;
 import net.sf.jfasta.impl.FASTAFileReaderImpl;
-import net.tlabs.tablesaw.parquet.TablesawParquetReadOptions;
-import net.tlabs.tablesaw.parquet.TablesawParquetReader;
+import main.java.ai.FileIO;
 import tech.tablesaw.api.DoubleColumn;
 import tech.tablesaw.api.LongColumn;
 import tech.tablesaw.api.StringColumn;
@@ -367,8 +366,8 @@ class  RankLabelGenerator{
              double intensity;
              int n_removed  = 0;
              // DIA-NN parquet file
-             Table psmTable = new TablesawParquetReader().read(TablesawParquetReadOptions.builder(input_file)
-                             .withOnlyTheseColumns(PSMConfig.ms_file_column_name,
+             Table psmTable = FileIO.readParquetToTable(input_file,
+                                     PSMConfig.ms_file_column_name,
                                      PSMConfig.stripped_peptide_sequence_column_name,
                                      PSMConfig.peptide_modification_column_name,
                                      PSMConfig.precursor_charge_column_name,
@@ -378,8 +377,7 @@ class  RankLabelGenerator{
                                      PSMConfig.lib_pg_column_name,
                                      PSMConfig.global_qvalue_column_name,
                                      PSMConfig.lib_qvalue_column_name,
-                                     PSMConfig.qvalue_column_name)
-                             .build());
+                                     PSMConfig.qvalue_column_name);
              // Get columns directly for faster access
              int rowCount = psmTable.rowCount();
              DoubleColumn globalPgColumn = (DoubleColumn) psmTable.column(PSMConfig.global_pg_column_name);
@@ -738,8 +736,7 @@ class  RankLabelGenerator{
         HashMap<String, Integer> hIndex = new HashMap<>();
          // DIA-NN parquet file
          if(file.endsWith(".parquet")){
-             try (ParquetFileReader reader = ParquetFileReader.open(HadoopInputFile.fromPath(
-                     new org.apache.hadoop.fs.Path(file), new Configuration()))) {
+             try (ParquetFileReader reader = ParquetFileReader.open(new LocalInputFile(Paths.get(file)))) {
                  MessageType schema = reader.getFooter().getFileMetaData().getSchema();
                  for (int i = 0; i < schema.getFieldCount(); i++) {
                      hIndex.put(schema.getFieldName(i), i);

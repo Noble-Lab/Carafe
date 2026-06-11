@@ -7,12 +7,26 @@ import org.apache.avro.SchemaBuilder;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.avro.AvroParquetReader;
+import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.example.data.Group;
+import org.apache.parquet.example.data.simple.convert.GroupRecordConverter;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.hadoop.api.ReadSupport;
+import org.apache.parquet.io.ColumnIOFactory;
 import org.apache.parquet.io.LocalInputFile;
+import org.apache.parquet.io.MessageColumnIO;
+import org.apache.parquet.io.RecordReader;
 import org.apache.parquet.schema.MessageType;
+import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
+import tech.tablesaw.api.BooleanColumn;
+import tech.tablesaw.api.DoubleColumn;
+import tech.tablesaw.api.IntColumn;
+import tech.tablesaw.api.LongColumn;
+import tech.tablesaw.api.StringColumn;
+import tech.tablesaw.api.Table;
+import tech.tablesaw.columns.Column;
 import umich.ms.datatypes.LCMSDataSubset;
 import umich.ms.datatypes.lcmsrun.LCMSRunInfo;
 import umich.ms.datatypes.scan.IScan;
@@ -181,6 +195,91 @@ public class FileIO {
             cols[i] = col_names.get(i);
         }
         return cols;
+    }
+
+    /**
+     * Read a parquet file into a tablesaw {@link Table} WITHOUT Hadoop's FileSystem
+     * (uses {@link LocalInputFile} + the low-level Group reader). This works on Java 24+,
+     * where Hadoop's {@code UserGroupInformation.getCurrentUser()} -> {@code Subject.getSubject()}
+     * throws {@code UnsupportedOperationException}. It mirrors tablesaw-parquet's default
+     * column-type mapping (validated against a DIA-NN report.parquet: same dimensions, column
+     * types and values) and handles DIA-NN's dotted column names (e.g. "Run.Index") that the
+     * Avro reader rejects.
+     *
+     * @param file        parquet file path
+     * @param onlyColumns optional column projection; if empty/null, all columns are read
+     */
+    public static Table readParquetToTable(String file, String... onlyColumns) {
+        Set<String> wanted = (onlyColumns != null && onlyColumns.length > 0)
+                ? new LinkedHashSet<>(Arrays.asList(onlyColumns)) : null;
+        Table table = Table.create(new File(file).getName());
+        try (ParquetFileReader reader = ParquetFileReader.open(new LocalInputFile(Paths.get(file)))) {
+            MessageType schema = reader.getFooter().getFileMetaData().getSchema();
+            int nCols = schema.getFieldCount();
+            List<Integer> idxs = new ArrayList<>();
+            List<Column<?>> cols = new ArrayList<>();
+            List<PrimitiveType.PrimitiveTypeName> tps = new ArrayList<>();
+            for (int c = 0; c < nCols; c++) {
+                Type f = schema.getType(c);
+                String name = f.getName();
+                if (wanted != null && !wanted.contains(name)) {
+                    continue;
+                }
+                PrimitiveType.PrimitiveTypeName tn = f.isPrimitive() ? f.asPrimitiveType().getPrimitiveTypeName() : null;
+                cols.add(newTablesawColumn(name, tn));
+                idxs.add(c);
+                tps.add(tn);
+            }
+            MessageColumnIO io = new ColumnIOFactory().getColumnIO(schema);
+            PageReadStore pages;
+            while ((pages = reader.readNextRowGroup()) != null) {
+                long rows = pages.getRowCount();
+                RecordReader<Group> rr = io.getRecordReader(pages, new GroupRecordConverter(schema));
+                for (long r = 0; r < rows; r++) {
+                    Group g = rr.read();
+                    for (int k = 0; k < idxs.size(); k++) {
+                        appendParquetValue(cols.get(k), tps.get(k), g, idxs.get(k));
+                    }
+                }
+            }
+            table.addColumns(cols.toArray(new Column[0]));
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read parquet file: " + file, e);
+        }
+        return table;
+    }
+
+    private static Column<?> newTablesawColumn(String name, PrimitiveType.PrimitiveTypeName tn) {
+        if (tn == null) {
+            return StringColumn.create(name);
+        }
+        switch (tn) {
+            case BOOLEAN: return BooleanColumn.create(name);
+            case INT32:   return IntColumn.create(name);
+            case INT64:   return LongColumn.create(name);
+            case FLOAT:   // tablesaw-parquet default maps FLOAT -> DoubleColumn
+            case DOUBLE:  return DoubleColumn.create(name);
+            default:      return StringColumn.create(name); // BINARY / FIXED_LEN_BYTE_ARRAY / INT96
+        }
+    }
+
+    private static void appendParquetValue(Column<?> col, PrimitiveType.PrimitiveTypeName tn, Group g, int c) {
+        if (g.getFieldRepetitionCount(c) == 0) {
+            col.appendMissing();
+            return;
+        }
+        if (tn == null) {
+            ((StringColumn) col).append(g.getValueToString(c, 0));
+            return;
+        }
+        switch (tn) {
+            case BOOLEAN: ((BooleanColumn) col).append(g.getBoolean(c, 0)); break;
+            case INT32:   ((IntColumn) col).append(g.getInteger(c, 0)); break;
+            case INT64:   ((LongColumn) col).append(g.getLong(c, 0)); break;
+            case FLOAT:   ((DoubleColumn) col).append((double) g.getFloat(c, 0)); break;
+            case DOUBLE:  ((DoubleColumn) col).append(g.getDouble(c, 0)); break;
+            default:      ((StringColumn) col).append(g.getValueToString(c, 0)); break;
+        }
     }
 
     /**
