@@ -20,7 +20,7 @@ The Skyline version supporting Carafe2 is available on the Skyline website: [htt
 
 ### Using Carafe2 through the command line 
 
-Carafe2 is written in Java and Python and can run on Windows, macOS, and Linux. To run Carafe2 from the command line, Java and Python must be installed. If Java is not installed, please install Java version 21.0.2 or later from https://jdk.java.net/archive/. After Java is installed, Carafe2 can be downloaded from https://github.com/Noble-Lab/Carafe/releases. All Python dependencies can be installed using the following command:
+Carafe2 is written in Java and Python and can run on Windows, macOS, and Linux. To run Carafe2 from the command line, Java and Python must be installed. If Java is not installed, please install Java version 25.0.2 or later from https://jdk.java.net/archive/. After Java is installed, Carafe2 can be downloaded from https://github.com/Noble-Lab/Carafe/releases. All Python dependencies can be installed using the following command:
 
 ```shell
 # using the installed Java 
