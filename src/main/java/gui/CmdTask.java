@@ -15,6 +15,17 @@ public class CmdTask {
     public List<String> out_files = new ArrayList<>();
     public List<String> out_files_description = new ArrayList<>();
 
+    /**
+     * Primary output file used to decide whether this step can be skipped (reused).
+     * When "Reuse existing results" is enabled and this file already exists, the step
+     * is skipped instead of re-running. Null means the step is never auto-skipped.
+     */
+    public String skip_check_file = null;
+    /**
+     * Set to true when the step was skipped because its result was already present.
+     */
+    public boolean skipped = false;
+
     public CmdTask(String cmd, String task_name, String task_description) {
         this.cmd = cmd;
         this.task_name = task_name;

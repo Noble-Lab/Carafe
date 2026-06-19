@@ -27,6 +27,10 @@ import main.java.db.DBGear;
 import main.java.input.CModification;
 import org.apache.commons.lang3.StringUtils;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONWriter;
+
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
@@ -51,6 +55,17 @@ public class CarafeGUI extends JFrame {
     private static final Color PRIMARY_DARK = new Color(31, 97, 141);
     private static final Color PRIMARY_LIGHT = new Color(52, 152, 219);
     private static final Color ACCENT_COLOR = new Color(46, 204, 113);
+
+    /**
+     * Global setting: the label color used to flag a parameter whose value differs from its
+     * startup default. Change this single line to restyle every "modified" label. Orange was
+     * chosen because it stays readable on both the light and dark themes. (Kept non-final so a
+     * future GUI control could change it at runtime.)
+     */
+    private static Color MODIFIED_LABEL_COLOR = new Color(0xE6, 0x7E, 0x22);
+
+    /** Debounce after the last keystroke before re-evaluating a typed field's label color. */
+    private static final int SETTING_INDICATOR_DELAY_MS = 2000;
 
     // Layout spacing constants
     private static final int ROW_SPACING = 4; // Vertical spacing between rows
@@ -142,6 +157,7 @@ public class CarafeGUI extends JFrame {
     private JProgressBar progressBar;
     private JButton runButton;
     private JButton stopButton;
+    private JCheckBox reuseResultsCheckbox;
     private JTabbedPane tabbedPane;
     private JLabel statusLabel;
     private JScrollPane consoleScrollPane;
@@ -343,6 +359,9 @@ public class CarafeGUI extends JFrame {
 
         // Footer with run button
         add(createFooter(), BorderLayout.SOUTH);
+
+        // Register the modified-from-default label indicators now that all inputs exist.
+        initSettingChangeIndicators();
 
         // Ensure scroll pane starts at top
         SwingUtilities.invokeLater(() -> {
@@ -1120,6 +1139,38 @@ public class CarafeGUI extends JFrame {
                 "Additional command line options for Carafe.",
                 carafeAdditionalOptionsField = createTextField("Carafe additional options"),
                 null);
+
+        // Run options + settings load/save, placed just above the Workflow Guide.
+        // Use the same row height (COMPONENT_HEIGHT), button style (styleButton) and insets
+        // (DEFAULT_INSETS) as the input rows above so this row matches them.
+        JPanel workflowOptionsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        workflowOptionsPanel.setOpaque(false);
+
+        reuseResultsCheckbox = new JCheckBox("Reuse existing results (skip completed steps)");
+        reuseResultsCheckbox.setToolTipText("<html>When enabled, a pipeline step is skipped whenever its expected output file<br>"
+                + "already exists in the output directory — letting you resume an interrupted run<br>"
+                + "without redoing finished steps such as the DIA-NN search or model training.<br>"
+                + "<br>"
+                + "Reuse is based only on whether the output file exists; it does not detect<br>"
+                + "parameter changes. To force a step to re-run, delete its output first.</html>");
+        reuseResultsCheckbox.setPreferredSize(new Dimension(reuseResultsCheckbox.getPreferredSize().width, COMPONENT_HEIGHT));
+        workflowOptionsPanel.add(reuseResultsCheckbox);
+
+        // Let the button size naturally to its text (like the Browse/Folder buttons); the
+        // checkbox above is pinned to COMPONENT_HEIGHT, so it drives this row's height.
+        JButton loadSettingsButton = new JButton("Load Settings");
+        styleButton(loadSettingsButton);
+        loadSettingsButton.setToolTipText("Load parameter settings from a JSON file");
+        loadSettingsButton.addActionListener(e -> loadSettingsDialog());
+        workflowOptionsPanel.add(loadSettingsButton);
+
+        GridBagConstraints gbcOptions = new GridBagConstraints();
+        gbcOptions.gridx = 0;
+        gbcOptions.gridy = gridy++;
+        gbcOptions.gridwidth = 3;
+        gbcOptions.fill = GridBagConstraints.HORIZONTAL;
+        gbcOptions.insets = DEFAULT_INSETS;
+        inputFieldsPanel.add(workflowOptionsPanel, gbcOptions);
 
         JPanel infoWrapper = new JPanel(new BorderLayout());
         infoWrapper.add(createInfoCard(
@@ -4224,7 +4275,11 @@ public class CarafeGUI extends JFrame {
                         String baseName = rawName.lastIndexOf('.') > 0
                                 ? rawName.substring(0, rawName.lastIndexOf('.'))
                                 : rawName;
-                        finalMsFiles.add(subDir + File.separator + baseName + ".mzML");
+                        String mzML = subDir + File.separator + baseName + ".mzML";
+                        finalMsFiles.add(mzML);
+                        if (conversionTask.skip_check_file == null) {
+                            conversionTask.skip_check_file = mzML;
+                        }
                     }
                 }
 
@@ -4269,6 +4324,9 @@ public class CarafeGUI extends JFrame {
                     diann_report_file = diann_train_dir + File.separator + "report.tsv";
                 }
                 // System.out.println("DIANN report file: " + diann_report_file);
+                if (diannTask != null) {
+                    diannTask.skip_check_file = diann_report_file;
+                }
 
                 if (tabbedPane != null) {
                     SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
@@ -4292,6 +4350,9 @@ public class CarafeGUI extends JFrame {
                             CmdTask carafe_task = buildCarafeCommand(finalEffectiveMsFile, finalIsTimsTOF);
                             if (carafe_task != null) {
                                 carafe_task.task_description = "Run Carafe to generate fine-tuned library";
+                                if (!carafe_task.out_files.isEmpty()) {
+                                    carafe_task.skip_check_file = carafe_task.out_files.getFirst();
+                                }
                             }
                             commandContainer[0] = carafe_task;
                         });
@@ -4568,6 +4629,11 @@ public class CarafeGUI extends JFrame {
                     }
                 }
 
+                // If RAW conversion is scheduled, the first converted mzML marks its completion.
+                if (conversionTask != null && !finalTrainMzMLFiles.isEmpty()) {
+                    conversionTask.skip_check_file = finalTrainMzMLFiles.getFirst();
+                }
+
                 CmdTask diannTask;
                 if (!finalTrainMzMLFiles.isEmpty()) {
                     diannTask = buildDIANNCommand(finalTrainMzMLFiles, "", trainDb, diann_train_dir);
@@ -4587,6 +4653,7 @@ public class CarafeGUI extends JFrame {
                     diannTask.out_dir = diann_train_dir;
                     diannTask.out_files.add(diann_report_file);
                     diannTask.out_files_description.add("DIA-NN report");
+                    diannTask.skip_check_file = diann_report_file;
                 }
 
                 String diann_project_dir = outDir + File.separator + "diann_project";
@@ -4652,6 +4719,9 @@ public class CarafeGUI extends JFrame {
                             CmdTask carafe_task = buildCarafeCommand(finalCarafeMsInput, finalIsTimsTOFData);
                             if (carafe_task != null) {
                                 carafe_task.task_description = "Run Carafe to generate fine-tuned library";
+                                if (!carafe_task.out_files.isEmpty()) {
+                                    carafe_task.skip_check_file = carafe_task.out_files.getFirst();
+                                }
                             }
                             commands[0] = carafe_task;
 
@@ -4667,6 +4737,8 @@ public class CarafeGUI extends JFrame {
 
                             if (commands[1] != null) {
                                 commands[1].task_description = "DIA-NN search for project data using fine-tuned library";
+                                commands[1].skip_check_file = diann_project_dir + File.separator + "report"
+                                        + (isDiannV2 ? ".parquet" : ".tsv");
                             }
 
                             // Optional benchmark step: DIA-NN library-free search
@@ -4681,6 +4753,8 @@ public class CarafeGUI extends JFrame {
                                         diann_libfree_dir);
                                 if (commands[2] != null) {
                                     commands[2].task_description = "DIA-NN library-free search for benchmark comparison";
+                                    commands[2].skip_check_file = diann_libfree_dir + File.separator + "report"
+                                            + (isDiannV2 ? ".parquet" : ".tsv");
                                 }
                             }
                         });
@@ -4702,6 +4776,32 @@ public class CarafeGUI extends JFrame {
         CmdTask[] getNextCommands();
     }
 
+    /**
+     * If "Reuse existing results" is enabled and the command's expected output already
+     * exists, record the step as skipped and return true. Otherwise return false, meaning
+     * the caller should run the command normally.
+     */
+    private boolean skipIfResultPresent(CmdTask command, boolean reuseResults, int stepIndex) {
+        if (!reuseResults || command == null || command.skip_check_file == null
+                || !new File(command.skip_check_file).exists()) {
+            return false;
+        }
+        command.skipped = true;
+        command.time_used = 0.0;
+        String now = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+        command.time_start = now;
+        command.time_end = now;
+        logToConsole("\n========================================\n");
+        logToConsole("[SKIP] " + command.task_description + "\n");
+        logToConsole("Reusing existing result: " + command.skip_check_file + "\n");
+        logToConsole("========================================\n\n");
+        String key = String.format("%02d. %s - %s (skipped)", stepIndex, command.task_name,
+                command.task_description);
+        timeUsageMap.put(key, 0.0);
+        tasks.add(command);
+        return true;
+    }
+
     private void executeChainedCommands(CmdTask[] initialCommands, NextCommandsSupplier nextCommandsSupplier) {
         isRunning = true;
         runButton.setEnabled(false);
@@ -4712,6 +4812,8 @@ public class CarafeGUI extends JFrame {
         timeUsageMap.clear();
         tasks.clear();
 
+        final boolean reuseResults = reuseResultsCheckbox != null && reuseResultsCheckbox.isSelected();
+
         Object selectedPython = pythonPathCombo.getSelectedItem();
         String pythonPath = selectedPython != null ? selectedPython.toString().trim() : "";
         if (!pythonPath.isEmpty()) {
@@ -4721,6 +4823,7 @@ public class CarafeGUI extends JFrame {
         // Automatically save screenshots of parameter panels at the start
         // Ensure this runs on EDT before background thread starts
         saveParameterScreenshots();
+        autoSaveRunSettings();
 
         executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
@@ -4729,6 +4832,11 @@ public class CarafeGUI extends JFrame {
                 for (CmdTask command : initialCommands) {
                     if (!isRunning)
                         return;
+
+                    if (skipIfResultPresent(command, reuseResults, stepIndex)) {
+                        stepIndex++;
+                        continue;
+                    }
 
                     updateProgressBarForCommand(command.task_description);
 
@@ -4763,6 +4871,11 @@ public class CarafeGUI extends JFrame {
                     for (CmdTask command : nextCommands) {
                         if (!isRunning)
                             return;
+
+                        if (skipIfResultPresent(command, reuseResults, stepIndex)) {
+                            stepIndex++;
+                            continue;
+                        }
 
                         updateProgressBarForCommand(command.task_description);
 
@@ -4803,7 +4916,8 @@ public class CarafeGUI extends JFrame {
                     }
                     int taskIndex = 1;
                     for (CmdTask task : tasks) {
-                        logToConsole("\n[" + String.format("%02d", taskIndex++) + "] " + task.task_name + " - " + task.task_description + "\n");
+                        String skippedNote = task.skipped ? " (skipped — reused existing result)" : "";
+                        logToConsole("\n[" + String.format("%02d", taskIndex++) + "] " + task.task_name + " - " + task.task_description + skippedNote + "\n");
                         // logToConsole("  Command: " + task.cmd + "\n");
                         logToConsole("  Output directory: " + task.out_dir + "\n");
                         if(!task.out_files.isEmpty()){
@@ -5635,6 +5749,7 @@ public class CarafeGUI extends JFrame {
         tasks.clear();
 
         saveParameterScreenshots();
+        autoSaveRunSettings();
 
         if (tabbedPane != null) {
             SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
@@ -6466,6 +6581,429 @@ public class CarafeGUI extends JFrame {
                 ex.printStackTrace();
             }
         }).start();
+    }
+
+    // =====================================================================================
+    // Parameter settings save/load (JSON). Self-contained region.
+    //
+    // The loader is intentionally tolerant: unknown keys are ignored and missing keys keep
+    // their current/default values, so older or newer settings files still load cleanly.
+    // =====================================================================================
+
+    /** A single saveable parameter: a stable key plus get/set accessors for its component. */
+    private record Setting(String key, java.util.function.Supplier<Object> getter,
+            java.util.function.Consumer<Object> setter) {
+    }
+
+    private Setting textSetting(String key, JTextField f) {
+        return new Setting(key, f::getText, v -> f.setText(v == null ? "" : String.valueOf(v)));
+    }
+
+    private Setting comboSetting(String key, JComboBox<String> c) {
+        return new Setting(key, c::getSelectedItem, v -> {
+            if (v != null) {
+                c.setSelectedItem(String.valueOf(v));
+            }
+        });
+    }
+
+    private Setting spinnerSetting(String key, JSpinner s) {
+        return new Setting(key, s::getValue, v -> applySpinnerValue(s, v));
+    }
+
+    private Setting checkSetting(String key, JCheckBox c) {
+        return new Setting(key, c::isSelected, v -> c.setSelected(asBool(v)));
+    }
+
+    private void applySpinnerValue(JSpinner sp, Object v) {
+        if (v == null) {
+            return;
+        }
+        Object cur = sp.getValue();
+        Number n = (v instanceof Number num) ? num : new java.math.BigDecimal(String.valueOf(v).trim());
+        if (cur instanceof Integer) {
+            sp.setValue(n.intValue());
+        } else if (cur instanceof Long) {
+            sp.setValue(n.longValue());
+        } else if (cur instanceof Float) {
+            sp.setValue(n.floatValue());
+        } else if (cur instanceof Double) {
+            sp.setValue(n.doubleValue());
+        } else {
+            sp.setValue(n);
+        }
+    }
+
+    private boolean asBool(Object v) {
+        if (v instanceof Boolean b) {
+            return b;
+        }
+        return Boolean.parseBoolean(String.valueOf(v).trim());
+    }
+
+    /**
+     * The complete list of saveable parameters.
+     *
+     * Note: executable paths (python/DIA-NN/MSConvert) are intentionally excluded — they are
+     * machine-specific and already persisted via java Preferences.
+     */
+    private java.util.List<Setting> settingsRegistry() {
+        java.util.List<Setting> reg = new java.util.ArrayList<>();
+
+        // --- Workflow tab (selection + inputs) ---
+        reg.add(new Setting("workflow", workflowCombo::getSelectedIndex,
+                v -> workflowCombo.setSelectedIndex(((Number) v).intValue())));
+        reg.add(textSetting("diann_report_file", diannReportFileField));
+        reg.add(textSetting("train_ms_file", trainMsFileField));
+        reg.add(textSetting("train_db_file", trainDbFileField));
+        reg.add(textSetting("project_ms_file", projectMsFileField));
+        reg.add(textSetting("library_db_file", libraryDbFileField));
+        reg.add(textSetting("output_dir", outputDirField));
+        reg.add(textSetting("carafe_additional_options", carafeAdditionalOptionsField));
+        reg.add(textSetting("diann_additional_options", diannAdditionalOptionsField));
+        reg.add(new Setting("train_ms_files", () -> new java.util.ArrayList<>(trainMsFiles),
+                v -> setStringList(trainMsFiles, v)));
+        reg.add(new Setting("project_ms_files", () -> new java.util.ArrayList<>(projectMsFiles),
+                v -> setStringList(projectMsFiles, v)));
+
+        // --- Training Data Generation tab ---
+        reg.add(spinnerSetting("fdr", fdrSpinner));
+        reg.add(spinnerSetting("ptm_site_prob", ptmSiteProbSpinner));
+        reg.add(spinnerSetting("ptm_site_qvalue", ptmSiteQvalueSpinner));
+        reg.add(textSetting("frag_tol", fragTolField));
+        reg.add(comboSetting("frag_tol_unit", fragTolUnitCombo));
+        reg.add(checkSetting("refine_boundary", refineBoundaryCheckbox));
+        reg.add(textSetting("rt_peak_window", rtPeakWindowField));
+        reg.add(spinnerSetting("xic_cor", xicCorSpinner));
+        reg.add(spinnerSetting("min_frag_mz", minFragMzSpinner));
+        reg.add(spinnerSetting("n_ion_min", nIonMinSpinner));
+        reg.add(spinnerSetting("c_ion_min", cIonMinSpinner));
+
+        // --- Model Training tab ---
+        reg.add(comboSetting("mode", modeCombo));
+        reg.add(textSetting("nce", nceField));
+        reg.add(comboSetting("ms_instrument", msInstrumentField));
+        reg.add(comboSetting("device", deviceCombo));
+
+        // --- Library Generation tab ---
+        reg.add(comboSetting("enzyme", enzymeCombo));
+        reg.add(spinnerSetting("miss_cleavage", missCleavageSpinner));
+        reg.add(textSetting("fix_mod_selected", fixModSelectedField));
+        reg.add(textSetting("var_mod_selected", varModSelectedField));
+        reg.add(spinnerSetting("max_var_mods", maxVarSpinner));
+        reg.add(checkSetting("clip_nterm_m", clipNmCheckbox));
+        reg.add(spinnerSetting("min_length", minLengthSpinner));
+        reg.add(spinnerSetting("max_length", maxLengthSpinner));
+        reg.add(spinnerSetting("min_pep_mz", minPepMzSpinner));
+        reg.add(spinnerSetting("max_pep_mz", maxPepMzSpinner));
+        reg.add(spinnerSetting("min_pep_charge", minPepChargeSpinner));
+        reg.add(spinnerSetting("max_pep_charge", maxPepChargeSpinner));
+        reg.add(spinnerSetting("lib_min_frag_mz", libMinFragMzSpinner));
+        reg.add(spinnerSetting("lib_max_frag_mz", libMaxFragMzSpinner));
+        reg.add(spinnerSetting("lib_top_n_frag_ions", LibTopNFragIonsSpinner));
+        reg.add(spinnerSetting("lib_min_num_frag", libMinNumFragSpinner));
+        reg.add(spinnerSetting("lib_frag_num_min", libFragNumMinSpinner));
+        reg.add(comboSetting("library_format", libraryFormatCombo));
+        reg.add(checkSetting("benchmark", benchmarkCheckbox));
+
+        return reg;
+    }
+
+    private void setStringList(java.util.List<String> target, Object v) {
+        target.clear();
+        if (v instanceof java.util.List<?> list) {
+            for (Object o : list) {
+                if (o != null) {
+                    target.add(String.valueOf(o));
+                }
+            }
+        }
+    }
+
+    private void saveSettingsToFile(File file) throws IOException {
+        java.util.LinkedHashMap<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("_settings_version", 1);
+        map.put("_carafe_version", CParameter.getVersion());
+        map.put("_saved_at", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+        for (Setting s : settingsRegistry()) {
+            try {
+                map.put(s.key(), s.getter().get());
+            } catch (Exception ex) {
+                // A missing/uninitialized component should never abort the whole save.
+                logToConsole("[WARN] Could not read setting '" + s.key() + "': " + ex.getMessage() + "\n");
+            }
+        }
+        String json = JSON.toJSONString(map, JSONWriter.Feature.PrettyFormat, JSONWriter.Feature.WriteMapNullValue);
+        java.nio.file.Files.writeString(file.toPath(), json, StandardCharsets.UTF_8);
+    }
+
+    private void loadSettingsFromFile(File file) throws IOException {
+        String content = java.nio.file.Files.readString(file.toPath(), StandardCharsets.UTF_8);
+        JSONObject obj = JSON.parseObject(content);
+        if (obj == null) {
+            throw new IOException("File is empty or not valid JSON.");
+        }
+        java.util.List<Setting> reg = settingsRegistry();
+        java.util.Set<String> known = new java.util.HashSet<>();
+        int applied = 0;
+        for (Setting s : reg) {
+            known.add(s.key());
+            if (obj.containsKey(s.key())) {
+                try {
+                    s.setter().accept(obj.get(s.key()));
+                    applied++;
+                } catch (Exception ex) {
+                    logToConsole("[WARN] Could not apply setting '" + s.key() + "': " + ex.getMessage() + "\n");
+                }
+            }
+        }
+        java.util.List<String> unknown = new java.util.ArrayList<>();
+        for (String k : obj.keySet()) {
+            if (!k.startsWith("_") && !known.contains(k)) {
+                unknown.add(k);
+            }
+        }
+        // Multi-file inputs keep only a summary ("(N files selected)") in their text field, so
+        // re-render their proper state from the restored file lists. Otherwise the selection
+        // shows as plain editable text and is not recognized as a real multi-file selection.
+        updateFileFieldState(trainMsFileField, trainMsFiles);
+        updateFileFieldState(projectMsFileField, projectMsFiles);
+
+        logToConsole("[INFO] Loaded settings from: " + file.getAbsolutePath() + "\n");
+        logToConsole("       Applied " + applied + " of " + reg.size() + " known parameters.\n");
+        if (!unknown.isEmpty()) {
+            logToConsole("       Ignored " + unknown.size() + " unrecognized key(s): " + String.join(", ", unknown)
+                    + "\n");
+        }
+        // Immediately reflect the loaded values in the label indicators (skip the debounce).
+        refreshAllIndicators();
+    }
+
+    /**
+     * Automatically save the current parameters to {@code <outputDir>/carafe_settings.json}
+     * at the start of a run, so each run leaves a reloadable record of its settings.
+     * Mirrors {@link #saveParameterScreenshots()}; failures are logged, never fatal.
+     */
+    private void autoSaveRunSettings() {
+        String outDir = outputDirField.getText().trim();
+        if (outDir.isEmpty()) {
+            return;
+        }
+        File dir = new File(outDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        File file = new File(dir, "carafe_settings.json");
+        try {
+            saveSettingsToFile(file);
+            logToConsole("[INFO] Run settings saved to: " + file.getAbsolutePath() + "\n");
+        } catch (Exception ex) {
+            logToConsole("[WARN] Could not save run settings: " + ex.getMessage() + "\n");
+        }
+    }
+
+    private void loadSettingsDialog() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Load Settings");
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        chooser.setFileFilter(new FileNameExtensionFilter("JSON settings (*.json)", "json"));
+        chooser.setCurrentDirectory(new File(prefs.get(PREF_LAST_DIR, System.getProperty("user.home"))));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File file = chooser.getSelectedFile();
+        if (file.getParent() != null) {
+            prefs.put(PREF_LAST_DIR, file.getParent());
+        }
+        try {
+            loadSettingsFromFile(file);
+            JOptionPane.showMessageDialog(this, "Settings loaded from:\n" + file.getAbsolutePath()
+                    + "\n\nSee the Console tab for details.", "Settings Loaded", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Failed to load settings:\n" + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    // =====================================================================================
+    // "Modified from default" label indicator.
+    //
+    // Each analysis parameter's label is recolored (MODIFIED_LABEL_COLOR) when its value
+    // differs from the value captured at app startup, and reverts to the theme default when
+    // it matches again. Typed fields are debounced (SETTING_INDICATOR_DELAY_MS) so the color
+    // only updates a couple of seconds after typing stops; discrete inputs update immediately.
+    //
+    // Performance: purely event-driven (no polling). Label↔input association is resolved once
+    // at startup from GridBagLayout constraints. A per-setting 'highlighted' flag means a label
+    // is only repainted when its modified-state actually flips.
+    // =====================================================================================
+
+    private static final class TrackedSetting {
+        final JLabel label;
+        final JComponent input;
+        final Object defaultValue;
+        boolean highlighted = false;
+        javax.swing.Timer debounce; // non-null only for free-text inputs
+
+        TrackedSetting(JLabel label, JComponent input, Object defaultValue) {
+            this.label = label;
+            this.input = input;
+            this.defaultValue = defaultValue;
+        }
+    }
+
+    private final java.util.List<TrackedSetting> trackedSettings = new java.util.ArrayList<>();
+
+    /**
+     * Register every analysis parameter for the modified-from-default indicator. Called once at
+     * the end of {@link #initComponents()}, when all components and their labels exist.
+     */
+    private void initSettingChangeIndicators() {
+        JComponent[] inputs = {
+                // Workflow tab — analysis options only (file/path/executable inputs are excluded)
+                carafeAdditionalOptionsField, diannAdditionalOptionsField,
+                // Training Data Generation
+                fdrSpinner, ptmSiteProbSpinner, ptmSiteQvalueSpinner, fragTolField, fragTolUnitCombo,
+                refineBoundaryCheckbox, rtPeakWindowField, xicCorSpinner,
+                minFragMzSpinner, nIonMinSpinner, cIonMinSpinner,
+                // Model Training
+                modeCombo, nceField, msInstrumentField, deviceCombo,
+                // Library Generation
+                enzymeCombo, missCleavageSpinner, fixModSelectedField, varModSelectedField, maxVarSpinner,
+                clipNmCheckbox, minLengthSpinner, maxLengthSpinner, minPepMzSpinner, maxPepMzSpinner,
+                minPepChargeSpinner, maxPepChargeSpinner, libMinFragMzSpinner, libMaxFragMzSpinner,
+                LibTopNFragIonsSpinner, libMinNumFragSpinner, libFragNumMinSpinner, libraryFormatCombo,
+                benchmarkCheckbox
+        };
+        for (JComponent input : inputs) {
+            if (input == null) {
+                continue;
+            }
+            JLabel label = findLabelFor(input);
+            if (label == null) {
+                continue; // no adjacent label found — skip silently
+            }
+            TrackedSetting ts = new TrackedSetting(label, input, indicatorValue(input));
+            trackedSettings.add(ts);
+            attachIndicatorListener(ts);
+        }
+    }
+
+    /**
+     * Find the label that sits immediately to the left of {@code input} (same row, previous
+     * column) within a GridBagLayout. Returns null if the layout/association can't be resolved.
+     */
+    private JLabel findLabelFor(JComponent input) {
+        Container parent = input.getParent();
+        if (parent == null || !(parent.getLayout() instanceof GridBagLayout gbl)) {
+            return null;
+        }
+        GridBagConstraints ic = gbl.getConstraints(input);
+        if (ic.gridx == GridBagConstraints.RELATIVE || ic.gridy == GridBagConstraints.RELATIVE) {
+            return null;
+        }
+        int wantX = ic.gridx - 1;
+        int wantY = ic.gridy;
+        for (Component c : parent.getComponents()) {
+            if (c instanceof JLabel lbl) {
+                GridBagConstraints lc = gbl.getConstraints(lbl);
+                if (lc.gridy == wantY && lc.gridx == wantX) {
+                    return lbl;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Current comparable value of an input, used for both the default snapshot and comparisons. */
+    private Object indicatorValue(JComponent c) {
+        if (c instanceof JTextField tf) {
+            return tf.getText().trim();
+        }
+        if (c instanceof JSpinner sp) {
+            return sp.getValue();
+        }
+        if (c instanceof JComboBox<?> cb) {
+            return cb.getSelectedItem();
+        }
+        if (c instanceof JCheckBox ck) {
+            return ck.isSelected();
+        }
+        return null;
+    }
+
+    private void attachIndicatorListener(TrackedSetting ts) {
+        JComponent c = ts.input;
+        if (c instanceof JTextField tf) {
+            // Typed input: debounce, plus an immediate refresh when focus leaves the field.
+            ts.debounce = new javax.swing.Timer(SETTING_INDICATOR_DELAY_MS, e -> refreshIndicator(ts));
+            ts.debounce.setRepeats(false);
+            tf.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                @Override
+                public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                    ts.debounce.restart();
+                }
+
+                @Override
+                public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                    ts.debounce.restart();
+                }
+
+                @Override
+                public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                    ts.debounce.restart();
+                }
+            });
+            tf.addFocusListener(new java.awt.event.FocusAdapter() {
+                @Override
+                public void focusLost(java.awt.event.FocusEvent e) {
+                    ts.debounce.stop();
+                    refreshIndicator(ts);
+                }
+            });
+        } else if (c instanceof JSpinner sp) {
+            sp.addChangeListener(e -> refreshIndicator(ts));
+        } else if (c instanceof JComboBox<?> cb) {
+            cb.addActionListener(e -> refreshIndicator(ts));
+        } else if (c instanceof JCheckBox ck) {
+            ck.addActionListener(e -> refreshIndicator(ts));
+        }
+    }
+
+    /**
+     * Compare a current value to its default. Numeric values (e.g. spinner doubles) are compared
+     * with a small relative tolerance so that floating-point drift from arrow-button arithmetic
+     * (0.01 + 0.005 - 0.005 != 0.01) is not mistaken for a real change.
+     */
+    private boolean valuesEqual(Object a, Object b) {
+        if (a instanceof Number na && b instanceof Number nb) {
+            double da = na.doubleValue();
+            double db = nb.doubleValue();
+            double tol = 1e-9 * Math.max(1.0, Math.max(Math.abs(da), Math.abs(db)));
+            return Math.abs(da - db) <= tol;
+        }
+        return java.util.Objects.equals(a, b);
+    }
+
+    /** Recolor a single label only if its modified-state changed (avoids needless repaints). */
+    private void refreshIndicator(TrackedSetting ts) {
+        boolean modified = !valuesEqual(indicatorValue(ts.input), ts.defaultValue);
+        if (modified == ts.highlighted) {
+            return;
+        }
+        ts.highlighted = modified;
+        // null restores the look-and-feel default, so theme switches are handled automatically.
+        ts.label.setForeground(modified ? MODIFIED_LABEL_COLOR : null);
+    }
+
+    /** Re-evaluate every tracked label now (used after settings are loaded programmatically). */
+    private void refreshAllIndicators() {
+        for (TrackedSetting ts : trackedSettings) {
+            if (ts.debounce != null) {
+                ts.debounce.stop();
+            }
+            refreshIndicator(ts);
+        }
     }
 
     private void saveParameterScreenshots() {
