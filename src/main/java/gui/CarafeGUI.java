@@ -5843,6 +5843,18 @@ public class CarafeGUI extends JFrame {
                 failed.set(true);
                 return;
             }
+            // Post-success hook (e.g. move a locally-staged blib to its final network path).
+            // Runs only on a clean exit and before the reuse signature is written.
+            if (command.postAction != null) {
+                try {
+                    command.postAction.run();
+                } catch (Exception ex) {
+                    logToConsole("\n[ERROR] " + command.task_description + " post-step failed: "
+                            + ex.getMessage() + "\n");
+                    failed.set(true);
+                    return;
+                }
+            }
             writeStepSignature(command);
         }
     }
@@ -6704,7 +6716,29 @@ public class CarafeGUI extends JFrame {
         }
         args.add("-l");
         args.add(library);
-        String outBlib = outDir + File.separator + "osprey.blib";
+
+        // OspreySharp writes its output as a SQLite .blib. SQLite cannot reliably create/lock a
+        // database over a network share (UNC \\server\... or a mapped drive backed by SMB): the
+        // BlibWriter does File.Delete + recreate + WAL, which fails on SMB with "unable to open
+        // database file". So always have OspreySharp write the blib to a LOCAL temp directory and
+        // move it to the requested (possibly network) outDir after the step succeeds. This also
+        // speeds up the many small SQLite/WAL writes. The staging dir is keyed on a hash of outDir
+        // so the train and project searches don't collide.
+        String finalBlib = outDir + File.separator + "osprey.blib";
+        String stageDir = new File(System.getProperty("java.io.tmpdir"),
+                "carafe_osprey_blib" + File.separator + Integer.toHexString(outDir.hashCode()))
+                .getAbsolutePath();
+        File stageDirFile = new File(stageDir);
+        stageDirFile.mkdirs();
+        // Start clean so the post-step move only picks up files produced by THIS run (and so
+        // BlibWriter's File.Delete + recreate runs on reliable local disk).
+        File[] staleStaged = stageDirFile.listFiles();
+        if (staleStaged != null) {
+            for (File s : staleStaged) {
+                s.delete();
+            }
+        }
+        String outBlib = stageDir + File.separator + "osprey.blib";
         args.add("-o");
         args.add(outBlib);
 
@@ -6766,7 +6800,35 @@ public class CarafeGUI extends JFrame {
             task.input_files.add(manifest);
         }
         task.out_dir = outDir;
-        task.skip_check_file = outBlib;
+        // Reuse is keyed on the FINAL blib (after the move), not the local staging copy.
+        task.skip_check_file = finalBlib;
+        // Move the locally-staged blib (and any sidecar files OspreySharp wrote next to it) to the
+        // final output directory once the search exits cleanly.
+        final String fStageDir = stageDir;
+        final String fOutDir = outDir;
+        final String fFinalBlib = finalBlib;
+        task.postAction = () -> {
+            new File(fOutDir).mkdirs();
+            File[] staged = new File(fStageDir).listFiles();
+            if (staged == null || staged.length == 0) {
+                throw new java.io.IOException(
+                        "OspreySharp produced no output in the staging directory: " + fStageDir);
+            }
+            for (File f : staged) {
+                java.nio.file.Path dest = new File(fOutDir, f.getName()).toPath();
+                try {
+                    java.nio.file.Files.move(f.toPath(), dest,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                } catch (java.io.IOException crossDevice) {
+                    // Staging dir and destination are on different volumes (the usual case for a
+                    // network destination): fall back to copy + delete.
+                    java.nio.file.Files.copy(f.toPath(), dest,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    f.delete();
+                }
+            }
+            logToConsole("[Carafe] Moved OspreySharp blib from local staging to " + fFinalBlib + "\n");
+        };
         return task;
     }
 
