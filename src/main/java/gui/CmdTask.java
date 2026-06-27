@@ -16,6 +16,12 @@ public class CmdTask {
     public List<String> out_files_description = new ArrayList<>();
 
     /**
+     * Files this step READS (e.g. MS data, protein database, prior-step library/blib). Used to
+     * compute the reuse signature so a step is only skipped when its inputs are unchanged.
+     */
+    public List<String> input_files = new ArrayList<>();
+
+    /**
      * Primary output file used to decide whether this step can be skipped (reused).
      * When "Reuse existing results" is enabled and this file already exists, the step
      * is skipped instead of re-running. Null means the step is never auto-skipped.

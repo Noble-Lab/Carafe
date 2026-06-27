@@ -89,6 +89,33 @@ public class PSMConfig {
         search_engine_name = "DIA-NN";
     }
 
+    /**
+     * Configures the column names for the TSV that {@code OspreyBlibReader} writes when
+     * converting an OspreySharp {@code .blib} into a Carafe identification file. The converter
+     * emits DIA-NN-style column names (so the existing DIA-NN report path can read it), but the
+     * search engine name is set to "OspreySharp". The blib supplies the peptide identifications
+     * (sequence, modifications, charge, apex RT); Carafe still extracts the measured fragment
+     * intensities and performs transition masking from the mzML files exactly as for DIA-NN.
+     */
+    public static void use_osprey_blib_column_names() {
+        precursor_id_column_name = "Precursor.Id";
+        stripped_peptide_sequence_column_name = "Stripped.Sequence";
+        peptide_modification_column_name = "Modified.Sequence";
+        precursor_charge_column_name = "Precursor.Charge";
+        precursor_mz_column_name = "Precursor.MZ";
+        rt_column_name = "RT";
+        rt_start_column_name = "RT.Start";
+        rt_end_column_name = "RT.Stop";
+        ms2_index_column_name = "MS2.Scan";
+        ptm_site_confidence_column_name = "PTM.Site.Confidence";
+        ptm_site_qvalue_column_name = "PTM.Q.Value";
+        qvalue_column_name = "Q.Value";
+        PEP_column_name = "PEP";
+        im_column_name = "IM";
+        ms_file_column_name = "File.Name";
+        search_engine_name = "OspreySharp";
+    }
+
     public static void use_skyline_report_column_names(){
         stripped_peptide_sequence_column_name = "Peptide";
         peptide_modification_column_name = "Peptide Modified Sequence Unimod Ids";

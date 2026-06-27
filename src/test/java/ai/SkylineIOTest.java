@@ -1,8 +1,8 @@
 package test.java.ai;
 
 import main.java.ai.SkylineIO;
-import org.junit.Assert;
-import org.junit.Test;
+import org.testng.Assert;
+import org.testng.annotations.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,33 +14,40 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 
+/**
+ * TestNG (argument order {@code assertEquals(actual, expected)}) so these run under
+ * {@code mvn test}; the project's Surefire uses the TestNG provider and skips JUnit tests.
+ */
 public class SkylineIOTest {
 
     @Test
     public void testGet_unimod_from_peptide() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        String mod_pep = "SSSFSC(unimod:4)PE";
+        // The parser's regex matches the DIA-NN "UniMod:" casing; the modified sequences below
+        // use that casing accordingly. (This test previously used lowercase "unimod:" and never
+        // ran under Surefire, so the mismatch went unnoticed.)
+        String mod_pep = "SSSFSC(UniMod:4)PE";
         Method method = SkylineIO.class.getDeclaredMethod("get_unimod_from_peptide", String.class);
         method.setAccessible(true);
         HashMap<Integer, String> result = (HashMap<Integer, String>) method.invoke(null, mod_pep);
-        org.junit.Assert.assertEquals(result.get(6), "C(unimod:4)");
+        Assert.assertEquals(result.get(6), "C(UniMod:4)");
 
-        mod_pep = "SSSFSC(unimod:4)PE(unimod:35)";
+        mod_pep = "SSSFSC(UniMod:4)PE(UniMod:35)";
         result = (HashMap<Integer, String>) method.invoke(null, mod_pep);
-        org.junit.Assert.assertEquals(result.get(6), "C(unimod:4)");
-        org.junit.Assert.assertEquals(result.get(8), "E(unimod:35)");
+        Assert.assertEquals(result.get(6), "C(UniMod:4)");
+        Assert.assertEquals(result.get(8), "E(UniMod:35)");
 
-        mod_pep = "SSSFSC(unimod:4)PC";
+        mod_pep = "SSSFSC(UniMod:4)PC";
         result = (HashMap<Integer, String>) method.invoke(null, mod_pep);
-        org.junit.Assert.assertEquals(result.get(6), "C(unimod:4)");
+        Assert.assertEquals(result.get(6), "C(UniMod:4)");
 
-        mod_pep = "SSSFSCPC(unimod:4)";
+        mod_pep = "SSSFSCPC(UniMod:4)";
         result = (HashMap<Integer, String>) method.invoke(null, mod_pep);
-        org.junit.Assert.assertEquals(result.get(8), "C(unimod:4)");
+        Assert.assertEquals(result.get(8), "C(UniMod:4)");
 
-        mod_pep = "(unimod:41)SSSFSCPC(unimod:4)";
+        mod_pep = "(UniMod:41)SSSFSCPC(UniMod:4)";
         result = (HashMap<Integer, String>) method.invoke(null, mod_pep);
-        org.junit.Assert.assertEquals(result.get(0), "unimod:41");
-        org.junit.Assert.assertEquals(result.get(8), "C(unimod:4)");
+        Assert.assertEquals(result.get(0), "UniMod:41");
+        Assert.assertEquals(result.get(8), "C(UniMod:4)");
     }
 
     @Test
@@ -91,9 +98,9 @@ public class SkylineIOTest {
                 "SELECT ionMobility, collisionalCrossSectionSqA, ionMobilityType FROM RefSpectra WHERE id = 1");
              ResultSet rs = statement.executeQuery()) {
             Assert.assertTrue(rs.next());
-            Assert.assertEquals(1.2345, rs.getDouble("ionMobility"), 0.0001);
+            Assert.assertEquals(rs.getDouble("ionMobility"), 1.2345, 0.0001);
             Assert.assertNull(rs.getObject("collisionalCrossSectionSqA"));
-            Assert.assertEquals(SkylineIO.ION_MOBILITY_TYPE_INVERSE_K0, rs.getInt("ionMobilityType"));
+            Assert.assertEquals(rs.getInt("ionMobilityType"), SkylineIO.ION_MOBILITY_TYPE_INVERSE_K0);
         }
     }
 
@@ -102,9 +109,9 @@ public class SkylineIOTest {
                 "SELECT ionMobility, collisionalCrossSectionSqA, ionMobilityType FROM RetentionTimes WHERE RefSpectraID = 1");
              ResultSet rs = statement.executeQuery()) {
             Assert.assertTrue(rs.next());
-            Assert.assertEquals(1.2345, rs.getDouble("ionMobility"), 0.0001);
+            Assert.assertEquals(rs.getDouble("ionMobility"), 1.2345, 0.0001);
             Assert.assertNull(rs.getObject("collisionalCrossSectionSqA"));
-            Assert.assertEquals(SkylineIO.ION_MOBILITY_TYPE_INVERSE_K0, rs.getInt("ionMobilityType"));
+            Assert.assertEquals(rs.getInt("ionMobilityType"), SkylineIO.ION_MOBILITY_TYPE_INVERSE_K0);
         }
     }
 
@@ -114,7 +121,7 @@ public class SkylineIOTest {
             statement.setInt(1, SkylineIO.ION_MOBILITY_TYPE_INVERSE_K0);
             try (ResultSet rs = statement.executeQuery()) {
                 Assert.assertTrue(rs.next());
-                Assert.assertEquals("inverseK0(Vsec/cm^2)", rs.getString("ionMobilityType"));
+                Assert.assertEquals(rs.getString("ionMobilityType"), "inverseK0(Vsec/cm^2)");
             }
         }
     }
