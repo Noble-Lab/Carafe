@@ -32,6 +32,19 @@ public class CmdTask {
      */
     public boolean skipped = false;
 
+    /**
+     * Optional action run AFTER the step's process exits 0 and BEFORE its reuse signature
+     * is written — e.g. move a locally-staged output to its final (possibly network) path.
+     * Throwing aborts the workflow as a step failure. Never run when the step is skipped.
+     */
+    public ThrowingRunnable postAction = null;
+
+    /** A {@link Runnable} that is allowed to throw a checked exception. */
+    @FunctionalInterface
+    public interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
     public CmdTask(String cmd, String task_name, String task_description) {
         this.cmd = cmd;
         this.task_name = task_name;
