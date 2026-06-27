@@ -42,18 +42,18 @@ jobs:
 
     steps:
       - name: Checkout Carafe
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # JDK with jpackage. Match the runtime version Bo ships (README requires
       # 25.0.2+); the bundled JEP 472 native-access flag needs JDK 24+.
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "25"
 
       - name: Set up .NET 8 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
@@ -96,7 +96,7 @@ jobs:
       #                             overlay is Exists()-guarded, so a missing file would
       #                             SILENTLY ship a build that can't read osprey parquet.
       - name: Checkout OspreySharp source (sparse)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ env.OSPREYSHARP_REPO }}
           ref: ${{ env.OSPREYSHARP_REF }}
@@ -126,7 +126,7 @@ jobs:
         run: scripts\generate_installer_win.bat
 
       - name: Upload MSI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Carafe-${{ env.RID }}-msi
           path: target/installer/*.msi
@@ -135,6 +135,6 @@ jobs:
       # On a version tag, attach the MSI to the GitHub Release.
       - name: Attach MSI to release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: target/installer/*.msi
