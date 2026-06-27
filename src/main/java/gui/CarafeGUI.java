@@ -6814,17 +6814,17 @@ public class CarafeGUI extends JFrame {
                 throw new java.io.IOException(
                         "OspreySharp produced no output in the staging directory: " + fStageDir);
             }
-            for (File f : staged) {
-                java.nio.file.Path dest = new File(fOutDir, f.getName()).toPath();
+            for (File stagedFile : staged) {
+                java.nio.file.Path dest = new File(fOutDir, stagedFile.getName()).toPath();
                 try {
-                    java.nio.file.Files.move(f.toPath(), dest,
+                    java.nio.file.Files.move(stagedFile.toPath(), dest,
                             java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 } catch (java.io.IOException crossDevice) {
                     // Staging dir and destination are on different volumes (the usual case for a
                     // network destination): fall back to copy + delete.
-                    java.nio.file.Files.copy(f.toPath(), dest,
+                    java.nio.file.Files.copy(stagedFile.toPath(), dest,
                             java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    f.delete();
+                    stagedFile.delete();
                 }
             }
             logToConsole("[Carafe] Moved OspreySharp blib from local staging to " + fFinalBlib + "\n");
