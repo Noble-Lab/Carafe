@@ -133,7 +133,7 @@ jobs:
         run: scripts\generate_installer_win.bat
 
       - name: Upload MSI artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: Carafe-${{ env.RID }}-msi
           path: target/installer/*.msi
