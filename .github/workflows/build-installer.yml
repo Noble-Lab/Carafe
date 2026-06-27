@@ -108,17 +108,24 @@ jobs:
             pwiz_tools/Shared/Lib/Parquet
           sparse-checkout-cone-mode: false
 
-      # Publish a self-contained, single-file OspreySharp straight into the app
-      # directory so jpackage's --input sweeps it into the MSI. resolveOspreyBinary()
-      # then finds it at <appdir>/osprey/win-x64/OspreySharp.exe next to the jar.
+      # Publish a self-contained OspreySharp straight into the app directory so
+      # jpackage's --input sweeps it into the MSI. resolveOspreyBinary() then finds
+      # it at <appdir>/osprey/win-x64/OspreySharp.exe next to the jar.
+      #
+      # Do NOT use PublishSingleFile here. OspreySharp's blib writer uses
+      # System.Data.SQLite, whose native SQLite.Interop.dll is preloaded by resolving
+      # the managed assembly's own directory (Assembly.Location). In a single-file
+      # publish Assembly.Location is "", so Path.GetDirectoryName("") -> null and the
+      # SQLiteConnection ctor throws "ArgumentNullException (Parameter 'path1')" from
+      # Path.Combine the moment it opens the output .blib. A normal folder publish
+      # ships SQLite.Interop.dll as a real sibling file, so the resolution works.
       - name: Publish OspreySharp (self-contained ${{ env.RID }})
         run: >
           dotnet publish
           pwiz/pwiz_tools/OspreySharp/OspreySharp/OspreySharp.csproj
           -c Release -f net8.0 -r ${{ env.RID }}
           --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PublishSingleFile=false
           -p:Platform=x64
           -o target/carafe-2.2.0/osprey/${{ env.RID }}
 

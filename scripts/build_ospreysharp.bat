@@ -51,13 +51,17 @@ echo.
 if exist "%DEST%" rmdir /s /q "%DEST%"
 mkdir "%DEST%"
 
+REM Do NOT use PublishSingleFile: OspreySharp's blib writer uses System.Data.SQLite,
+REM whose native SQLite.Interop.dll is located via the managed assembly's own directory.
+REM Under single-file publish Assembly.Location is empty, so the SQLiteConnection ctor
+REM throws ArgumentNullException (Parameter 'path1') when it opens the output .blib.
+REM A folder publish ships SQLite.Interop.dll as a real sibling file and works.
 dotnet publish "%OSPREY_CSPROJ%" ^
     -c Release ^
     -f %TARGET_FRAMEWORK% ^
     -r %RID% ^
     --self-contained true ^
-    -p:PublishSingleFile=true ^
-    -p:IncludeNativeLibrariesForSelfExtract=true ^
+    -p:PublishSingleFile=false ^
     -p:Platform=x64 ^
     -o "%DEST%"
 

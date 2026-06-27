@@ -76,13 +76,17 @@ for rid in "${RIDS[@]}"; do
     echo "==> Publishing OspreySharp for ${rid} -> ${dest}"
     rm -rf "${dest}"
     mkdir -p "${dest}"
+    # Do NOT use PublishSingleFile: OspreySharp's blib writer uses System.Data.SQLite,
+    # whose native SQLite.Interop.dll is located via the managed assembly's own directory.
+    # Under single-file publish Assembly.Location is empty, so the SQLiteConnection ctor
+    # throws ArgumentNullException (Parameter 'path1') when it opens the output .blib.
+    # A folder publish ships SQLite.Interop.dll as a real sibling file and works.
     dotnet publish "${OSPREY_CSPROJ}" \
         -c Release \
         -f "${TARGET_FRAMEWORK}" \
         -r "${rid}" \
         --self-contained true \
-        -p:PublishSingleFile=true \
-        -p:IncludeNativeLibrariesForSelfExtract=true \
+        -p:PublishSingleFile=false \
         -p:Platform=x64 \
         -o "${dest}"
 
