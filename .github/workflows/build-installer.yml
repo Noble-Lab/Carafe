@@ -57,12 +57,21 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      # jpackage's MSI backend is WiX 3.x (candle/light). The hosted image no
-      # longer ships it, so install it and put it on PATH.
-      - name: Install WiX 3 (jpackage MSI backend)
+      # jpackage's MSI backend is WiX 3.x (candle/light). windows-latest already
+      # ships WiX 3.14, so just locate it and put its bin on PATH; install only as
+      # a fallback if it is ever missing (do NOT pin a version - choco fails when a
+      # newer build is already installed).
+      - name: Ensure WiX 3 on PATH (jpackage MSI backend)
+        shell: pwsh
         run: |
-          choco install wixtoolset --version=3.14.1 --no-progress -y
-          echo "C:\Program Files (x86)\WiX Toolset v3.14\bin" >> $env:GITHUB_PATH
+          $light = Get-ChildItem 'C:\Program Files (x86)\WiX Toolset*\bin\light.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $light) {
+            choco install wixtoolset --no-progress -y
+            $light = Get-ChildItem 'C:\Program Files (x86)\WiX Toolset*\bin\light.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $light) { Write-Error 'WiX 3 (light.exe) not found'; exit 1 }
+          Add-Content -Path $env:GITHUB_PATH -Value $light.Directory.FullName
+          Write-Host "Using WiX at $($light.Directory.FullName)"
 
       - name: Build Carafe jar
         run: mvn -B -DskipTests package
