@@ -78,11 +78,11 @@ jobs:
       # Install the vendored copy into the runner's local repo before building.
       # TODO(Bo): replace by publishing this jar to a lab-controlled Maven repo and
       # resolving it normally, then drop lib/ and this step.
+      # Use cmd (not the default pwsh): PowerShell mangles unquoted -D values that
+      # contain '.'/'/' (e.g. -Dfile=lib/utilities-5.0.39P2.jar -> lib/utilities-5).
       - name: Install patched compomics-utilities into the local Maven repo
-        run: >
-          mvn -B install:install-file
-          -Dfile=lib/utilities-5.0.39P2.jar
-          -DgroupId=com.compomics -DartifactId=utilities -Dversion=5.0.39P2 -Dpackaging=jar
+        shell: cmd
+        run: mvn -B install:install-file -Dfile=lib/utilities-5.0.39P2.jar -DgroupId=com.compomics -DartifactId=utilities -Dversion=5.0.39P2 -Dpackaging=jar
 
       - name: Build Carafe jar
         run: mvn -B -DskipTests package
