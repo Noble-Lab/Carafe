@@ -157,6 +157,14 @@ For comparison purposes, Workflow 3 also provides the option shown below to perf
 
 In addition to DIA-NN, Carafe2 can drive **OspreySharp**, the MacCoss-lab DIA search tool, for the peptide-detection steps of the workflows. Unlike DIA-NN, OspreySharp does not build its own AI-predicted library, so Carafe2 supplies the library and finetunes its models on OspreySharp's search output.
 
+OspreySharp is used by **Workflow 4** (search, finetune, build a new library) and **Workflow 5** (end-to-end: finetune, then search the project files), both selectable from the **Workflow** dropdown:
+
+![Carafe2 workflow dropdown showing the OspreySharp workflows 4 and 5](docs/images/CarafeGUI-ospreysharp-workflows.png)
+
+The **OspreySharp** tab holds the OspreySharp-specific settings: the initial library predictor (local AlphaPepDeep or a Koina model), the optional entrapment-peptide toggle, FDR levels, and the number of parallel MSConvert processes:
+
+![Carafe2 OspreySharp settings tab](docs/images/CarafeGUI-ospreysharp-tab.png)
+
 **How Carafe2 prepares the library for OspreySharp.** OspreySharp prefers a library that already contains both target and decoy retention times and spectra. When OspreySharp is selected as the search engine, Carafe2 (behind the scenes):
 
 1. Digests the input protein FASTA with the configured **Library generation** digest options (enzyme, missed cleavages, peptide length) into a peptide-level FASTA, adding a deterministic decoy for each target (and, when **Include entrapment peptides** is enabled, the FDRBench `p_target`/`p_decoy` entrapment quartets), and writes a 5-column FDRBench pairing manifest. This is the Java port of `build_entrapment_peptide_fasta.py` (`EntrapmentFastaGear`); it can also be run standalone:
