@@ -89,6 +89,52 @@ public class PSMConfig {
         search_engine_name = "DIA-NN";
     }
 
+    /**
+     * Configures the column names for the TSV that {@code OspreyBlibReader} writes when
+     * converting an Osprey {@code .blib} into a Carafe identification file. The converter
+     * emits DIA-NN-style column names (so the existing DIA-NN report path can read it), but the
+     * search engine name is set to "Osprey". The blib supplies the peptide identifications
+     * (sequence, modifications, charge, apex RT); Carafe still extracts the measured fragment
+     * intensities and performs transition masking from the mzML files exactly as for DIA-NN.
+     */
+    public static void use_osprey_blib_column_names() {
+        precursor_id_column_name = "Precursor.Id";
+        stripped_peptide_sequence_column_name = "Stripped.Sequence";
+        peptide_modification_column_name = "Modified.Sequence";
+        precursor_charge_column_name = "Precursor.Charge";
+        precursor_mz_column_name = "Precursor.MZ";
+        rt_column_name = "RT";
+        rt_start_column_name = "RT.Start";
+        rt_end_column_name = "RT.Stop";
+        ms2_index_column_name = "MS2.Scan";
+        ptm_site_confidence_column_name = "PTM.Site.Confidence";
+        ptm_site_qvalue_column_name = "PTM.Q.Value";
+        qvalue_column_name = "Q.Value";
+        PEP_column_name = "PEP";
+        im_column_name = "IM";
+        ms_file_column_name = "File.Name";
+        search_engine_name = "Osprey";
+    }
+
+    /**
+     * Point the reader at the columns that {@code AIGear.add_ms2spectrum_index} synthesizes: the
+     * true per-precursor MS2 scan ordinal ({@code ms2index}) and the matched apex retention time
+     * ({@code apex_rt}). Call this after the report has been run through
+     * {@code add_ms2spectrum_index} and after any {@code use_*_report_column_names()} reset.
+     *
+     * <p>This matters for the Osprey {@code .blib} path: the blib has no usable DIA-NN MS2 scan
+     * index, so {@code OspreyBlibReader.convertBlibToDiannTsv} writes {@code MS2.Scan=0} for every
+     * precursor. If the reader is left on the default {@code MS2.Scan} column, every precursor maps
+     * to MS2 scan 0 and fragment extraction fails ("Spectrum not found" for all but the one
+     * precursor whose isolation window happens to contain scan 0). The Skyline path avoids this by
+     * defaulting {@code ms2_index_column_name} to {@code ms2index}; the Osprey path resets to
+     * DIA-NN column names afterward, so it must re-point explicitly.
+     */
+    public static void use_added_ms2index_columns() {
+        ms2_index_column_name = "ms2index";
+        rt_column_name = "apex_rt";
+    }
+
     public static void use_skyline_report_column_names(){
         stripped_peptide_sequence_column_name = "Peptide";
         peptide_modification_column_name = "Peptide Modified Sequence Unimod Ids";

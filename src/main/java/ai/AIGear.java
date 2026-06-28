@@ -33,6 +33,8 @@ import com.google.common.math.Quantiles;
 import com.jerolba.carpet.CarpetReader;
 
 import main.java.db.DBGear;
+import main.java.db.EntrapmentFastaGear;
+import main.java.koina.KoinaLibraryGenerator;
 import main.java.dia.*;
 import main.java.input.*;
 import main.java.util.*;
@@ -679,6 +681,7 @@ public class AIGear {
         options.addOption("min_mz", true, "The minimum fragment ion m/z to consider, default is 200.0");
         options.addOption("min_n", true, "The minimum high quality fragment ion number to consider, default is 4");
         options.addOption("enzyme",true,"Enzyme used for protein digestion. 0:Non enzyme, 1:Trypsin (default), 2:Trypsin (no P rule), 3:Arg-C, 4:Arg-C (no P rule), 5:Arg-N, 6:Glu-C, 7:Lys-C");
+        options.addOption("decoy_prefix", true, "Protein-accession prefix that marks decoy entries in the -db FASTA, default is rev_. Use decoy_ for entrapment FASTAs built with -build_entrapment_fasta so the library Decoy column is flagged correctly.");
         options.addOption("miss_c",true,"The max missed cleavages, default is 1");
         options.addOption("I2L",false,"Convert I to L");
         options.addOption("clip_n_m", false, "When digesting a protein starting with amino acid M, two copies of the leading peptides (with and without the N-terminal M) are considered or not. Default is false.");
@@ -704,6 +707,22 @@ public class AIGear {
         options.addOption("data_type", true, "DDA or DIA (default)");
         options.addOption("no_masking", false, "No peak masking");
 
+        // Peptide-level entrapment FASTA + FDRBench pairing manifest generation (for Osprey).
+        options.addOption("build_entrapment_fasta", true, "Build a peptide-level FASTA from the -db protein FASTA (using the configured digest options) and write it to the given path. Run Carafe library generation over this FASTA with -enzyme NoCut so targets and decoys are both predicted.");
+        options.addOption("manifest", true, "Output FDRBench 5-column pairing manifest TSV (used with -build_entrapment_fasta and Osprey's --decoy-pairing-manifest).");
+        options.addOption("entrapment", false, "Include entrapment (p_target/p_decoy) peptides when building the entrapment FASTA. Default off (target+decoy only).");
+        options.addOption("no_decoys", false, "Do not add decoy peptides when building the entrapment FASTA. Default is to add decoys.");
+        options.addOption("mz_filter", false, "Apply the precursor m/z window filter (-min_pep_mz/-max_pep_mz at charges -min_pep_charge..-max_pep_charge) when building the entrapment FASTA.");
+        options.addOption("entrapment_seed", true, "Master RNG seed for entrapment shuffling, default is 42.");
+        options.addOption("decoy_seed", true, "Master RNG seed for decoy shuffling, default is 24.");
+
+        // Koina-based initial library generation (for the Osprey workflow).
+        options.addOption("build_koina_library", true, "Generate an initial DIA-NN-format spectral library from the -db peptide FASTA using the Koina prediction service, writing it to the given TSV path. Use with -koina_ms2_model and -koina_rt_model.");
+        options.addOption("koina_url", true, "Koina server base URL (default https://koina.wilhelmlab.org).");
+        options.addOption("koina_ms2_model", true, "Koina fragment-intensity model (e.g. Prosit_2020_intensity_HCD, AlphaPeptDeep_ms2_generic).");
+        options.addOption("koina_rt_model", true, "Koina retention-time model (e.g. Prosit_2019_irt, AlphaPeptDeep_rt_generic).");
+        options.addOption("nce_ms", true, "Reference mzML to read the collision energy from when -nce is 'auto' (used by -build_koina_library).");
+
         options.addOption("y1", false, "Don't use y1 ion in training");
         options.addOption("n_ion_min", true, "For n-terminal fragment ions (such as b-ion) with number <= n_ion_min, they will be considered as invalid. Default is 0.");
         options.addOption("c_ion_min", true, "For c-terminal fragment ions (such as y-ion) with number <= n_ion_min, they will be considered as invalid. Default is 0.");
@@ -712,7 +731,7 @@ public class AIGear {
         options.addOption("nce", true, "NCE for in-silico spectral library");
         options.addOption("ms_instrument", true, "MS instrument for in-silico spectral library: default is Eclipse");
         options.addOption("device", true, "device for in-silico spectral library: default is gpu");
-        options.addOption("se", true, "The search engine used to generate the identification result: DIA-NN");
+        options.addOption("se", true, "The search engine used to generate the identification result: DIA-NN (default), Osprey (reads a .blib), skyline, or generic");
         options.addOption("mode", true, "Data type: general or phosphorylation");
         options.addOption("tf", true, "Fine tune type: ms2, rt, all (default)");
         options.addOption("seed", true, "Random seed, 2024 in default");
@@ -825,6 +844,9 @@ public class AIGear {
                 CParameter.enzyme = Integer.parseInt(cmd.getOptionValue("enzyme"));
             }
         }
+        if (cmd.hasOption("decoy_prefix")) {
+            CParameter.decoy_prefix = cmd.getOptionValue("decoy_prefix");
+        }
 
         // for non-specific digestion, set the missed cleavages to be equal to 100
         if(DBGear.isNonSpecificEnzyme()){
@@ -868,6 +890,139 @@ public class AIGear {
         }
         if (cmd.hasOption("max_pep_mz")) {
             CParameter.maxPeptideMz = Double.parseDouble(cmd.getOptionValue("max_pep_mz"));
+        }
+
+        // Entrapment FASTA mode: digest the protein FASTA into a peptide-level FASTA + pairing
+        // manifest, then exit. The configured digest options (enzyme, miss_c, minLength,
+        // maxLength, clip_n_m) above have already been applied to CParameter.
+        if (cmd.hasOption("build_entrapment_fasta")) {
+            String input_fasta = cmd.getOptionValue("db");
+            if (input_fasta == null || input_fasta.isEmpty()) {
+                System.err.println("-build_entrapment_fasta requires an input protein FASTA via -db");
+                System.exit(1);
+            }
+            EntrapmentFastaGear.Config efc = new EntrapmentFastaGear.Config();
+            efc.inputFasta = input_fasta;
+            efc.outputFasta = cmd.getOptionValue("build_entrapment_fasta");
+            efc.manifest = cmd.getOptionValue("manifest"); // null if not provided
+            efc.addEntrapment = cmd.hasOption("entrapment");
+            efc.addDecoys = !cmd.hasOption("no_decoys");
+            // Propagate an explicit -decoy_prefix into the entrapment FASTA so the flag is not
+            // silently ignored here; the Config default (decoy_) stays when the flag is absent.
+            if (cmd.hasOption("decoy_prefix")) {
+                efc.decoyPrefix = cmd.getOptionValue("decoy_prefix");
+            }
+            efc.applyMzFilter = cmd.hasOption("mz_filter");
+            efc.minMz = CParameter.minPeptideMz;
+            efc.maxMz = CParameter.maxPeptideMz;
+            int min_z = cmd.hasOption("min_pep_charge") ? Integer.parseInt(cmd.getOptionValue("min_pep_charge")) : 2;
+            int max_z = cmd.hasOption("max_pep_charge") ? Integer.parseInt(cmd.getOptionValue("max_pep_charge")) : 3;
+            if (max_z < min_z) {
+                max_z = min_z;
+            }
+            int[] charges = new int[max_z - min_z + 1];
+            for (int z = min_z; z <= max_z; z++) {
+                charges[z - min_z] = z;
+            }
+            efc.charges = charges;
+            if (cmd.hasOption("entrapment_seed")) {
+                efc.entrapmentSeed = Long.parseLong(cmd.getOptionValue("entrapment_seed"));
+            }
+            if (cmd.hasOption("decoy_seed")) {
+                efc.decoySeed = Long.parseLong(cmd.getOptionValue("decoy_seed"));
+            }
+            EntrapmentFastaGear.run(efc);
+            Cloger.getInstance().logger.info("Entrapment FASTA build finished in "
+                    + (System.currentTimeMillis() - startTime) / 1000 + " s.");
+            return;
+        }
+
+        // Koina-based initial library generation: predict an initial DIA-NN library from the -db
+        // peptide FASTA via the Koina service, then exit. Reuses the digest/charge/mod options.
+        if (cmd.hasOption("build_koina_library")) {
+            String input_fasta = cmd.getOptionValue("db");
+            if (input_fasta == null || input_fasta.isEmpty()) {
+                System.err.println("-build_koina_library requires the peptide FASTA via -db");
+                System.exit(1);
+            }
+            if (!cmd.hasOption("koina_ms2_model") || !cmd.hasOption("koina_rt_model")) {
+                System.err.println("-build_koina_library requires -koina_ms2_model and -koina_rt_model");
+                System.exit(1);
+            }
+            KoinaLibraryGenerator.Config kc = new KoinaLibraryGenerator.Config();
+            kc.peptideFasta = input_fasta;
+            kc.outputTsv = cmd.getOptionValue("build_koina_library");
+            kc.ms2Model = cmd.getOptionValue("koina_ms2_model");
+            kc.rtModel = cmd.getOptionValue("koina_rt_model");
+            if (cmd.hasOption("koina_url")) {
+                kc.koinaUrl = cmd.getOptionValue("koina_url");
+            }
+            kc.minCharge = cmd.hasOption("min_pep_charge") ? Integer.parseInt(cmd.getOptionValue("min_pep_charge")) : 2;
+            kc.maxCharge = cmd.hasOption("max_pep_charge") ? Integer.parseInt(cmd.getOptionValue("max_pep_charge")) : 3;
+            // NCE: a number overrides; "auto" (or anything non-numeric) reads the collision energy
+            // from the reference mzML (-nce_ms), falling back to 27 when unavailable.
+            float nceVal = 27f;
+            if (cmd.hasOption("nce")) {
+                String nceOpt = cmd.getOptionValue("nce").trim();
+                if (nceOpt.equalsIgnoreCase("auto")) {
+                    double read = cmd.hasOption("nce_ms") ? main.java.util.MzmlUtils.readNce(cmd.getOptionValue("nce_ms")) : -1;
+                    if (read > 0) {
+                        nceVal = (float) read;
+                        Cloger.getInstance().logger.info("Koina: auto NCE = " + nceVal + " (from "
+                                + cmd.getOptionValue("nce_ms") + ")");
+                    } else {
+                        Cloger.getInstance().logger.warn("Koina: could not read NCE from mzML"
+                                + (cmd.hasOption("nce_ms") ? " " + cmd.getOptionValue("nce_ms") : "")
+                                + "; using default NCE " + nceVal);
+                    }
+                } else {
+                    try {
+                        nceVal = Float.parseFloat(nceOpt);
+                    } catch (NumberFormatException e) {
+                        Cloger.getInstance().logger.warn("Koina: invalid -nce '" + nceOpt + "'; using " + nceVal);
+                    }
+                }
+            }
+            kc.nce = nceVal;
+            kc.maxVarMods = CParameter.maxVarMods;
+            kc.minPrecursorMz = CParameter.minPeptideMz;
+            kc.maxPrecursorMz = CParameter.maxPeptideMz;
+            // Carbamidomethyl C (fixMod 1) and Oxidation M (varMod 2) toggles from the GUI settings.
+            // Exact id membership (split on , ; or whitespace) -- a substring contains("1") would
+            // also match mod ids like "10"/"21" and mis-toggle the modification.
+            kc.fixedCarbamidomethylC = java.util.Arrays.asList(
+                    (CParameter.fixMods == null ? "" : CParameter.fixMods).split("[,;\\s]+")).contains("1");
+            kc.variableOxidationM = java.util.Arrays.asList(
+                    (CParameter.varMods == null ? "" : CParameter.varMods).split("[,;\\s]+")).contains("2");
+            if (cmd.hasOption("lf_top_n_frag")) {
+                kc.topNFragments = Integer.parseInt(cmd.getOptionValue("lf_top_n_frag"));
+            }
+            if (cmd.hasOption("lf_frag_mz_min")) {
+                kc.minFragmentMz = Double.parseDouble(cmd.getOptionValue("lf_frag_mz_min"));
+            }
+            if (cmd.hasOption("lf_frag_mz_max")) {
+                kc.maxFragmentMz = Double.parseDouble(cmd.getOptionValue("lf_frag_mz_max"));
+            }
+            // Map the MS instrument to a Koina/AlphaPepDeep instrument code (ignored by Prosit/ms2pip).
+            String msi = cmd.hasOption("ms_instrument") ? cmd.getOptionValue("ms_instrument").toLowerCase() : "";
+            if (msi.contains("tims")) {
+                kc.instrument = "TIMSTOF";
+            } else if (msi.contains("lumos") || msi.contains("eclipse") || msi.contains("fusion") || msi.contains("ascend")) {
+                kc.instrument = "LUMOS";
+            } else if (msi.contains("elite")) {
+                kc.instrument = "ELITE";
+            } else {
+                kc.instrument = "QE"; // Exploris / Astral / QE family
+            }
+            try {
+                KoinaLibraryGenerator.run(kc);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Koina library generation interrupted", e);
+            }
+            Cloger.getInstance().logger.info("Koina library build finished in "
+                    + (System.currentTimeMillis() - startTime) / 1000 + " s.");
+            return;
         }
 
         if (cmd.hasOption("rf_rt_win")) {
@@ -1189,6 +1344,34 @@ public class AIGear {
                     aiGear.load_data(new_psm_file, ms_file, aiGear.fdr_cutoff);
                     aiGear.get_ms2_matches_diann();
                 }
+            } else if (aiGear.search_engine.equalsIgnoreCase("Osprey")
+                    && aiGear.data_type.equalsIgnoreCase("dia")) {
+                // Osprey does not predict its own library, so Carafe finetunes on Osprey's
+                // search output. The Osprey .blib supplies the peptide IDs + RT; Carafe still
+                // extracts the measured fragment intensities and masks transitions from the mzML
+                // exactly as for a DIA-NN report. Convert the blib to a DIA-NN-style TSV, add the
+                // MS2 spectrum index from the MS file, then reuse the DIA-NN matching path.
+                CModification.getInstance();
+                PSMConfig.use_osprey_blib_column_names();
+                String diann_like_tsv = OspreyBlibReader.convertBlibToDiannTsv(psm_file, aiGear.out_dir);
+                String new_psm_file = aiGear.add_ms2spectrum_index(diann_like_tsv, ms_file);
+                // The converted TSV is in DIA-NN format (DIA-NN column names, possibly multiple MS
+                // runs), so switch to the DIA-NN code path for loading + interference removal +
+                // matching. (Keeping "Osprey" would hit the generic loader that expects a
+                // "q_value" column and fails.)
+                PSMConfig.use_diann_report_column_names();
+                // The Osprey .blib carries no usable DIA-NN MS2 scan index, so
+                // convertBlibToDiannTsv writes MS2.Scan=0 and add_ms2spectrum_index() synthesizes
+                // the true per-precursor MS2 ordinal into an "ms2index" column (plus the matched
+                // apex RT into "apex_rt"). use_diann_report_column_names() just reset the reader
+                // back to MS2.Scan/RT, so re-point it at the synthesized columns -- exactly as the
+                // Skyline path does (PSMConfig.use_skyline_report_column_names sets ms2index).
+                // Without this every precursor maps to MS2 scan 0 and the fragment lookup fails
+                // ("Spectrum not found" for all but the one precursor sharing scan 0's window).
+                PSMConfig.use_added_ms2index_columns();
+                aiGear.search_engine = "DIA-NN";
+                aiGear.load_data(new_psm_file, ms_file, aiGear.fdr_cutoff);
+                aiGear.get_ms2_matches_diann();
             } else {
                 aiGear.load_data(psm_file, ms_file, aiGear.fdr_cutoff);
                 // TODO: need to update for CCS
@@ -7985,8 +8168,10 @@ public class AIGear {
         ConcurrentHashMap<Integer, ApexMatch> row2index = new ConcurrentHashMap<>();
         // only need to save information from MS2 spectra
         // index -> rt and isolation_mz
-        // Extract MS2 spectra index and MS2 spectra RT and isolation win from mzML
-        HashMap<Integer, HashMap<String, Double>> index = new HashMap<>();
+        // Extract MS2 spectra index and MS2 spectra RT and isolation win from mzML.
+        // TreeMap so iteration is by MS2 ordinal (= RT-ascending), which ApexMatcher relies on for
+        // its early-exit to be sound.
+        java.util.TreeMap<Integer, HashMap<String, Double>> index = new java.util.TreeMap<>();
         DIAMeta meta = new DIAMeta();
         meta.load_ms_data(ms_file);
         int global_index = 0;
@@ -8049,35 +8234,8 @@ public class AIGear {
                         Integer.parseInt(d[cIndex.get(PSMConfig.precursor_charge_column_name)]));
             }
 
-            double delta_rt = Double.POSITIVE_INFINITY;
-            int matched_index = -1;
-
-            for (Integer i : index.keySet()) {
-                if (index.get(i).get("isolation_mz_start") <= precursor_mz
-                        && precursor_mz <= index.get(i).get("isolation_mz_end")) {
-                    if (Math.abs(index.get(i).get("rt") - rt) < delta_rt) {
-                    // if (Math.abs(index.get(i).get("rt") - rt) < delta_rt && Math.abs(index.get(i).get("ccs") - ccs) < ccs_cutoff) {
-                        delta_rt = Math.abs(index.get(i).get("rt") - rt);
-                        // delta_ccs = Math.abs(index.get(i).get("ccs") - ccs);
-                        matched_index = i;
-                    } else if (index.get(i).get("rt") > rt + 2) {
-                        break;
-                    }
-                }
-            }
-            if (matched_index == -1) {
-                for (int i : index.keySet()) {
-                    if (index.get(i).get("isolation_mz_start") <= precursor_mz
-                            && precursor_mz <= index.get(i).get("isolation_mz_end")) {
-                        if (Math.abs(index.get(i).get("rt") - rt) < delta_rt) {
-                            delta_rt = Math.abs(index.get(i).get("rt") - rt);
-                            matched_index = i;
-                        } else if (index.get(i).get("rt") > rt + 2) {
-                            break;
-                        }
-                    }
-                }
-            }
+            int matched_index =
+                    main.java.dia.ApexMatcher.matchByIsolationRange(index, precursor_mz, rt);
 
             synchronized (this) {
                 if (index.containsKey(matched_index)) {
@@ -9306,10 +9464,11 @@ public class AIGear {
                     }
 
                 }
-                if(!apex_found){
-                    Cloger.getInstance().logger.error("Apex not found:"+peptideMatch.rt_apex+","+peptideMatch.rt_start+","+peptideMatch.rt_end);
-                    System.exit(1);
-                }
+                // The apex RT is the fitted peak apex, which by definition lies BETWEEN scans, so an
+                // exact scan-RT match is not expected - and on slower-cycle instruments (e.g. Stellar
+                // sDIA) the nearest scan is further than the 0.01 min window, so no scan matches. Fall
+                // through to the closest-scan re-detection below, which handles the apex and the
+                // boundaries gracefully. (Previously this hard-exited the whole run.)
                 if (!boundary_left_found || !boundary_right_found || !apex_found) {
                     // redo the peak index detection
                     rt = 0;

@@ -1,0 +1,161 @@
+name: Build Windows Installer
+
+# Builds the unsigned Carafe Windows MSI with Osprey bundled inside, the same
+# way Bo's local installer does, but fully automated:
+#   mvn package  ->  publish Osprey (self-contained)  ->  jpackage MSI.
+#
+# Osprey lives in the ProteoWizard tree and is a self-contained managed .NET
+# solution (no native pwiz C++ build needed), so a runner only needs the .NET 8
+# SDK. We sparse-checkout just the Osprey subtree at a pinned ref.
+#
+# Triggers: manual (workflow_dispatch) and version tags (v*). MSI builds are heavy,
+# so it does NOT run on every push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      osprey_repo:
+        description: "Git repo containing pwiz_tools/Osprey (owner/name)"
+        required: true
+        # Osprey is public in ProteoWizard/pwiz; override only to test a fork.
+        default: "ProteoWizard/pwiz"
+      osprey_ref:
+        description: "Branch, tag, or commit SHA of the Osprey source to build"
+        required: true
+        default: "master"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  # write is required so the "Attach MSI to release" step (softprops/action-gh-release) can
+  # upload the MSI asset on v* tag builds; contents: read would block the upload.
+  contents: write
+
+jobs:
+  build-msi:
+    runs-on: windows-latest
+
+    env:
+      # Defaults used when the workflow is triggered by a tag (no manual inputs).
+      OSPREY_REPO: ${{ github.event.inputs.osprey_repo || 'ProteoWizard/pwiz' }}
+      OSPREY_REF: ${{ github.event.inputs.osprey_ref || 'master' }}
+      RID: win-x64
+
+    steps:
+      - name: Checkout Carafe
+        uses: actions/checkout@v5
+
+      # JDK with jpackage. Match the runtime version Bo ships (README requires
+      # 25.0.2+); the bundled JEP 472 native-access flag needs JDK 24+.
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up .NET 8 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      # jpackage's MSI backend is WiX 3.x (candle/light). windows-latest already
+      # ships WiX 3.14, so just locate it and put its bin on PATH; install only as
+      # a fallback if it is ever missing (do NOT pin a version - choco fails when a
+      # newer build is already installed).
+      - name: Ensure WiX 3 on PATH (jpackage MSI backend)
+        shell: pwsh
+        run: |
+          $light = Get-ChildItem 'C:\Program Files (x86)\WiX Toolset*\bin\light.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $light) {
+            choco install wixtoolset --no-progress -y
+            $light = Get-ChildItem 'C:\Program Files (x86)\WiX Toolset*\bin\light.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $light) { Write-Error 'WiX 3 (light.exe) not found'; exit 1 }
+          Add-Content -Path $env:GITHUB_PATH -Value $light.Directory.FullName
+          Write-Host "Using WiX at $($light.Directory.FullName)"
+
+      # STOP-GAP: com.compomics:utilities:5.0.39P2 is a patched build that is not
+      # published to any public Maven repo, so a clean checkout cannot resolve it.
+      # Install the vendored copy into the runner's local repo before building.
+      # TODO(Bo): replace by publishing this jar to a lab-controlled Maven repo and
+      # resolving it normally, then drop lib/ and this step.
+      # Use cmd (not the default pwsh): PowerShell mangles unquoted -D values that
+      # contain '.'/'/' (e.g. -Dfile=lib/utilities-5.0.39P2.jar -> lib/utilities-5).
+      - name: Install patched compomics-utilities into the local Maven repo
+        shell: cmd
+        run: mvn -B install:install-file -Dfile=lib/utilities-5.0.39P2.jar -DgroupId=com.compomics -DartifactId=utilities -Dversion=5.0.39P2 -Dpackaging=jar
+
+      - name: Build Carafe jar
+        run: mvn -B -DskipTests package
+
+      # Single source of truth for the version: the Maven project version. Used below for the
+      # Osprey publish path and passed to the MSI script as APP_VERSION, so a pom bump can't drift
+      # from a hard-coded 2.2.0 in two files.
+      - name: Resolve Carafe version
+        shell: bash
+        run: |
+          v=$(mvn -q -B help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "CARAFE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "Resolved Carafe version: $v"
+
+      # Osprey is public (ProteoWizard/pwiz). Sparse-checkout only what the
+      # build touches: the Osprey subtree, the shared PortableUtil project,
+      # and two vendored DLLs the projects bind to outside that subtree:
+      #   * Shared/Lib/DotNetZip  - hard <Reference> in Osprey.IO (build fails without it)
+      #   * Shared/Lib/Parquet    - patched ParquetNet.dll that Osprey's
+      #                             Directory.Build.targets overlays post-build; the
+      #                             overlay is Exists()-guarded, so a missing file would
+      #                             SILENTLY ship a build that can't read osprey parquet.
+      - name: Checkout Osprey source (sparse)
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.OSPREY_REPO }}
+          ref: ${{ env.OSPREY_REF }}
+          path: pwiz
+          sparse-checkout: |
+            pwiz_tools/Osprey
+            pwiz_tools/Shared/PortableUtil
+            pwiz_tools/Shared/Lib/DotNetZip
+            pwiz_tools/Shared/Lib/Parquet
+          sparse-checkout-cone-mode: false
+
+      # Publish a self-contained Osprey straight into the app directory so
+      # jpackage's --input sweeps it into the MSI. resolveOspreyBinary() then finds
+      # it at <appdir>/osprey/win-x64/Osprey.exe next to the jar.
+      #
+      # Do NOT use PublishSingleFile here. Osprey's blib writer uses
+      # System.Data.SQLite, whose native SQLite.Interop.dll is preloaded by resolving
+      # the managed assembly's own directory (Assembly.Location). In a single-file
+      # publish Assembly.Location is "", so Path.GetDirectoryName("") -> null and the
+      # SQLiteConnection ctor throws "ArgumentNullException (Parameter 'path1')" from
+      # Path.Combine the moment it opens the output .blib. A normal folder publish
+      # ships SQLite.Interop.dll as a real sibling file, so the resolution works.
+      - name: Publish Osprey (self-contained ${{ env.RID }})
+        run: >
+          dotnet publish
+          pwiz/pwiz_tools/Osprey/Osprey/Osprey.csproj
+          -c Release -f net8.0 -r ${{ env.RID }}
+          --self-contained true
+          -p:PublishSingleFile=false
+          -p:Platform=x64
+          -o target/carafe-${{ env.CARAFE_VERSION }}/osprey/${{ env.RID }}
+
+      - name: Build MSI (unsigned, Osprey bundled)
+        env:
+          APP_VERSION: ${{ env.CARAFE_VERSION }}
+        run: scripts\generate_installer_win.bat
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: Carafe-${{ env.RID }}-msi
+          path: target/installer/*.msi
+          if-no-files-found: error
+
+      # On a version tag, attach the MSI to the GitHub Release.
+      - name: Attach MSI to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: target/installer/*.msi

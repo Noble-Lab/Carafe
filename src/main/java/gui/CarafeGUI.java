@@ -94,6 +94,59 @@ public class CarafeGUI extends JFrame {
     private JTextField carafeAdditionalOptionsField;
     private JTextField diannAdditionalOptionsField;
 
+    // Search engine selection + Osprey settings. These are field-initialized with defaults
+    // so the search-engine choice defaults to DIA-NN (no behavior change) and the Osprey option
+    // widgets are never null even before they are added to a settings panel.
+    private JComboBox<String> searchEngineCombo = new JComboBox<>(new String[] { "DIA-NN", "Osprey" });
+    private JComboBox<String> ospreyPathCombo;
+    // Resolution defaults to hram (high-res Orbitrap/Astral, the common Osprey case).
+    private JComboBox<String> ospreyResolutionCombo = new JComboBox<>(new String[] { "hram", "unit", "auto" });
+    // FDR method is always percolator for Osprey (no UI control; hardcoded in buildOspreyCommand).
+    private JComboBox<String> ospreyFdrLevelCombo = new JComboBox<>(new String[] { "precursor", "peptide", "both" });
+    private JComboBox<String> ospreySharedPeptidesCombo = new JComboBox<>(new String[] { "all", "razor", "unique" });
+    private JTextField ospreyRunFdrField = new JTextField("0.01");
+    private JTextField ospreyExperimentFdrField = new JTextField("0.01");
+    private JTextField ospreyProteinFdrField = new JTextField("0.01");
+    private JTextField ospreyAdditionalOptionsField = new JTextField("");
+    // Default off: entrapment (p_target/p_decoy) peptides are only needed for Osprey-side
+    // entrapment-FDR validation. Off => Carafe builds a target+decoy library for Osprey.
+    private JCheckBox includeEntrapmentCheckbox = new JCheckBox("Include entrapment peptides (Osprey)", false);
+
+    // Initial-library predictor for the Osprey workflows: Carafe's local AlphaPepDeep (default) or
+    // a Koina-hosted model. Koina is opt-in and requires network.
+    private JComboBox<String> initialLibraryPredictorCombo = new JComboBox<>(new String[] {
+            "Carafe (local AlphaPepDeep)",
+            "Koina: AlphaPepDeep",
+            "Koina: Prosit 2020 HCD",
+            "Koina: Prosit 2020 CID",
+            "Koina: Prosit timsTOF",
+            "Koina: ms2pip HCD",
+            "Koina: ms2pip timsTOF"
+    });
+    private JTextField koinaUrlField = new JTextField("https://koina.wilhelmlab.org");
+    // Max number of MSConvert processes to run in parallel when converting raw/.d for Osprey.
+    private JTextField ospreyConversionThreadsField = new JTextField("4");
+
+    // Per-step overrides for buildCarafeCommand, used only by the Osprey workflows to reuse
+    // the shared Carafe command builder for the peptide-FASTA (NoCut) library and finetune steps.
+    // All null for the DIA-NN workflows (1-3), so their behavior is unchanged.
+    private String carafeDbOverride = null;         // -db (peptide FASTA instead of libraryDbField)
+    private String carafeIOverride = null;          // -i  (Osprey .blib instead of diannReportField)
+    private String carafeOutSubdirOverride = null;  // output subdir under the output directory
+    private String carafeEnzymeOverride = null;     // -enzyme value (e.g. "NoCut")
+    private String carafeSeOverride = null;         // -se value (e.g. "Osprey")
+    private String carafeLfTypeOverride = null;     // -lf_type value (e.g. "DIA-NN")
+
+    /** Reset all per-step Carafe command overrides back to default (DIA-NN-workflow) behavior. */
+    private void clearCarafeOverrides() {
+        carafeDbOverride = null;
+        carafeIOverride = null;
+        carafeOutSubdirOverride = null;
+        carafeEnzymeOverride = null;
+        carafeSeOverride = null;
+        carafeLfTypeOverride = null;
+    }
+
     // Multi-file selection storage
     private java.util.List<String> trainMsFiles = new java.util.ArrayList<>();
     private java.util.List<String> projectMsFiles = new java.util.ArrayList<>();
@@ -106,6 +159,7 @@ public class CarafeGUI extends JFrame {
     private java.util.List<JComponent> diannAdditionalOptionsRowComponents;
     private java.util.List<JComponent> libraryDbRowComponents;
     private java.util.List<JComponent> diannExeRowComponents;
+    private java.util.List<JComponent> ospreyExeRowComponents;
     private java.util.List<JComponent> msConvertExeRowComponents;
     private JPanel inputFieldsPanel;
 
@@ -191,17 +245,26 @@ public class CarafeGUI extends JFrame {
     private static final String PREF_LAST_DIR = "lastDirectory";
     private static final String PREF_PYTHON_PATH = "pythonPath";
     private static final String PREF_DIANN_PATH = "diannPath";
+    private static final String PREF_OSPREY_PATH = "ospreyPath";
     private static final String PREF_MSCONVERT_PATH = "msConvertPath";
     private static final String PREF_DARK_MODE = "darkMode";
 
     /**
      * Time usage tracking map.
      */
-    private final java.util.Map<String, Double> timeUsageMap = new java.util.LinkedHashMap<>();
+    // Synchronized so the parallel Osprey workflow executor can update these from multiple lane
+    // threads; the sequential workflows are unaffected.
+    private final java.util.Map<String, Double> timeUsageMap =
+            java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
     /**
      * List of tasks
      */
-    private final java.util.List<CmdTask> tasks = new java.util.ArrayList<>();
+    private final java.util.List<CmdTask> tasks =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+    /** Live external processes, tracked so Stop can terminate all of them (incl. parallel ones). */
+    private final java.util.Set<Process> activeProcesses =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
     private String diannVersion = "";
     private boolean isDiannV2 = false;
@@ -211,6 +274,10 @@ public class CarafeGUI extends JFrame {
     public CarafeGUI() {
         setTitle("Carafe - Spectral Library Generator");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // Make sure external processes (MSConvert / DIA-NN / Osprey / Carafe / Python) and
+        // their children are terminated if the GUI exits without the user clicking Stop (e.g. the
+        // window is closed mid-run). Runs on JVM shutdown, which EXIT_ON_CLOSE triggers.
+        Runtime.getRuntime().addShutdownHook(new Thread(this::terminateAllProcesses, "carafe-process-cleanup"));
         setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
         setPreferredSize(new Dimension(DEFAULT_WIDTH, DEFAULT_HEIGHT));
         setResizable(true);
@@ -349,6 +416,9 @@ public class CarafeGUI extends JFrame {
         tabbedPane.addTab("Training Data Generation", wrapInScrollPane(createTrainingDataPanel()));
         tabbedPane.addTab("Model Training", wrapInScrollPane(createModelTrainingPanel()));
         tabbedPane.addTab("Library Generation", wrapInScrollPane(createLibraryGenerationPanel()));
+        tabbedPane.addTab("Osprey", wrapInScrollPane(createOspreyPanel()));
+        // Console is added last (rightmost); code switches to it via indexOfTab("Console"),
+        // so its position is not hardcoded.
         tabbedPane.addTab("Console", createConsolePanel());
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
@@ -1024,7 +1094,9 @@ public class CarafeGUI extends JFrame {
         String[] workflows = {
                 "1. Spectral library generation: start with DIA-NN search",
                 "2. Spectral library generation: start with DIA-NN report",
-                "3. End-to-end DIA search"
+                "3. End-to-end DIA search",
+                "4. Osprey: search, finetune, build new library",
+                "5. Osprey: end-to-end (finetune, then search project files)"
         };
         workflowCombo = new JComboBox<>(workflows);
         styleComboBox(workflowCombo);
@@ -1135,6 +1207,15 @@ public class CarafeGUI extends JFrame {
                 diannAdditionalOptionsField = createTextField("DIA-NN additional options"),
                 null);
 
+        ospreyExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Osprey Executable:",
+                "Path to the Osprey executable (Osprey.exe on Windows, Osprey on Linux/Mac).\n"
+                        + "An Osprey bundled with the installer always takes precedence, so MSI installs use the\n"
+                        + "installed build automatically and you can leave this blank. Set it only for source /\n"
+                        + "command-line runs with no bundled build (e.g. a local pwiz build folder). Remaining\n"
+                        + "fallbacks: ~/.carafe/osprey/<rid>/, then the system PATH.",
+                ospreyPathCombo = createOspreyComboBox(),
+                createOspreyBrowseButton());
+
         addInputRowToPanel(inputFieldsPanel, gridy++, "Carafe additional options:",
                 "Additional command line options for Carafe.",
                 carafeAdditionalOptionsField = createTextField("Carafe additional options"),
@@ -1180,6 +1261,10 @@ public class CarafeGUI extends JFrame {
                         "Workflow 2: Generate spectral library from existing DIA-NN results\n" +
                         "  - Requires: DIA-NN report file, Train MS files, Library database\n\n" +
                         "Workflow 3: Complete DIA analysis pipeline (Carafe+DIA-NN)\n" +
+                        "  - Requires: Train MS, Project MS, both databases\n\n" +
+                        "Workflow 4: Osprey search, finetune, build new library\n" +
+                        "  - Requires: Train MS, Train database, Library database\n\n" +
+                        "Workflow 5: Osprey end-to-end (finetune, then search project files)\n" +
                         "  - Requires: Train MS, Project MS, both databases"),
                 BorderLayout.CENTER);
 
@@ -1584,6 +1669,7 @@ public class CarafeGUI extends JFrame {
                 setVisible(projectMsRowComponents, false);
                 setVisible(libraryDbRowComponents, true);
                 setVisible(diannExeRowComponents, true);
+                setVisible(ospreyExeRowComponents, false);
                 setVisible(diannAdditionalOptionsRowComponents, true);
                 updateMsConvertVisibility();
             }
@@ -1594,6 +1680,7 @@ public class CarafeGUI extends JFrame {
                 setVisible(projectMsRowComponents, false);
                 setVisible(libraryDbRowComponents, true);
                 setVisible(diannExeRowComponents, false);
+                setVisible(ospreyExeRowComponents, false);
                 setVisible(diannAdditionalOptionsRowComponents, false);
                 updateMsConvertVisibility();
             }
@@ -1604,7 +1691,30 @@ public class CarafeGUI extends JFrame {
                 setVisible(projectMsRowComponents, true);
                 setVisible(libraryDbRowComponents, true);
                 setVisible(diannExeRowComponents, true);
+                setVisible(ospreyExeRowComponents, false);
                 setVisible(diannAdditionalOptionsRowComponents, true);
+                updateMsConvertVisibility();
+            }
+            case 3 -> { // Workflow 4: Osprey search -> finetune -> new library
+                setVisible(diannReportRowComponents, false);
+                setVisible(trainMsRowComponents, true);
+                setVisible(trainDbRowComponents, true);
+                setVisible(projectMsRowComponents, false);
+                setVisible(libraryDbRowComponents, true);
+                setVisible(diannExeRowComponents, false);
+                setVisible(ospreyExeRowComponents, true);
+                setVisible(diannAdditionalOptionsRowComponents, false);
+                updateMsConvertVisibility();
+            }
+            case 4 -> { // Workflow 5: Osprey end-to-end (then search project files)
+                setVisible(diannReportRowComponents, false);
+                setVisible(trainMsRowComponents, true);
+                setVisible(trainDbRowComponents, true);
+                setVisible(projectMsRowComponents, true);
+                setVisible(libraryDbRowComponents, true);
+                setVisible(diannExeRowComponents, false);
+                setVisible(ospreyExeRowComponents, true);
+                setVisible(diannAdditionalOptionsRowComponents, false);
                 updateMsConvertVisibility();
             }
         }
@@ -1622,6 +1732,105 @@ public class CarafeGUI extends JFrame {
         inputFieldsPanel.setBorder(BorderFactory.createEmptyBorder());
         inputFieldsPanel.revalidate();
         inputFieldsPanel.repaint();
+    }
+
+    /** Settings panel for the Osprey search engine (Workflows 4 and 5). */
+    private JPanel createOspreyPanel() {
+        JPanel panel = new ScrollablePanel(new GridBagLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = DEFAULT_INSETS;
+        gbc.anchor = GridBagConstraints.WEST;
+        int row = 0;
+
+        styleComboBox(ospreyResolutionCombo);
+        styleComboBox(ospreyFdrLevelCombo);
+        styleComboBox(ospreySharedPeptidesCombo);
+        styleComboBox(initialLibraryPredictorCombo);
+
+        // Initial-library predictor (Carafe local vs Koina) + Koina server URL.
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0;
+        panel.add(createLabel("Initial library predictor:",
+                "How the initial (non-finetuned) library is predicted before the first Osprey search.\n"
+                        + "Carafe local runs AlphaPepDeep on your machine; Koina options query the Koina web\n"
+                        + "service (needs network). The finetuned library is always built locally by Carafe."), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(initialLibraryPredictorCombo, gbc);
+        row++;
+
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0;
+        panel.add(createLabel("Koina server URL:",
+                "Koina server base URL (used only when a Koina predictor is selected)."), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(koinaUrlField, gbc);
+        row++;
+
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0;
+        panel.add(includeEntrapmentCheckbox, gbc);
+        includeEntrapmentCheckbox.setToolTipText(
+                "Include FDRBench entrapment (p_target/p_decoy) peptides in the target-decoy library.\n"
+                        + "Off by default; enable for Osprey-side entrapment-FDR validation.");
+        row++;
+
+        Object[][] combos = {
+                { "Resolution:", ospreyResolutionCombo,
+                        "Spectral resolution mode passed to Osprey (--resolution). Default: hram." },
+                { "FDR level:", ospreyFdrLevelCombo, "Osprey --fdr-level." },
+                { "Shared peptides:", ospreySharedPeptidesCombo, "Osprey --shared-peptides." },
+        };
+        for (Object[] c : combos) {
+            gbc.gridx = 0;
+            gbc.gridy = row;
+            gbc.weightx = 0;
+            panel.add(createLabel((String) c[0], (String) c[2]), gbc);
+            gbc.gridx = 1;
+            gbc.weightx = 1;
+            panel.add((JComponent) c[1], gbc);
+            row++;
+        }
+
+        Object[][] fields = {
+                { "Run FDR:", ospreyRunFdrField, "Per-run FDR threshold (--run-fdr)." },
+                { "Experiment FDR:", ospreyExperimentFdrField, "Experiment-wide FDR threshold (--experiment-fdr)." },
+                { "Protein FDR:", ospreyProteinFdrField, "Protein-level FDR threshold (--protein-fdr)." },
+                { "Additional options:", ospreyAdditionalOptionsField,
+                        "Extra command-line options appended to the Osprey command." },
+                { "Parallel MSConvert processes:", ospreyConversionThreadsField,
+                        "How many raw/.d files to convert to mzML at once (separate MSConvert processes).\n"
+                                + "Used by Workflows 4/5 when converting acquisition files for Osprey." },
+        };
+        for (Object[] f : fields) {
+            gbc.gridx = 0;
+            gbc.gridy = row;
+            gbc.weightx = 0;
+            panel.add(createLabel((String) f[0], (String) f[2]), gbc);
+            gbc.gridx = 1;
+            gbc.weightx = 1;
+            panel.add((JComponent) f[1], gbc);
+            row++;
+        }
+
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1;
+        panel.add(createInfoCard("Osprey",
+                "Osprey is used by Workflows 4 and 5. Carafe builds a target-decoy library\n"
+                        + "(with the digest options from the Library Generation tab), runs Osprey,\n"
+                        + "finetunes its models on the resulting .blib, then predicts a new library.\n"
+                        + "Fragment tolerance is taken from the Training Data Generation tab."), gbc);
+
+        return panel;
     }
 
     private JPanel createTrainingDataPanel() {
@@ -1810,7 +2019,9 @@ public class CarafeGUI extends JFrame {
                 "The normalized collision energy (NCE) to use for deep learning model training and inference.\n" +
                         "NCE is one of the inputs to the deep learning model\n" +
                         "for fragment ion intensity model training and inference.\n" +
-                        "When it is set to 'auto', Carafe will determine the NCE from the training MS/MS data and use it."),
+                        "When it is set to 'auto', Carafe determines the NCE from the MS/MS data and uses it\n" +
+                        "(this also applies to the Osprey initial library, including Koina predictions).\n" +
+                        "Enter a number to override with a specific NCE."),
                 gbc);
         nceField = createTextField("e.g., 27 or auto");
         nceField.setText("auto");
@@ -2239,7 +2450,7 @@ public class CarafeGUI extends JFrame {
                 "This setting will be changed based on the minimum precursor m/z detected in the training MS/MS data."),
                 gbc);
 
-        minPepMzSpinner = createSpinner(300, 100, 2000, 50);
+        minPepMzSpinner = createSpinner(400, 100, 2000, 50);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(minPepMzSpinner, gbc);
@@ -2252,7 +2463,7 @@ public class CarafeGUI extends JFrame {
                 "This setting will be changed based on the maximum precursor m/z detected in the training MS/MS data."),
                 gbc);
 
-        maxPepMzSpinner = createSpinner(1800, 100, 3000, 50);
+        maxPepMzSpinner = createSpinner(900, 100, 3000, 50);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(maxPepMzSpinner, gbc);
@@ -2274,7 +2485,7 @@ public class CarafeGUI extends JFrame {
         panel.add(createLabel("Maximum Peptide Charge:",
                 "The maximum charge of peptide to consider for library generation."), gbc);
 
-        maxPepChargeSpinner = createSpinner(4, 1, 10, 1);
+        maxPepChargeSpinner = createSpinner(3, 1, 10, 1);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(maxPepChargeSpinner, gbc);
@@ -2297,7 +2508,7 @@ public class CarafeGUI extends JFrame {
         panel.add(createLabel("Maximum Fragment m/z:", "The maximum mz of fragment to consider for library generation"),
                 gbc);
 
-        libMaxFragMzSpinner = createSpinner(1800, 500, 3000, 1);
+        libMaxFragMzSpinner = createSpinner(1960, 500, 3000, 1);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(libMaxFragMzSpinner, gbc);
@@ -2786,8 +2997,11 @@ public class CarafeGUI extends JFrame {
                 java.nio.file.Path installRoot = Paths.get(home, ".carafe");
                 try {
                     SwingUtilities.invokeLater(() -> {
-                        if (tabbedPane != null)
-                            tabbedPane.setSelectedIndex(Math.max(0, tabbedPane.getTabCount() - 1));
+                        if (tabbedPane != null) {
+                            int consoleIdx = tabbedPane.indexOfTab("Console");
+                            tabbedPane.setSelectedIndex(consoleIdx >= 0 ? consoleIdx
+                                    : Math.max(0, tabbedPane.getTabCount() - 1));
+                        }
                         progressBar.setIndeterminate(true);
                         progressBar.setString("Python installation...");
                         logToConsole("\n[INSTALL] Python installation started...\n");
@@ -3197,6 +3411,80 @@ public class CarafeGUI extends JFrame {
         return button;
     }
 
+    private JComboBox<String> createOspreyComboBox() {
+        JComboBox<String> combo = new JComboBox<>();
+        combo.setEditable(true);
+        combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        combo.setToolTipText("Select the Osprey executable, or leave blank to use a bundled/auto-detected build");
+
+        String ospreyPrototype = System.getProperty("os.name").toLowerCase().contains("windows")
+                ? "C:\\Carafe\\osprey\\win-x64\\Osprey.exe"
+                : "/usr/local/bin/Osprey";
+        combo.setPrototypeDisplayValue(ospreyPrototype);
+
+        String saved = prefs.get(PREF_OSPREY_PATH, "");
+        if (!saved.isEmpty()) {
+            combo.addItem(saved);
+        }
+        // Prefill with an auto-resolved (bundled/PATH) executable if one is found.
+        String resolved = resolveOspreyBinary();
+        if (!resolved.isEmpty()) {
+            boolean present = false;
+            for (int i = 0; i < combo.getItemCount(); i++) {
+                if (combo.getItemAt(i).equals(resolved)) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) {
+                combo.addItem(resolved);
+            }
+        }
+        if (!saved.isEmpty()) {
+            combo.setSelectedItem(saved);
+        } else if (combo.getItemCount() > 0) {
+            combo.setSelectedIndex(0);
+        }
+
+        combo.addActionListener(e -> {
+            Object selected = combo.getSelectedItem();
+            if (selected != null) {
+                prefs.put(PREF_OSPREY_PATH, selected.toString());
+            }
+        });
+        return combo;
+    }
+
+    private JButton createOspreyBrowseButton() {
+        JButton button = new JButton("Browse");
+        styleButton(button);
+        button.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser(prefs.get(PREF_LAST_DIR, System.getProperty("user.home")));
+            chooser.setDialogTitle("Select the Osprey executable");
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File selectedFile = chooser.getSelectedFile();
+                String path = selectedFile.getAbsolutePath();
+                boolean found = false;
+                for (int i = 0; i < ospreyPathCombo.getItemCount(); i++) {
+                    if (ospreyPathCombo.getItemAt(i).equals(path)) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    ospreyPathCombo.addItem(path);
+                }
+                ospreyPathCombo.setSelectedItem(path);
+                prefs.put(PREF_OSPREY_PATH, path);
+                if (selectedFile.getParent() != null) {
+                    prefs.put(PREF_LAST_DIR, selectedFile.getParent());
+                }
+            }
+        });
+        return button;
+    }
+
     private JComboBox<String> createDiannComboBox() {
         JComboBox<String> combo = new JComboBox<>();
         combo.setEditable(true);
@@ -3406,11 +3694,46 @@ public class CarafeGUI extends JFrame {
             }
         }
 
+        // Osprey reads only mzML, so its workflows also need MSConvert for Bruker .d inputs
+        // (DIA-NN workflows read .d directly and keep the .raw-only rule above).
+        if (!show && (globalWorkflowIndex == 3 || globalWorkflowIndex == 4)) {
+            show = ospreyNeedsConversion(trainMsFiles, trainMsFileField)
+                    || ospreyNeedsConversion(projectMsFiles, projectMsFileField);
+        }
+
         setVisible(msConvertExeRowComponents, show);
         if (inputFieldsPanel != null) {
             inputFieldsPanel.revalidate();
             inputFieldsPanel.repaint();
         }
+    }
+
+    /** True if the selection contains any non-mzML acquisition file (.raw or Bruker .d) that
+     *  Osprey would require MSConvert to convert. */
+    private boolean ospreyNeedsConversion(java.util.List<String> selected, JTextField field) {
+        java.util.List<String> cands = new java.util.ArrayList<>();
+        if (selected != null && !selected.isEmpty()) {
+            cands.addAll(selected);
+        } else if (field != null && !field.getText().trim().isEmpty()) {
+            cands.add(field.getText().trim());
+        }
+        for (String p : cands) {
+            String low = p.toLowerCase();
+            File f = new File(p);
+            if (low.endsWith(".raw") || (low.endsWith(".d") && f.isDirectory())) {
+                return true;
+            }
+            if (f.isDirectory()) {
+                File[] hits = f.listFiles((d, n) -> {
+                    String x = n.toLowerCase();
+                    return x.endsWith(".raw") || x.endsWith(".d");
+                });
+                if (hits != null && hits.length > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private JComboBox<String> createMsConvertComboBox() {
@@ -3781,7 +4104,7 @@ public class CarafeGUI extends JFrame {
             commandArgs.add(pythonPath);
         }
 
-        String libraryDb = libraryDbFileField.getText().trim();
+        String libraryDb = carafeDbOverride != null ? carafeDbOverride : libraryDbFileField.getText().trim();
         if (!libraryDb.isEmpty()) {
             // cmd.append("-db \"").append(libraryDb).append("\" ");
             commandArgs.add("-db");
@@ -3789,7 +4112,7 @@ public class CarafeGUI extends JFrame {
             // commandArgs.add("\"" + libraryDb + "\"");
         }
 
-        String diannReport = diannReportFileField.getText().trim();
+        String diannReport = carafeIOverride != null ? carafeIOverride : diannReportFileField.getText().trim();
         if (!diannReport.isEmpty()) {
             // cmd.append("-i \"").append(diannReport).append("\" ");
             commandArgs.add("-i");
@@ -3819,15 +4142,16 @@ public class CarafeGUI extends JFrame {
             // commandArgs.add("\"" + trainMsFile + "\"");
         }
 
+        String outSubdir = carafeOutSubdirOverride != null ? carafeOutSubdirOverride : "carafe_library";
         String outDir = outputDirField.getText().trim();
         if (!outDir.isEmpty()) {
-            carafe_library_directory = outDir + File.separator + "carafe_library";
+            carafe_library_directory = outDir + File.separator + outSubdir;
             // cmd.append("-o \"").append(carafe_library_directory).append("\" ");
             commandArgs.add("-o");
             commandArgs.add(carafe_library_directory);
             // commandArgs.add("\"" + carafe_library_directory + "\"");
         }else{
-            carafe_library_directory = "carafe_library";
+            carafe_library_directory = outSubdir;
             commandArgs.add("-o");
             commandArgs.add(carafe_library_directory);
         }
@@ -3915,7 +4239,11 @@ public class CarafeGUI extends JFrame {
             commandArgs.add("-ccs");
         }
 
-        String enzyme = ((String) enzymeCombo.getSelectedItem()).split(":")[0];
+        // For the Osprey peptide-FASTA path, override the enzyme with "NoCut" so AlphaPepDeep
+        // predicts each pre-digested peptide (target and decoy) as-is.
+        String enzyme = carafeEnzymeOverride != null
+                ? carafeEnzymeOverride
+                : ((String) enzymeCombo.getSelectedItem()).split(":")[0];
         // cmd.append("-enzyme ").append(enzyme).append(" ");
         commandArgs.add("-enzyme");
         commandArgs.add(enzyme);
@@ -3992,11 +4320,20 @@ public class CarafeGUI extends JFrame {
         // cmd.append("-lf_type ").append(libraryFormatCombo.getSelectedItem()).append("
         // ");
         commandArgs.add("-lf_type");
-        commandArgs.add(libraryFormatCombo.getSelectedItem().toString());
+        commandArgs.add(carafeLfTypeOverride != null
+                ? carafeLfTypeOverride
+                : libraryFormatCombo.getSelectedItem().toString());
         // cmd.append("-se DIA-NN ");
 
         commandArgs.add("-se");
-        commandArgs.add("DIA-NN");
+        String seValue = carafeSeOverride != null ? carafeSeOverride : getSelectedSearchEngine();
+        commandArgs.add(seValue);
+        // Entrapment FASTAs (the Osprey workflow) mark decoys with the "decoy_" prefix, not the
+        // default "rev_", so the library's Decoy column is flagged correctly when building from them.
+        if ("Osprey".equalsIgnoreCase(seValue)) {
+            commandArgs.add("-decoy_prefix");
+            commandArgs.add("decoy_");
+        }
 
         if (!trainMsFile.isEmpty()) {
             // cmd.append("-tf all ");
@@ -4132,6 +4469,16 @@ public class CarafeGUI extends JFrame {
         cmdTask.out_dir = carafe_library_directory;
         cmdTask.out_files.add(carafe_library_directory+File.separator+"carafe_spectral_library.tsv");
         cmdTask.out_files_description.add("Carafe fine-tuned spectral library");
+        // Inputs read by this step: protein DB (-db), training MS (-ms), and peptide IDs (-i).
+        if (!libraryDb.isEmpty()) {
+            cmdTask.input_files.add(libraryDb);
+        }
+        if (!trainMsFile.isEmpty()) {
+            cmdTask.input_files.add(trainMsFile);
+        }
+        if (!diannReport.isEmpty()) {
+            cmdTask.input_files.add(diannReport);
+        }
 
         return cmdTask;
     }
@@ -4269,6 +4616,7 @@ public class CarafeGUI extends JFrame {
                     String convCmd = buildMsConvertCommand(rawFilesToConvert, subDir);
                     conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW files to mzML");
                     conversionTask.out_dir = subDir;
+                    conversionTask.input_files.addAll(rawFilesToConvert);
 
                     for (String rawPath : rawFilesToConvert) {
                         String rawName = new File(rawPath).getName();
@@ -4329,7 +4677,7 @@ public class CarafeGUI extends JFrame {
                 }
 
                 if (tabbedPane != null) {
-                    SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
+                    SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(tabbedPane.indexOfTab("Console")));
                 }
 
                 CmdTask[] initialTasks;
@@ -4580,6 +4928,7 @@ public class CarafeGUI extends JFrame {
                             conversionTask.out_dir = subDir;
 
                             for (File raw : rawFiles) {
+                                conversionTask.input_files.add(raw.getAbsolutePath());
                                 String rawName = raw.getName();
                                 String baseName = rawName.lastIndexOf('.') > 0
                                         ? rawName.substring(0, rawName.lastIndexOf('.'))
@@ -4617,6 +4966,7 @@ public class CarafeGUI extends JFrame {
                         String convCmd = buildMsConvertCommand(effectiveTrainFiles, subDir);
                         conversionTask = new CmdTask(convCmd, "MSConvert", "Convert RAW files to mzML");
                         conversionTask.out_dir = subDir;
+                        conversionTask.input_files.addAll(effectiveTrainFiles);
 
                         for (String f : effectiveTrainFiles) {
                             String rawName = new File(f).getName();
@@ -4665,7 +5015,7 @@ public class CarafeGUI extends JFrame {
                         + "carafe_spectral_library.tsv";
 
                 if (tabbedPane != null) {
-                    SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
+                    SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(tabbedPane.indexOfTab("Console")));
                 }
 
                 CmdTask[] initialTasks;
@@ -4766,6 +5116,234 @@ public class CarafeGUI extends JFrame {
                 });
             }
 
+            case 3, 4 -> { // Osprey workflows 4 & 5
+                boolean endToEnd = (workflow == 4);
+                String trainDb = trainDbFileField.getText().trim();
+                String libraryDb = libraryDbFileField.getText().trim();
+                boolean koina = koinaModelsFor((String) initialLibraryPredictorCombo.getSelectedItem()) != null;
+
+                // Resolve training + project MS inputs; each non-mzML file becomes its own MSConvert
+                // task so they can run as parallel processes.
+                java.util.List<CmdTask> trainConv = new java.util.ArrayList<>();
+                java.util.List<String> trainMs = resolveOspreyMsInputs(trainMsFiles, trainMsFileField.getText(),
+                        outDir + File.separator + "train_mzML", trainConv);
+                if (trainMs.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "No valid training MS files (mzML/.d) found.",
+                            "Input Required", JOptionPane.WARNING_MESSAGE);
+                    setInputsFrozen(false);
+                    return;
+                }
+                java.util.List<CmdTask> projConv = new java.util.ArrayList<>();
+                java.util.List<String> projMs = null;
+                if (endToEnd) {
+                    projMs = resolveOspreyMsInputs(projectMsFiles, projectMsFileField.getText(),
+                            outDir + File.separator + "project_mzML", projConv);
+                    if (projMs.isEmpty()) {
+                        JOptionPane.showMessageDialog(this, "No valid project MS files (mzML/.d) found.",
+                                "Input Required", JOptionPane.WARNING_MESSAGE);
+                        setInputsFrozen(false);
+                        return;
+                    }
+                }
+
+                boolean isTimsTOF = trainMs.stream().anyMatch(p -> p.toLowerCase().endsWith(".d"));
+                String trainMsInput = trainMs.size() == 1 ? trainMs.getFirst()
+                        : new File(trainMs.getFirst()).getParent();
+
+                // When the training and library databases are the same file, build the peptide
+                // FASTA + manifest once and reuse it for the new (finetuned) library.
+                boolean sameDb;
+                try {
+                    sameDb = new File(trainDb).getCanonicalPath().equals(new File(libraryDb).getCanonicalPath());
+                } catch (IOException ioe) {
+                    sameDb = trainDb.equals(libraryDb);
+                }
+
+                // Deterministic output paths.
+                String pep1 = outDir + File.separator + "osprey_train_db_peptides.fasta";
+                String man1 = outDir + File.separator + "osprey_train_db_pairing.tsv";
+                String lib1Tsv = outDir + File.separator + "osprey_initial_library"
+                        + File.separator + "carafe_spectral_library.tsv";
+                String ospreyTrainDir = outDir + File.separator + "osprey_train";
+                String blib1 = ospreyTrainDir + File.separator + "osprey.blib";
+                String lib2Tsv = outDir + File.separator + "osprey_new_library"
+                        + File.separator + "carafe_spectral_library.tsv";
+                // Entrapment peptides go ONLY into the library-DB FASTA, which feeds the finetuned
+                // library (used as the project-search library in workflow 5, and the deliverable in
+                // workflow 4). They must NOT go into the training-DB FASTA: the training search
+                // drives AI fine-tuning, and identifying random entrapment sequences would pollute
+                // that training. Consequently, when entrapment is requested the training and library
+                // FASTAs differ even if the two databases are the same file, so we cannot share one.
+                boolean entrap = includeEntrapmentCheckbox.isSelected();
+                OspreyFastaPlanner.Plan fastaPlan = OspreyFastaPlanner.plan(sameDb, entrap);
+                boolean shareFasta = fastaPlan.shareTrainingFasta;
+                // The library-DB peptide FASTA + manifest: reuse the training-DB ones only when the
+                // databases are identical AND no entrapment is requested.
+                String pep2 = shareFasta ? pep1 : outDir + File.separator + "osprey_library_db_peptides.fasta";
+                String man2 = shareFasta ? man1 : outDir + File.separator + "osprey_library_db_pairing.tsv";
+
+                // Build all tasks up front (output paths are deterministic). The training-DB FASTA is
+                // always target+decoy only (never entrapment) so fine-tuning is not trained on it.
+                CmdTask ent1 = buildEntrapmentFastaCommand(trainDb, pep1, man1, fastaPlan.trainingEntrapment);
+                ent1.task_description = "Build target-decoy peptide FASTA (training DB)";
+
+                CmdTask lib1;
+                if (koina) {
+                    lib1 = buildKoinaLibraryCommand(pep1, lib1Tsv, trainMs.get(0));
+                    if (lib1 != null) {
+                        lib1.task_description = "Koina: predict initial target-decoy library";
+                    }
+                } else {
+                    clearCarafeOverrides();
+                    carafeDbOverride = pep1;
+                    carafeEnzymeOverride = "NoCut";
+                    carafeOutSubdirOverride = "osprey_initial_library";
+                    carafeLfTypeOverride = "DIA-NN";
+                    carafeSeOverride = "Osprey";
+                    lib1 = buildCarafeCommand("", false); // empty -ms => library only
+                    clearCarafeOverrides();
+                    if (lib1 != null) {
+                        lib1.task_description = "Carafe: build initial target-decoy library (NoCut)";
+                    }
+                }
+                if (lib1 == null) {
+                    setInputsFrozen(false);
+                    return;
+                }
+                lib1.skip_check_file = lib1Tsv;
+
+                new File(ospreyTrainDir).mkdirs();
+                CmdTask osprey1 = buildOspreyCommand(trainMs, lib1Tsv, man1, ospreyTrainDir, null);
+                if (osprey1 == null) {
+                    setInputsFrozen(false);
+                    return;
+                }
+                osprey1.task_description = "Osprey: search training files";
+
+                // The library-DB FASTA carries the entrapment peptides (when requested). Build it
+                // separately whenever it can't be shared with the training-DB FASTA (different DBs,
+                // or entrapment requested). When shared, the training-DB target+decoy FASTA is reused.
+                CmdTask ent2 = shareFasta ? null
+                        : buildEntrapmentFastaCommand(libraryDb, pep2, man2, fastaPlan.libraryEntrapment);
+                if (ent2 != null) {
+                    ent2.task_description = entrap
+                            ? "Build target-decoy-entrapment peptide FASTA (library DB)"
+                            : "Build target-decoy peptide FASTA (library DB)";
+                    if (sameDb && entrap) {
+                        logToConsole("[Carafe] Entrapment enabled: building a separate library "
+                                + "peptide FASTA WITH entrapment for the finetuned library, while the "
+                                + "training FASTA stays entrapment-free so fine-tuning is not trained "
+                                + "on entrapment sequences.\n");
+                    }
+                } else {
+                    logToConsole("[Carafe] Training and library databases are identical (no entrapment); "
+                            + "reusing the same peptide FASTA + manifest for both libraries.\n");
+                }
+
+                clearCarafeOverrides();
+                carafeDbOverride = pep2;
+                carafeEnzymeOverride = "NoCut";
+                carafeIOverride = blib1;
+                carafeSeOverride = "Osprey";
+                carafeOutSubdirOverride = "osprey_new_library";
+                carafeLfTypeOverride = "DIA-NN";
+                CmdTask lib2 = buildCarafeCommand(trainMsInput, isTimsTOF);
+                clearCarafeOverrides();
+                if (lib2 == null) {
+                    setInputsFrozen(false);
+                    return;
+                }
+                lib2.task_description = "Carafe: finetune on Osprey results and build new library";
+                lib2.skip_check_file = lib2Tsv;
+
+                CmdTask osprey2 = null;
+                if (endToEnd) {
+                    String ospreyProjectDir = outDir + File.separator + "osprey_project";
+                    new File(ospreyProjectDir).mkdirs();
+                    // When entrapment is on, have Osprey also write an FDRBench input TSV under
+                    // osprey_project/FDRBench (level follows the Osprey tab's --fdr-level); the
+                    // pairing manifest is copied alongside it after the search (see buildOspreyCommand).
+                    String fdrbenchOut = OspreyFdrBenchPlanner.fdrBenchInputPath(entrap, true, ospreyProjectDir);
+                    osprey2 = buildOspreyCommand(projMs, lib2Tsv, man2, ospreyProjectDir, fdrbenchOut);
+                    if (osprey2 == null) {
+                        setInputsFrozen(false);
+                        return;
+                    }
+                    osprey2.task_description = "Osprey: search project files with the new library";
+                }
+
+                // ---- Phases ----
+                // Phase 1 (parallel): MSConvert lanes (throttled), the library-DB entrapment FASTA,
+                // and the training-DB entrapment FASTA. With Koina, the initial-library prediction
+                // (remote) runs in the same lane right after its FASTA, concurrently with MSConvert.
+                // With local Carafe, the library prediction is deferred to Phase 2 so it does not
+                // compete with MSConvert for local CPU/GPU.
+                // When "auto" NCE is selected and inputs must be converted, the Koina library needs
+                // the mzML to read the collision energy, so it cannot run before conversion; defer
+                // it to Phase 2. Otherwise (manual NCE, or mzML inputs) the Koina lane runs in
+                // Phase 1 concurrently with conversion.
+                boolean autoNce = nceField.getText().trim().equalsIgnoreCase("auto");
+                boolean hasConversion = !trainConv.isEmpty() || !projConv.isEmpty();
+                boolean koinaParallel = koina && !(autoNce && hasConversion);
+
+                java.util.List<java.util.List<CmdTask>> phase1 = new java.util.ArrayList<>();
+                for (CmdTask c : trainConv) {
+                    phase1.add(java.util.List.of(c));
+                }
+                for (CmdTask c : projConv) {
+                    phase1.add(java.util.List.of(c));
+                }
+                if (ent2 != null) {
+                    phase1.add(java.util.List.of(ent2));
+                }
+                if (koinaParallel) {
+                    phase1.add(java.util.Arrays.asList(ent1, lib1));
+                } else {
+                    phase1.add(java.util.List.of(ent1));
+                }
+
+                // Phase 2 (sequential): the deferred library (local, or Koina waiting for mzML for
+                // auto NCE), then Osprey search, finetune, re-search.
+                java.util.List<CmdTask> seq = new java.util.ArrayList<>();
+                if (!koinaParallel) {
+                    seq.add(lib1);
+                }
+                seq.add(osprey1);
+                seq.add(lib2);
+                if (endToEnd && osprey2 != null) {
+                    seq.add(osprey2);
+                }
+
+                java.util.List<java.util.List<java.util.List<CmdTask>>> phases = new java.util.ArrayList<>();
+                phases.add(phase1);
+                phases.add(java.util.List.of(seq));
+
+                int convThreads = 4;
+                try {
+                    convThreads = Integer.parseInt(ospreyConversionThreadsField.getText().trim());
+                } catch (NumberFormatException ignore) {
+                    // keep default
+                }
+                if (convThreads < 1) {
+                    convThreads = 1;
+                }
+
+                // MSConvert settings are identical for every file, so log them once here instead of
+                // repeating the verbose per-file header in the console.
+                int nConvert = trainConv.size() + projConv.size();
+                if (nConvert > 0) {
+                    logToConsole("\n[MSConvert] Converting " + nConvert + " file(s) to indexed mzML "
+                            + "(peak picking MS1-2, zlib compression) using up to " + convThreads
+                            + " parallel process(es). Per-file headers are suppressed; only the output "
+                            + "file and any errors are shown.\n");
+                }
+
+                if (tabbedPane != null) {
+                    SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(tabbedPane.indexOfTab("Console")));
+                }
+                executeParallelWorkflow(phases, convThreads);
+            }
+
             default -> JOptionPane.showMessageDialog(this, "Unsupported workflow selected!", "Error",
                     JOptionPane.ERROR_MESSAGE);
         }
@@ -4786,6 +5364,18 @@ public class CarafeGUI extends JFrame {
                 || !new File(command.skip_check_file).exists()) {
             return false;
         }
+        // The output exists, but only reuse it if the step's command + inputs are unchanged.
+        // Computed here (not at build time) so chained inputs from upstream steps already exist,
+        // giving the correct cascade: a changed upstream output re-runs every downstream step.
+        String signature = main.java.util.ReuseSignature.compute(
+                command.args, command.cmd, command.input_files);
+        if (!main.java.util.ReuseSignature.matches(command.skip_check_file, signature)) {
+            logToConsole("\n========================================\n");
+            logToConsole("[RE-RUN] " + command.task_description + "\n");
+            logToConsole("Inputs or settings changed since the last run — re-running.\n");
+            logToConsole("========================================\n\n");
+            return false;
+        }
         command.skipped = true;
         command.time_used = 0.0;
         String now = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
@@ -4800,6 +5390,27 @@ public class CarafeGUI extends JFrame {
         timeUsageMap.put(key, 0.0);
         tasks.add(command);
         return true;
+    }
+
+    /**
+     * Persist the reuse signature next to a step's output after it completes successfully, so a
+     * later run with the same command and unchanged inputs can be skipped. No-op when the step has
+     * no {@code skip_check_file} (steps that are never auto-reused).
+     */
+    private void writeStepSignature(CmdTask command) {
+        if (command == null || command.skip_check_file == null) {
+            return;
+        }
+        if (!new File(command.skip_check_file).exists()) {
+            return;
+        }
+        String signature = main.java.util.ReuseSignature.compute(
+                command.args, command.cmd, command.input_files);
+        String normalizedCmd = !command.args.isEmpty()
+                ? StringUtils.join(command.args, " ")
+                : command.cmd;
+        main.java.util.ReuseSignature.writeSidecar(
+                command.skip_check_file, signature, normalizedCmd, command.input_files);
     }
 
     private void executeChainedCommands(CmdTask[] initialCommands, NextCommandsSupplier nextCommandsSupplier) {
@@ -4864,6 +5475,7 @@ public class CarafeGUI extends JFrame {
                         });
                         return;
                     }
+                    writeStepSignature(command);
                 }
 
                 if (nextCommandsSupplier != null && isRunning) {
@@ -4902,6 +5514,7 @@ public class CarafeGUI extends JFrame {
                             });
                             return;
                         }
+                        writeStepSignature(command);
                     }
                 }
 
@@ -5050,6 +5663,262 @@ public class CarafeGUI extends JFrame {
             return -1;
         }
         return exitCode;
+    }
+
+    /** Prepend the Python executable's directory to PATH for a process (same as runSingleCommand). */
+    private void applyPythonPathEnv(ProcessBuilder pb, String pythonPath) {
+        if (pythonPath == null || pythonPath.isEmpty()) {
+            return;
+        }
+        java.util.Map<String, String> env = pb.environment();
+        File pythonFile = new File(pythonPath);
+        String pythonDir = pythonFile.isFile() ? pythonFile.getParent() : pythonPath;
+        if (pythonDir != null) {
+            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
+            String sep = isWindows ? ";" : ":";
+            String currentPath = env.getOrDefault("PATH", env.getOrDefault("Path", ""));
+            String newPath = pythonDir + sep + currentPath;
+            env.put("PATH", newPath);
+            if (isWindows) {
+                env.put("Path", newPath);
+            }
+        }
+    }
+
+    /**
+     * Parallel-safe command runner: like {@link #runSingleCommand} but tracks its process in
+     * {@link #activeProcesses} (so Stop can terminate it) instead of the shared
+     * {@code currentProcess} field, and prefixes each output line with {@code prefix} so the
+     * interleaved output of concurrent lanes stays readable.
+     */
+    private int runTrackedCommand(CmdTask task, String pythonPath, String prefix) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder();
+        if (task.args != null && !task.args.isEmpty()) {
+            pb.command(task.args);
+        } else if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+            pb.command("cmd", "/c", "\"" + task.cmd + "\"");
+        } else {
+            pb.command("bash", "-c", task.cmd);
+        }
+        pb.redirectErrorStream(true);
+        applyPythonPathEnv(pb, pythonPath);
+
+        // MSConvert prints a verbose, identical header for every file; with many parallel
+        // conversions that floods the console. Suppress the boilerplate and keep only meaningful
+        // lines (the output-file line and any errors/warnings). The common settings are logged
+        // once before the conversion phase.
+        boolean isMsConvert = "MSConvert".equalsIgnoreCase(task.task_name);
+
+        Process proc = pb.start();
+        activeProcesses.add(proc);
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (isMsConvert && !showMsConvertLine(line)) {
+                    continue;
+                }
+                logToConsole("[" + prefix + "] " + line + "\n");
+            }
+            return proc.waitFor();
+        } finally {
+            activeProcesses.remove(proc);
+        }
+    }
+
+    /**
+     * Whether an MSConvert output line is worth showing on the console. We keep the per-file
+     * "writing output file" line and any error/warning/failure lines, and drop the repetitive
+     * format/compression/filter header (logged once before the conversion phase).
+     */
+    private boolean showMsConvertLine(String line) {
+        String l = line.toLowerCase();
+        return l.contains("writing output file")
+                || l.contains("error") || l.contains("warning")
+                || l.contains("fail") || l.contains("exception");
+    }
+
+    /**
+     * Execute a workflow as a sequence of phases. Within a phase, lanes run concurrently (barrier
+     * at the end of the phase); each lane runs its tasks sequentially. MSConvert tasks are
+     * throttled to {@code convConcurrency} concurrent processes via a semaphore, while other lanes
+     * (e.g. a Koina library prediction running on a remote server) run freely alongside them.
+     *
+     * @param phases ordered phases; each phase is a list of lanes; each lane is a list of tasks
+     * @param convConcurrency max number of concurrent MSConvert processes
+     */
+    private void executeParallelWorkflow(java.util.List<java.util.List<java.util.List<CmdTask>>> phases,
+            int convConcurrency) {
+        isRunning = true;
+        runButton.setEnabled(false);
+        stopButton.setEnabled(true);
+        progressBar.setIndeterminate(true);
+        progressBar.setString("Running...");
+        timeUsageMap.clear();
+        tasks.clear();
+        activeProcesses.clear();
+
+        final boolean reuseResults = reuseResultsCheckbox != null && reuseResultsCheckbox.isSelected();
+        Object selectedPython = pythonPathCombo.getSelectedItem();
+        final String pythonPath = selectedPython != null ? selectedPython.toString().trim() : "";
+        if (!pythonPath.isEmpty()) {
+            prefs.put(PREF_PYTHON_PATH, pythonPath);
+        }
+        saveParameterScreenshots();
+        autoSaveRunSettings();
+
+        final java.util.concurrent.Semaphore convSem =
+                new java.util.concurrent.Semaphore(Math.max(1, convConcurrency));
+        final java.util.concurrent.atomic.AtomicInteger stepCounter =
+                new java.util.concurrent.atomic.AtomicInteger(1);
+        final java.util.concurrent.atomic.AtomicBoolean failed =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        executor.submit(() -> {
+            try {
+                for (java.util.List<java.util.List<CmdTask>> phase : phases) {
+                    if (!isRunning || failed.get()) {
+                        break;
+                    }
+                    java.util.concurrent.ExecutorService pool =
+                            java.util.concurrent.Executors.newCachedThreadPool();
+                    java.util.List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+                    for (java.util.List<CmdTask> lane : phase) {
+                        futures.add(pool.submit(
+                                () -> runLane(lane, pythonPath, reuseResults, stepCounter, convSem, failed)));
+                    }
+                    pool.shutdown();
+                    for (java.util.concurrent.Future<?> fut : futures) {
+                        try {
+                            fut.get();
+                        } catch (Exception e) {
+                            failed.set(true);
+                        }
+                    }
+                    if (failed.get()) {
+                        break;
+                    }
+                }
+
+                SwingUtilities.invokeLater(() -> {
+                    if (!isRunning || failed.get()) {
+                        progressBar.setString("Failed");
+                    } else {
+                        logToConsole("\n[SUCCESS] Workflow completed successfully!\n");
+                        progressBar.setString("Completed");
+                        printWorkflowSummary();
+                    }
+                    finishExecution();
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    logToConsole("\n[ERROR] Error: " + e.getMessage() + "\n");
+                    progressBar.setString("Error");
+                    finishExecution();
+                });
+            }
+        });
+    }
+
+    /** Run one lane's tasks sequentially; sets {@code failed} on the first non-zero exit/error. */
+    private void runLane(java.util.List<CmdTask> lane, String pythonPath, boolean reuseResults,
+            java.util.concurrent.atomic.AtomicInteger stepCounter, java.util.concurrent.Semaphore convSem,
+            java.util.concurrent.atomic.AtomicBoolean failed) {
+        for (CmdTask command : lane) {
+            if (!isRunning || failed.get()) {
+                return;
+            }
+            int stepIndex = stepCounter.getAndIncrement();
+            if (skipIfResultPresent(command, reuseResults, stepIndex)) {
+                continue;
+            }
+            String prefix = command.task_name;
+            boolean isConversion = "MSConvert".equalsIgnoreCase(command.task_name);
+            int exitCode;
+            long start = System.nanoTime();
+            try {
+                // For conversions, wait for a free slot BEFORE announcing the start, so the
+                // [START] markers reflect files that are actually converting (not all queued at once).
+                if (isConversion) {
+                    convSem.acquire();
+                }
+                if (!isRunning || failed.get()) {
+                    if (isConversion) {
+                        convSem.release();
+                    }
+                    return;
+                }
+                logToConsole("\n=== [START] " + command.task_description + " ===\n");
+                command.time_start = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+                start = System.nanoTime();
+                try {
+                    exitCode = runTrackedCommand(command, pythonPath, prefix);
+                } finally {
+                    if (isConversion) {
+                        convSem.release();
+                    }
+                }
+            } catch (Exception e) {
+                logToConsole("\n[ERROR] " + command.task_description + " failed: " + e.getMessage() + "\n");
+                failed.set(true);
+                return;
+            }
+            long end = System.nanoTime();
+            command.time_used = (end - start) / 1e9 / 60.0;
+            command.time_end = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+            timeUsageMap.put(String.format("%02d. %s - %s", stepIndex, command.task_name,
+                    command.task_description), command.time_used);
+            tasks.add(command);
+            logToConsole("\n=== [DONE] " + command.task_description + " ("
+                    + String.format("%.2f", command.time_used) + " min) ===\n");
+            if (exitCode != 0) {
+                logToConsole("\n[ERROR] " + command.task_description + " failed with exit code: "
+                        + exitCode + "\n");
+                failed.set(true);
+                return;
+            }
+            // Post-success hook (e.g. move a locally-staged blib to its final network path).
+            // Runs only on a clean exit and before the reuse signature is written.
+            if (command.postAction != null) {
+                try {
+                    command.postAction.run();
+                } catch (Exception ex) {
+                    logToConsole("\n[ERROR] " + command.task_description + " post-step failed: "
+                            + ex.getMessage() + "\n");
+                    failed.set(true);
+                    return;
+                }
+            }
+            writeStepSignature(command);
+        }
+    }
+
+    /** Print the per-step duration summary (shared by the parallel executor). */
+    private void printWorkflowSummary() {
+        logToConsole("\n[SUMMARY] Step durations (min):\n");
+        double totalTime = 0.0;
+        synchronized (timeUsageMap) {
+            for (java.util.Map.Entry<String, Double> e : timeUsageMap.entrySet()) {
+                totalTime += e.getValue();
+            }
+        }
+        int taskIndex = 1;
+        synchronized (tasks) {
+            for (CmdTask task : tasks) {
+                String skippedNote = task.skipped ? " (skipped — reused existing result)" : "";
+                logToConsole("\n[" + String.format("%02d", taskIndex++) + "] " + task.task_name + " - "
+                        + task.task_description + skippedNote + "\n");
+                logToConsole("  Output directory: " + task.out_dir + "\n");
+                if (!task.out_files.isEmpty()) {
+                    for (int k = 0; k < task.out_files.size(); k++) {
+                        logToConsole("  - " + task.out_files_description.get(k) + ": " + task.out_files.get(k) + "\n");
+                    }
+                }
+                logToConsole("  Time used: " + String.format("%.2f", task.time_used) + " min\n");
+            }
+        }
+        logToConsole("Total time: " + String.format("%.2f", totalTime) + " min\n");
     }
 
     private CmdTask buildDIANNCommand(String ms_file, String spectral_library_file, String database, String out_dir,
@@ -5648,6 +6517,13 @@ public class CarafeGUI extends JFrame {
             }
             CmdTask task = new CmdTask(diannArgs, "DIA-NN", "Running DIA-NN");
             task.cmd = String.join(" ", diannArgs);
+            task.input_files.addAll(msFiles);
+            if (database != null && !database.isEmpty()) {
+                task.input_files.add(database);
+            }
+            if (spectral_library_file != null && !spectral_library_file.isEmpty()) {
+                task.input_files.add(spectral_library_file);
+            }
             task.out_dir = out_dir;
             return task;
         } else {
@@ -5739,6 +6615,542 @@ public class CarafeGUI extends JFrame {
         }
     }
 
+    /** The search engine selected in the GUI, defaulting to DIA-NN. */
+    private String getSelectedSearchEngine() {
+        if (searchEngineCombo != null && searchEngineCombo.getSelectedItem() != null) {
+            return searchEngineCombo.getSelectedItem().toString();
+        }
+        return "DIA-NN";
+    }
+
+    /** The .NET runtime identifier for the current platform (used to find the bundled Osprey). */
+    private String getOspreyRid() {
+        String os = System.getProperty("os.name").toLowerCase();
+        String arch = System.getProperty("os.arch").toLowerCase();
+        if (os.contains("win")) {
+            return "win-x64";
+        } else if (os.contains("mac") || os.contains("darwin")) {
+            return (arch.contains("aarch64") || arch.contains("arm")) ? "osx-arm64" : "osx-x64";
+        } else {
+            return "linux-x64";
+        }
+    }
+
+    /**
+     * Resolve the Osprey executable. Checks, in order: the saved preference, the bundled
+     * location next to the Carafe jar ({@code osprey/<rid>/}), {@code ~/.carafe/osprey/<rid>/},
+     * then the system PATH. Returns the first existing path, or an empty string if none is found.
+     */
+    private String resolveOspreyBinary() {
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        String exeName = isWindows ? "Osprey.exe" : "Osprey";
+        String rid = getOspreyRid();
+
+        // 1. Bundled next to the Carafe jar: <jarDir>/osprey/<rid>/Osprey(.exe). A build shipped
+        //    with the installer (every MSI install has one) is the matched, tested version, so it
+        //    takes precedence over a saved path -- otherwise a stale dev override silently shadows
+        //    the Osprey that was installed.
+        String bundled = null;
+        try {
+            File jar = new File(getCarafeJarPath());
+            File jarDir = jar.getParentFile();
+            if (jarDir != null) {
+                File f = new File(jarDir, "osprey" + File.separator + rid + File.separator + exeName);
+                if (f.isFile()) {
+                    bundled = f.getAbsolutePath();
+                }
+            }
+        } catch (Exception ignore) {
+            // fall through to other locations
+        }
+
+        // 2. Saved preference (and the editable combo if present). Used for source / command-line
+        //    runs that have no bundled build -- e.g. pointing at a local pwiz build folder.
+        String saved = prefs.get(PREF_OSPREY_PATH, "");
+        if (ospreyPathCombo != null && ospreyPathCombo.getSelectedItem() != null) {
+            String fromCombo = ospreyPathCombo.getSelectedItem().toString().trim();
+            if (!fromCombo.isEmpty()) {
+                saved = fromCombo;
+            }
+        }
+        if (saved.isEmpty() || !new File(saved).isFile()) {
+            saved = null;
+        }
+
+        // 3. ~/.carafe/osprey/<rid>/Osprey(.exe).
+        String home = null;
+        File homeFile = new File(System.getProperty("user.home"),
+                ".carafe" + File.separator + "osprey" + File.separator + rid + File.separator + exeName);
+        if (homeFile.isFile()) {
+            home = homeFile.getAbsolutePath();
+        }
+
+        // 4. System PATH.
+        String onPath = null;
+        try {
+            String which = isWindows ? "where" : "which";
+            Process p = new ProcessBuilder(which, exeName).redirectErrorStream(true).start();
+            try (java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()))) {
+                String line = r.readLine();
+                p.waitFor();
+                if (line != null && !line.trim().isEmpty() && new File(line.trim()).isFile()) {
+                    onPath = line.trim();
+                }
+            }
+        } catch (Exception ignore) {
+            // not on PATH
+        }
+
+        return OspreyBinaryResolver.choose(bundled, saved, home, onPath);
+    }
+
+    /** Query the Osprey version (best effort); returns "unknown" on failure. */
+    private String getOspreyVersion(String ospreyPath) {
+        try {
+            Process p = new ProcessBuilder(ospreyPath, "--version").redirectErrorStream(true).start();
+            try (java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(p.getInputStream()))) {
+                String line = r.readLine();
+                p.waitFor();
+                if (line != null && !line.trim().isEmpty()) {
+                    return line.trim();
+                }
+            }
+        } catch (Exception ignore) {
+            // ignore
+        }
+        return "unknown";
+    }
+
+    /**
+     * Build the Osprey search command. The library must already contain target (and decoy)
+     * spectra/RT; when a pairing manifest is supplied, Osprey runs with library-supplied decoys.
+     *
+     * @param msFiles  input mzML/raw files
+     * @param library  spectral library (.tsv or .blib) Carafe generated
+     * @param manifest optional FDRBench pairing manifest TSV (null/empty to let Osprey reverse-decoy)
+     * @param outDir   output directory; the result blib is written to {@code outDir/osprey.blib}
+     * @return a {@link CmdTask}, or null if no Osprey executable could be resolved
+     */
+    private CmdTask buildOspreyCommand(java.util.List<String> msFiles, String library, String manifest,
+            String outDir, String fdrbenchOut) {
+        String ospreyPath = resolveOspreyBinary();
+        if (ospreyPath == null || ospreyPath.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Could not find an Osprey executable. Build it with scripts/build_osprey.sh "
+                            + "(or .bat) and place it under osprey/" + getOspreyRid()
+                            + "/ next to the Carafe jar, or set its path in preferences.",
+                    "Osprey Not Found", JOptionPane.WARNING_MESSAGE);
+            return null;
+        }
+        // Make sure the binary is executable on Unix.
+        File f = new File(ospreyPath);
+        if (f.exists() && !System.getProperty("os.name").toLowerCase().contains("win") && !f.canExecute()) {
+            f.setExecutable(true);
+        }
+
+        ArrayList<String> args = new ArrayList<>();
+        args.add(ospreyPath);
+        // -i is variadic in Osprey: one flag, then all input files.
+        args.add("-i");
+        for (String ms : msFiles) {
+            args.add(ms);
+        }
+        args.add("-l");
+        args.add(library);
+
+        // Osprey writes its output as a SQLite .blib. SQLite cannot reliably create/lock a
+        // database over a network share (UNC \\server\... or a mapped drive backed by SMB): the
+        // BlibWriter does File.Delete + recreate + WAL, which fails on SMB with "unable to open
+        // database file". So always have Osprey write the blib to a LOCAL temp directory and
+        // move it to the requested (possibly network) outDir after the step succeeds. This also
+        // speeds up the many small SQLite/WAL writes. The staging dir is keyed on a hash of outDir
+        // so the train and project searches don't collide.
+        String finalBlib = outDir + File.separator + "osprey.blib";
+        String stageDir = new File(System.getProperty("java.io.tmpdir"),
+                "carafe_osprey_blib" + File.separator + Integer.toHexString(outDir.hashCode()))
+                .getAbsolutePath();
+        File stageDirFile = new File(stageDir);
+        stageDirFile.mkdirs();
+        // Start clean so the post-step move only picks up files produced by THIS run (and so
+        // BlibWriter's File.Delete + recreate runs on reliable local disk).
+        File[] staleStaged = stageDirFile.listFiles();
+        if (staleStaged != null) {
+            for (File s : staleStaged) {
+                s.delete();
+            }
+        }
+        String outBlib = stageDir + File.separator + "osprey.blib";
+        args.add("-o");
+        args.add(outBlib);
+
+        // FDRBench input TSV (requires the Osprey --fdrbench feature). Written straight to the
+        // requested (possibly network) path - it is a plain TSV, not SQLite, so no local staging is
+        // needed. The level follows Osprey's --fdr-level, set below from the Osprey tab.
+        if (fdrbenchOut != null && !fdrbenchOut.trim().isEmpty()) {
+            args.add("--fdrbench");
+            args.add(fdrbenchOut);
+        }
+
+        // Library-supplied decoys via the FDRBench pairing manifest, when present.
+        if (manifest != null && !manifest.trim().isEmpty()) {
+            args.add("--decoys-in-library");
+            args.add("--decoy-pairing-manifest");
+            args.add(manifest);
+        }
+
+        // Resolution (auto/unit/hram).
+        if (ospreyResolutionCombo.getSelectedItem() != null) {
+            args.add("--resolution");
+            args.add(ospreyResolutionCombo.getSelectedItem().toString());
+        }
+        // Fragment tolerance: reuse the Training Data Generation tolerance fields.
+        String fragTol = fragTolField != null ? fragTolField.getText().trim() : "";
+        if (!fragTol.isEmpty()) {
+            args.add("--fragment-tolerance");
+            args.add(fragTol);
+            String unit = (fragTolUnitCombo != null && fragTolUnitCombo.getSelectedItem() != null)
+                    ? fragTolUnitCombo.getSelectedItem().toString().toLowerCase()
+                    : "ppm";
+            args.add("--fragment-unit");
+            // Osprey expects ppm|mz; map a "da"/"th" unit to "mz".
+            args.add(unit.startsWith("ppm") ? "ppm" : "mz");
+        }
+        addOspreyOption(args, "--run-fdr", ospreyRunFdrField);
+        addOspreyOption(args, "--experiment-fdr", ospreyExperimentFdrField);
+        addOspreyOption(args, "--protein-fdr", ospreyProteinFdrField);
+        // Osprey always uses percolator FDR.
+        args.add("--fdr-method");
+        args.add("percolator");
+        if (ospreyFdrLevelCombo.getSelectedItem() != null) {
+            args.add("--fdr-level");
+            args.add(ospreyFdrLevelCombo.getSelectedItem().toString());
+        }
+        if (ospreySharedPeptidesCombo.getSelectedItem() != null) {
+            args.add("--shared-peptides");
+            args.add(ospreySharedPeptidesCombo.getSelectedItem().toString());
+        }
+        args.add("--threads");
+        args.add(String.valueOf(Runtime.getRuntime().availableProcessors()));
+
+        // User-supplied extra options.
+        String extra = ospreyAdditionalOptionsField.getText().trim();
+        if (!extra.isEmpty()) {
+            Collections.addAll(args, Commandline.translateCommandline(extra));
+        }
+
+        prefs.put(PREF_OSPREY_PATH, ospreyPath);
+        Cloger.getInstance().logger.info("Using Osprey " + getOspreyVersion(ospreyPath) + " at " + ospreyPath);
+
+        CmdTask task = new CmdTask(args, "Osprey", "Running Osprey search");
+        task.cmd = String.join(" ", args);
+        task.input_files.addAll(msFiles);
+        task.input_files.add(library);
+        if (manifest != null && !manifest.trim().isEmpty()) {
+            task.input_files.add(manifest);
+        }
+        task.out_dir = outDir;
+        // Reuse is keyed on the FINAL blib (after the move), not the local staging copy.
+        task.skip_check_file = finalBlib;
+        // Move the locally-staged blib (and any sidecar files Osprey wrote next to it) to the
+        // final output directory once the search exits cleanly.
+        final String fStageDir = stageDir;
+        final String fOutDir = outDir;
+        final String fFinalBlib = finalBlib;
+        final String fFdrbenchOut = fdrbenchOut;
+        final String fManifest = manifest;
+        task.postAction = () -> {
+            new File(fOutDir).mkdirs();
+            File[] staged = new File(fStageDir).listFiles();
+            if (staged == null || staged.length == 0) {
+                throw new java.io.IOException(
+                        "Osprey produced no output in the staging directory: " + fStageDir);
+            }
+            for (File stagedFile : staged) {
+                java.nio.file.Path dest = new File(fOutDir, stagedFile.getName()).toPath();
+                try {
+                    java.nio.file.Files.move(stagedFile.toPath(), dest,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                } catch (java.io.IOException crossDevice) {
+                    // Staging dir and destination are on different volumes (the usual case for a
+                    // network destination): fall back to copy + delete.
+                    java.nio.file.Files.copy(stagedFile.toPath(), dest,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    stagedFile.delete();
+                }
+            }
+            logToConsole("[Carafe] Moved Osprey blib from local staging to " + fFinalBlib + "\n");
+
+            // When an FDRBench input was requested, copy the pairing manifest next to it so the
+            // FDRBench folder holds everything needed to run FDRBench (input TSV + pairing manifest).
+            if (fFdrbenchOut != null && !fFdrbenchOut.trim().isEmpty()
+                    && fManifest != null && !fManifest.trim().isEmpty()) {
+                File benchDir = new File(fFdrbenchOut).getParentFile();
+                File manSrc = new File(fManifest);
+                if (benchDir != null && manSrc.exists()) {
+                    benchDir.mkdirs();
+                    java.nio.file.Files.copy(manSrc.toPath(),
+                            new File(benchDir, manSrc.getName()).toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    logToConsole("[Carafe] Copied pairing manifest into the FDRBench folder: "
+                            + benchDir.getAbsolutePath() + "\n");
+                }
+            }
+        };
+        return task;
+    }
+
+    /** Append an Osprey {@code --flag value} pair when the field has a non-empty value. */
+    private void addOspreyOption(ArrayList<String> args, String flag, JTextField field) {
+        if (field == null) {
+            return;
+        }
+        String v = field.getText().trim();
+        if (!v.isEmpty()) {
+            args.add(flag);
+            args.add(v);
+        }
+    }
+
+    /**
+     * Map the "Initial library predictor" selection to a Koina {ms2 model, rt model} pair, or null
+     * if the selection is the local Carafe predictor.
+     */
+    private String[] koinaModelsFor(String predictor) {
+        if (predictor == null) {
+            return null;
+        }
+        return switch (predictor) {
+            case "Koina: AlphaPepDeep" -> new String[] { "AlphaPeptDeep_ms2_generic", "AlphaPeptDeep_rt_generic" };
+            case "Koina: Prosit 2020 HCD" -> new String[] { "Prosit_2020_intensity_HCD", "Prosit_2019_irt" };
+            case "Koina: Prosit 2020 CID" -> new String[] { "Prosit_2020_intensity_CID", "Prosit_2019_irt" };
+            case "Koina: Prosit timsTOF" -> new String[] { "Prosit_2023_intensity_timsTOF", "Prosit_2019_irt" };
+            case "Koina: ms2pip HCD" -> new String[] { "ms2pip_2021_HCD", "AlphaPeptDeep_rt_generic" };
+            case "Koina: ms2pip timsTOF" -> new String[] { "ms2pip_timsTOF2023", "AlphaPeptDeep_rt_generic" };
+            default -> null; // "Carafe (local AlphaPepDeep)"
+        };
+    }
+
+    /**
+     * Build the Carafe {@code -build_koina_library} command: predict an initial DIA-NN library from
+     * {@code inputFasta} (the target+decoy peptide FASTA) via Koina, writing it to {@code outTsv}.
+     */
+    private CmdTask buildKoinaLibraryCommand(String inputFasta, String outTsv, String nceRefMzml) {
+        String[] models = koinaModelsFor((String) initialLibraryPredictorCombo.getSelectedItem());
+        if (models == null) {
+            return null;
+        }
+        List<String> args = new ArrayList<>();
+        String javaExec = getJavaExecutable();
+        boolean exeLaunch = false;
+        if (javaExec.endsWith("java.exe") || javaExec.endsWith("java")) {
+            // use as is
+        } else if (javaExec.endsWith("Carafe.exe")) {
+            exeLaunch = true;
+        } else {
+            javaExec = "java";
+        }
+        args.add(javaExec);
+        if (!exeLaunch) {
+            args.add("-jar");
+            args.add(getCarafeJarPath());
+        }
+        args.add("-build_koina_library");
+        args.add(outTsv);
+        args.add("-db");
+        args.add(inputFasta);
+        args.add("-koina_ms2_model");
+        args.add(models[0]);
+        args.add("-koina_rt_model");
+        args.add(models[1]);
+        args.add("-koina_url");
+        args.add(koinaUrlField.getText().trim());
+        // NCE: a number is passed through; "auto" reads the collision energy from the reference
+        // mzML at runtime (Koina's intensity models for HCD/timsTOF need a collision energy).
+        String nce = nceField.getText().trim();
+        if (nce.equalsIgnoreCase("auto")) {
+            args.add("-nce");
+            args.add("auto");
+            if (nceRefMzml != null && !nceRefMzml.isEmpty()) {
+                args.add("-nce_ms");
+                args.add(nceRefMzml);
+            }
+        } else if (!nce.isEmpty()) {
+            args.add("-nce");
+            args.add(nce);
+        }
+        if (msInstrumentField.getSelectedItem() != null) {
+            args.add("-ms_instrument");
+            args.add(msInstrumentField.getSelectedItem().toString());
+        }
+        args.add("-min_pep_charge");
+        args.add(minPepChargeSpinner.getValue().toString());
+        args.add("-max_pep_charge");
+        args.add(maxPepChargeSpinner.getValue().toString());
+        args.add("-min_pep_mz");
+        args.add(minPepMzSpinner.getValue().toString());
+        args.add("-max_pep_mz");
+        args.add(maxPepMzSpinner.getValue().toString());
+        args.add("-fixMod");
+        args.add(fixModSelectedField.getText().trim());
+        args.add("-varMod");
+        args.add(varModSelectedField.getText().trim());
+        args.add("-maxVar");
+        args.add(maxVarSpinner.getValue().toString());
+        args.add("-lf_top_n_frag");
+        args.add(LibTopNFragIonsSpinner.getValue().toString());
+        args.add("-lf_frag_mz_min");
+        args.add(libMinFragMzSpinner.getValue().toString());
+        args.add("-lf_frag_mz_max");
+        args.add(libMaxFragMzSpinner.getValue().toString());
+
+        CmdTask task = new CmdTask(args, "Carafe-Koina", "Build initial library via Koina ("
+                + models[0] + ")");
+        task.cmd = String.join(" ", args);
+        task.input_files.add(inputFasta);
+        if (nceRefMzml != null && !nceRefMzml.isEmpty()) {
+            task.input_files.add(nceRefMzml);
+        }
+        File parent = new File(outTsv).getParentFile();
+        task.out_dir = parent != null ? parent.getAbsolutePath() : ".";
+        task.out_files.add(outTsv);
+        task.out_files_description.add("Koina initial spectral library");
+        task.skip_check_file = outTsv;
+        return task;
+    }
+
+    /**
+     * Build the Carafe {@code -build_entrapment_fasta} command: digest {@code inputFasta} with the
+     * GUI's configured digest options into a peptide-level FASTA plus an FDRBench pairing manifest
+     * (target+decoy, plus entrapment quartets when {@code withEntrapment} is true).
+     *
+     * <p>Entrapment peptides belong ONLY in the library-DB FASTA that feeds the finetuned library
+     * used for the project search (where FDRBench measures FDP) — never in the training-DB FASTA,
+     * because the training search drives AI fine-tuning and identifying random entrapment sequences
+     * would pollute that training. Callers therefore pass {@code withEntrapment} explicitly rather
+     * than reading the checkbox here.</p>
+     */
+    private CmdTask buildEntrapmentFastaCommand(String inputFasta, String outPeptideFasta, String outManifest,
+            boolean withEntrapment) {
+        List<String> args = new ArrayList<>();
+        String javaExec = getJavaExecutable();
+        boolean exeLaunch = false;
+        if (javaExec.endsWith("java.exe") || javaExec.endsWith("java")) {
+            // use as is
+        } else if (javaExec.endsWith("Carafe.exe")) {
+            exeLaunch = true;
+        } else {
+            javaExec = "java";
+        }
+        args.add(javaExec);
+        if (!exeLaunch) {
+            args.add("-jar");
+            args.add(getCarafeJarPath());
+        }
+        args.add("-build_entrapment_fasta");
+        args.add(outPeptideFasta);
+        args.add("-db");
+        args.add(inputFasta);
+        args.add("-manifest");
+        args.add(outManifest);
+        args.add("-enzyme");
+        args.add(((String) enzymeCombo.getSelectedItem()).split(":")[0]);
+        args.add("-miss_c");
+        args.add(missCleavageSpinner.getValue().toString());
+        args.add("-minLength");
+        args.add(minLengthSpinner.getValue().toString());
+        args.add("-maxLength");
+        args.add(maxLengthSpinner.getValue().toString());
+        args.add("-min_pep_charge");
+        args.add(minPepChargeSpinner.getValue().toString());
+        args.add("-max_pep_charge");
+        args.add(maxPepChargeSpinner.getValue().toString());
+        if (withEntrapment) {
+            args.add("-entrapment");
+        }
+
+        CmdTask task = new CmdTask(args, "Carafe", "Build target-decoy peptide FASTA for Osprey");
+        task.cmd = String.join(" ", args);
+        task.input_files.add(inputFasta);
+        File parent = new File(outPeptideFasta).getParentFile();
+        task.out_dir = parent != null ? parent.getAbsolutePath() : ".";
+        task.out_files.add(outPeptideFasta);
+        task.out_files_description.add("Peptide-level FASTA (target+decoy)");
+        task.skip_check_file = outPeptideFasta;
+        return task;
+    }
+
+    /**
+     * Resolve a train/project MS selection into a list of mzML inputs for Osprey. Osprey
+     * only reads mzML, so EVERY non-mzML acquisition (Thermo .raw, Bruker .d, ...) is routed through
+     * MSConvert; an MSConvert task is queued into {@code convTasks} for those. Existing .mzML files
+     * pass through unchanged.
+     */
+    private java.util.List<String> resolveOspreyMsInputs(java.util.List<String> selected, String fieldText,
+            String convertSubDir, java.util.List<CmdTask> convTasks) {
+        java.util.List<String> files = new ArrayList<>();
+        java.util.List<String> toConvert = new ArrayList<>();
+        java.util.List<String> candidates = new ArrayList<>();
+        if (selected != null && !selected.isEmpty()) {
+            candidates.addAll(selected);
+        } else if (fieldText != null && !fieldText.trim().isEmpty()) {
+            candidates.add(fieldText.trim());
+        }
+        for (String path : candidates) {
+            File f = new File(path);
+            String low = path.toLowerCase();
+            if (low.endsWith(".mzml")) {
+                files.add(path);
+            } else if (low.endsWith(".d") && f.isDirectory()) {
+                toConvert.add(path); // Bruker .d -> mzML for Osprey
+            } else if (low.endsWith(".raw")) {
+                toConvert.add(path); // Thermo .raw -> mzML for Osprey
+            } else if (f.isDirectory()) {
+                File[] mz = f.listFiles((d, n) -> n.toLowerCase().endsWith(".mzml"));
+                if (mz != null) {
+                    for (File m : mz) {
+                        files.add(m.getAbsolutePath());
+                    }
+                }
+                File[] dd = f.listFiles((d, n) -> n.toLowerCase().endsWith(".d"));
+                if (dd != null) {
+                    for (File m : dd) {
+                        toConvert.add(m.getAbsolutePath());
+                    }
+                }
+                File[] rw = f.listFiles((d, n) -> n.toLowerCase().endsWith(".raw"));
+                if (rw != null) {
+                    for (File m : rw) {
+                        toConvert.add(m.getAbsolutePath());
+                    }
+                }
+            }
+        }
+        if (!toConvert.isEmpty()) {
+            File sd = new File(convertSubDir);
+            if (!sd.exists()) {
+                sd.mkdirs();
+            }
+            // One MSConvert task per file so they can run as separate parallel processes.
+            for (String srcPath : toConvert) {
+                String srcName = new File(srcPath).getName();
+                String base = srcName.lastIndexOf('.') > 0
+                        ? srcName.substring(0, srcName.lastIndexOf('.'))
+                        : srcName;
+                String mzML = convertSubDir + File.separator + base + ".mzML";
+                files.add(mzML);
+                String convCmd = buildMsConvertCommand(java.util.List.of(srcPath), convertSubDir);
+                CmdTask conv = new CmdTask(convCmd, "MSConvert", "Convert " + srcName + " to mzML");
+                conv.out_dir = convertSubDir;
+                conv.input_files.add(srcPath);
+                conv.skip_check_file = mzML;
+                convTasks.add(conv);
+            }
+        }
+        return files;
+    }
+
     private void executeCommand(CmdTask command) {
         isRunning = true;
         runButton.setEnabled(false);
@@ -5752,7 +7164,7 @@ public class CarafeGUI extends JFrame {
         autoSaveRunSettings();
 
         if (tabbedPane != null) {
-            SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(4));
+            SwingUtilities.invokeLater(() -> tabbedPane.setSelectedIndex(tabbedPane.indexOfTab("Console")));
         }
 
         Object selectedPython = pythonPathCombo.getSelectedItem();
@@ -5857,17 +7269,28 @@ public class CarafeGUI extends JFrame {
     }
 
     private void stopCarafe() {
-        if (currentProcess != null && currentProcess.isAlive()) {
-            currentProcess.descendants().forEach(ProcessHandle::destroyForcibly);
-            currentProcess.destroyForcibly();
-            try {
-                currentProcess.waitFor(2, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+        isRunning = false;
+        boolean wasActive = (currentProcess != null && currentProcess.isAlive()) || !activeProcesses.isEmpty();
+        terminateAllProcesses();
+        if (wasActive) {
             logToConsole("\n[STOPPED] Process stopped by user.\n");
         }
         finishExecution();
+    }
+
+    /**
+     * Forcibly terminate every tracked external process (MSConvert / DIA-NN / Osprey /
+     * Carafe / Python) <em>and its descendants</em>. Called by Stop and by the JVM shutdown hook,
+     * so closing the window mid-run does not leave orphaned converter processes behind.
+     */
+    private synchronized void terminateAllProcesses() {
+        isRunning = false;
+        java.util.List<Process> all = new java.util.ArrayList<>(activeProcesses);
+        if (currentProcess != null) {
+            all.add(currentProcess);
+        }
+        main.java.util.ProcessUtils.terminateAll(all);
+        activeProcesses.clear();
     }
 
     private void finishExecution() {
@@ -6198,6 +7621,54 @@ public class CarafeGUI extends JFrame {
 
                 // 8. MSConvert (if raw)
                 if (hasRaw)
+                    checkMsConvert.accept(null);
+                break;
+
+            case 3: // Osprey: search -> finetune -> new library
+            case 4: // Osprey: end-to-end
+                // 1. Train MS Files
+                if (effectiveTrainFiles.isEmpty())
+                    errors.add("- No Training MS data files selected.");
+                else
+                    for (String p : effectiveTrainFiles)
+                        if (!new File(p).exists()) {
+                            errors.add("- Training MS File(s) not found: " + p);
+                            break;
+                        }
+
+                // 2. Train Protein DB (used to build the initial Osprey library)
+                String trainDbO = trainDbFileField.getText().trim();
+                if (trainDbO.isEmpty())
+                    errors.add("- Training protein database (FASTA) is not specified.");
+                else if (!new File(trainDbO).exists())
+                    errors.add("- Training protein database file not found.");
+
+                // 3. Library Protein DB (the new FASTA to predict after finetuning)
+                String libDbO = libraryDbFileField.getText().trim();
+                if (libDbO.isEmpty())
+                    errors.add("- Library protein database (FASTA) is not specified.");
+                else if (!new File(libDbO).exists())
+                    errors.add("- Library protein database file not found.");
+
+                // 4. Project MS Files (Workflow 5 only)
+                if (workflowIndex == 4) {
+                    if (effectiveProjectFiles.isEmpty())
+                        errors.add("- No Project MS data files selected.");
+                    else
+                        for (String p : effectiveProjectFiles)
+                            if (!new File(p).exists()) {
+                                errors.add("- Project MS File(s) not found: " + p);
+                                break;
+                            }
+                }
+
+                // 5. Output Directory + 6. Python (Osprey is auto-detected/bundled; the
+                // Osprey command builder reports a clear error if no executable is found).
+                checkOutDir.accept(null);
+                checkPython.accept(null);
+                // Osprey needs mzML, so any non-mzML acquisition (.raw or Bruker .d) requires
+                // MSConvert.
+                if (hasRaw || hasTimsTof)
                     checkMsConvert.accept(null);
                 break;
         }
@@ -6706,6 +8177,19 @@ public class CarafeGUI extends JFrame {
         reg.add(comboSetting("library_format", libraryFormatCombo));
         reg.add(checkSetting("benchmark", benchmarkCheckbox));
 
+        // Osprey settings (Workflows 4 & 5).
+        reg.add(comboSetting("osprey_resolution", ospreyResolutionCombo));
+        reg.add(comboSetting("osprey_fdr_level", ospreyFdrLevelCombo));
+        reg.add(comboSetting("osprey_shared_peptides", ospreySharedPeptidesCombo));
+        reg.add(textSetting("osprey_run_fdr", ospreyRunFdrField));
+        reg.add(textSetting("osprey_experiment_fdr", ospreyExperimentFdrField));
+        reg.add(textSetting("osprey_protein_fdr", ospreyProteinFdrField));
+        reg.add(textSetting("osprey_additional_options", ospreyAdditionalOptionsField));
+        reg.add(checkSetting("osprey_include_entrapment", includeEntrapmentCheckbox));
+        reg.add(comboSetting("osprey_initial_predictor", initialLibraryPredictorCombo));
+        reg.add(textSetting("koina_url", koinaUrlField));
+        reg.add(textSetting("osprey_conversion_threads", ospreyConversionThreadsField));
+
         return reg;
     }
 
@@ -6873,7 +8357,12 @@ public class CarafeGUI extends JFrame {
                 clipNmCheckbox, minLengthSpinner, maxLengthSpinner, minPepMzSpinner, maxPepMzSpinner,
                 minPepChargeSpinner, maxPepChargeSpinner, libMinFragMzSpinner, libMaxFragMzSpinner,
                 LibTopNFragIonsSpinner, libMinNumFragSpinner, libFragNumMinSpinner, libraryFormatCombo,
-                benchmarkCheckbox
+                benchmarkCheckbox,
+                // Osprey
+                ospreyResolutionCombo, ospreyFdrLevelCombo, ospreySharedPeptidesCombo,
+                ospreyRunFdrField, ospreyExperimentFdrField, ospreyProteinFdrField,
+                ospreyAdditionalOptionsField, includeEntrapmentCheckbox, initialLibraryPredictorCombo,
+                ospreyConversionThreadsField
         };
         for (JComponent input : inputs) {
             if (input == null) {
