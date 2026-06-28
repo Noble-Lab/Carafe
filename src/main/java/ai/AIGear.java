@@ -681,6 +681,7 @@ public class AIGear {
         options.addOption("min_mz", true, "The minimum fragment ion m/z to consider, default is 200.0");
         options.addOption("min_n", true, "The minimum high quality fragment ion number to consider, default is 4");
         options.addOption("enzyme",true,"Enzyme used for protein digestion. 0:Non enzyme, 1:Trypsin (default), 2:Trypsin (no P rule), 3:Arg-C, 4:Arg-C (no P rule), 5:Arg-N, 6:Glu-C, 7:Lys-C");
+        options.addOption("decoy_prefix", true, "Protein-accession prefix that marks decoy entries in the -db FASTA, default is rev_. Use decoy_ for entrapment FASTAs built with -build_entrapment_fasta so the library Decoy column is flagged correctly.");
         options.addOption("miss_c",true,"The max missed cleavages, default is 1");
         options.addOption("I2L",false,"Convert I to L");
         options.addOption("clip_n_m", false, "When digesting a protein starting with amino acid M, two copies of the leading peptides (with and without the N-terminal M) are considered or not. Default is false.");
@@ -842,6 +843,9 @@ public class AIGear {
             } else {
                 CParameter.enzyme = Integer.parseInt(cmd.getOptionValue("enzyme"));
             }
+        }
+        if (cmd.hasOption("decoy_prefix")) {
+            CParameter.decoy_prefix = cmd.getOptionValue("decoy_prefix");
         }
 
         // for non-specific digestion, set the missed cleavages to be equal to 100

@@ -27,10 +27,12 @@ import java.util.Set;
  *
  * <p>This is a Java port of the lab's {@code build_entrapment_peptide_fasta.py}. For each
  * tryptic peptide it can optionally also emit an entrapment ({@code p_target}) peptide, a
- * {@code decoy}, and a {@code p_decoy}. Synthetic peptides are deterministic shuffles of the
- * target (or entrapment) sequence with the C-terminal residue preserved so the peptide stays
- * tryptic. Any quartet whose synthetic peptide collides with a real target sequence is dropped
- * (FDRBench collision-drop policy).</p>
+ * {@code decoy}, and a {@code p_decoy}. The entrapment ({@code p_target}) sequence is a
+ * deterministic shuffle of the target (C-terminus preserved). The decoys ({@code decoy} /
+ * {@code p_decoy}) are generated the same way Osprey's {@code DecoyGenerator} does: reverse the
+ * peptide (C-terminus preserved), and cycle the internal residues to avoid colliding with a real
+ * target. A quartet is dropped when its entrapment shuffle collides with a real target or when a
+ * requested reverse decoy cannot be made unique (FDRBench collision-drop policy).</p>
  *
  * <p>The output FASTA has one entry per peptide whose accession is the source protein accession
  * (optionally with a per-source {@code _pepNNNNN} counter so library predictors that dedupe by
@@ -222,6 +224,65 @@ public class EntrapmentFastaGear {
         }
     }
 
+    /**
+     * Reverse all but the last residue (C-terminus preserved), matching Osprey's
+     * {@code DecoyGenerator.ReverseSequence} for tryptic peptides. Length-1 and length-2 inputs
+     * are returned unchanged.
+     */
+    public static String reversePreservingCterm(String seq) {
+        int len = seq.length();
+        if (len <= 2) {
+            return seq;
+        }
+        StringBuilder sb = new StringBuilder(len);
+        for (int i = len - 2; i >= 0; i--) {
+            sb.append(seq.charAt(i));
+        }
+        sb.append(seq.charAt(len - 1));
+        return sb.toString();
+    }
+
+    /**
+     * Cyclically rotate the internal residues (C-terminus preserved) by {@code cycleLength},
+     * matching Osprey's {@code DecoyGenerator.CycleSequence} (e.g. {@code ABCDEK -> BCDEAK} for
+     * cycleLength 1). Length-1 and length-2 inputs are returned unchanged.
+     */
+    public static String cyclePreservingCterm(String seq, int cycleLength) {
+        int len = seq.length();
+        if (len <= 2 || cycleLength == 0) {
+            return seq;
+        }
+        int middleLen = len - 1;
+        int effectiveCycle = cycleLength % middleLen;
+        StringBuilder sb = new StringBuilder(len);
+        for (int i = 0; i < middleLen; i++) {
+            sb.append(seq.charAt((i + effectiveCycle) % middleLen));
+        }
+        sb.append(seq.charAt(len - 1));
+        return sb.toString();
+    }
+
+    /**
+     * Generate a decoy the way Osprey does: reverse the peptide (C-terminus preserved); if the
+     * reversal equals the original or collides with a real target, cycle the internal residues by
+     * 1..min(len, 10) until the result is unique. Returns {@code null} when no unique decoy can be
+     * produced (the caller drops that target-decoy pair, as Osprey does).
+     */
+    public static String generateReverseDecoy(String seq, Set<String> targetSet) {
+        String rev = reversePreservingCterm(seq);
+        if (!rev.equals(seq) && !targetSet.contains(rev)) {
+            return rev;
+        }
+        int maxRetries = Math.min(seq.length(), 10);
+        for (int c = 1; c <= maxRetries; c++) {
+            String cyc = cyclePreservingCterm(seq, c);
+            if (!cyc.equals(seq) && !targetSet.contains(cyc)) {
+                return cyc;
+            }
+        }
+        return null;
+    }
+
     /** Build the {@code db|accession|entry} label for a peptide kind. */
     static String buildProteinLabel(ProteinRecord rec, boolean pTarget, boolean decoy,
                                     String entrapSuffix, String decoyPrefix,
@@ -308,7 +369,11 @@ public class EntrapmentFastaGear {
                         + "%d dropped (out of m/z range)",
                 r.proteins, r.uniqueTargets, r.droppedUnknownAa, r.droppedOutOfMz));
 
-        // Step 2: build quartets.
+        // Step 2: build quartets. Entrapment (p_target) sequences are deterministic shuffles, while
+        // decoys (decoy / p_decoy) are reverse-with-C-term-preserved, cycling internal residues to
+        // avoid collisions with real targets, matching Osprey's DecoyGenerator. A target whose decoy
+        // cannot be made unique yields a null decoy and is dropped below.
+        Set<String> targetSet = targetToSources.keySet();
         List<Quartet> quartets = new ArrayList<>(targetToSources.size());
         for (Map.Entry<String, List<ProteinRecord>> e : targetToSources.entrySet()) {
             Quartet q = new Quartet(e.getKey());
@@ -317,22 +382,22 @@ public class EntrapmentFastaGear {
                 q.pTarget = shufflePreservingCterm(q.target, cfg.entrapmentSeed);
             }
             if (cfg.addDecoys) {
-                q.decoy = shufflePreservingCterm(q.target, cfg.decoySeed);
+                q.decoy = generateReverseDecoy(q.target, targetSet);
                 if (cfg.addEntrapment && q.pTarget != null) {
-                    q.pDecoy = shufflePreservingCterm(q.pTarget, cfg.decoySeed);
+                    q.pDecoy = generateReverseDecoy(q.pTarget, targetSet);
                 }
             }
             quartets.add(q);
         }
         r.quartetsBuilt = quartets.size();
 
-        // Step 3: collision-drop any quartet whose synthetic peptide matches a real target.
-        Set<String> targetSet = targetToSources.keySet();
+        // Step 3: drop a quartet when its entrapment shuffle collides with a real target, or when a
+        // requested reverse decoy could not be made unique (generateReverseDecoy returned null).
         List<Quartet> kept = new ArrayList<>(quartets.size());
         for (Quartet q : quartets) {
             boolean drop = (q.pTarget != null && targetSet.contains(q.pTarget))
-                    || (q.decoy != null && targetSet.contains(q.decoy))
-                    || (q.pDecoy != null && targetSet.contains(q.pDecoy));
+                    || (cfg.addDecoys && q.decoy == null)
+                    || (cfg.addDecoys && cfg.addEntrapment && q.pTarget != null && q.pDecoy == null);
             if (!drop) {
                 kept.add(q);
             }

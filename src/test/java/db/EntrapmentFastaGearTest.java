@@ -120,6 +120,25 @@ public class EntrapmentFastaGearTest {
     }
 
     @Test
+    public void reverseDecoy_matchesOspreyReverseAndCycle() {
+        // Reverse keeps the C-terminus and reverses the rest (Osprey DecoyGenerator.ReverseSequence).
+        Assert.assertEquals(EntrapmentFastaGear.reversePreservingCterm("ABCDEK"), "EDCBAK");
+        // Cycle rotates the internal residues by N, keeping the C-terminus (CycleSequence).
+        Assert.assertEquals(EntrapmentFastaGear.cyclePreservingCterm("ABCDEK", 1), "BCDEAK");
+        Assert.assertEquals(EntrapmentFastaGear.cyclePreservingCterm("ABCDEK", 2), "CDEABK");
+        // Length <= 2 is returned unchanged.
+        Assert.assertEquals(EntrapmentFastaGear.reversePreservingCterm("AK"), "AK");
+
+        // No collision: the decoy is just the reverse.
+        Assert.assertEquals(EntrapmentFastaGear.generateReverseDecoy("ABCDEK", new HashSet<>()),
+                "EDCBAK");
+        // Reverse collides with a real target -> cycle to the next unique form.
+        Set<String> targets = new HashSet<>();
+        targets.add("EDCBAK");
+        Assert.assertEquals(EntrapmentFastaGear.generateReverseDecoy("ABCDEK", targets), "BCDEAK");
+    }
+
+    @Test
     public void entrapmentOn_emitsFullQuartet() throws IOException {
         Path in = writeFasta();
         Path outFasta = Files.createTempFile("entrap_out", ".fasta");

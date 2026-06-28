@@ -4324,7 +4324,14 @@ public class CarafeGUI extends JFrame {
         // cmd.append("-se DIA-NN ");
 
         commandArgs.add("-se");
-        commandArgs.add(carafeSeOverride != null ? carafeSeOverride : getSelectedSearchEngine());
+        String seValue = carafeSeOverride != null ? carafeSeOverride : getSelectedSearchEngine();
+        commandArgs.add(seValue);
+        // Entrapment FASTAs (the Osprey workflow) mark decoys with the "decoy_" prefix, not the
+        // default "rev_", so the library's Decoy column is flagged correctly when building from them.
+        if ("Osprey".equalsIgnoreCase(seValue)) {
+            commandArgs.add("-decoy_prefix");
+            commandArgs.add("decoy_");
+        }
 
         if (!trainMsFile.isEmpty()) {
             // cmd.append("-tf all ");
