@@ -24,6 +24,9 @@ public final class ProcessUtils {
      *                  child is the real converter)
      */
     public static void terminateAll(Collection<Process> processes) {
+        if (processes == null) {
+            return;
+        }
         List<Process> list = new ArrayList<>(processes);
         // First pass: kill descendants (the actual converter spawned by the shell), then the
         // process itself.

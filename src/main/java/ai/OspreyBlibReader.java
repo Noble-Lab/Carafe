@@ -184,9 +184,12 @@ public class OspreyBlibReader {
             }
         }
         if (unrecognized) {
+            // Emitting a partially de-modified sequence would give this precursor the wrong mass
+            // (a dropped mod), so skip the peptide entirely rather than write a corrupt row.
             Cloger.getInstance().logger.warn(
                     "OspreyBlibReader: unrecognized modification on peptide " + peptide
-                            + "; emitting best-effort modified sequence.");
+                            + "; skipping this identification.");
+            return null;
         }
         StringBuilder sb = new StringBuilder();
         sb.append(nTermPrefix);
@@ -214,6 +217,7 @@ public class OspreyBlibReader {
 
         String url = "jdbc:sqlite:" + blibPath;
         int nRows = 0;
+        int nSkipped = 0;
         try (Connection conn = DriverManager.getConnection(url)) {
             // Source-file id -> fileName.
             Map<Long, String> fileNames = readSourceFiles(conn);
@@ -259,6 +263,11 @@ public class OspreyBlibReader {
                     }
 
                     String modSeq = buildModifiedSequence(peptide, modsById.get(id));
+                    if (modSeq == null) {
+                        // Unrecognized modification: skip rather than emit a wrong-mass precursor.
+                        nSkipped++;
+                        continue;
+                    }
 
                     // Q.Value/PEP are 0: Osprey already FDR-filtered its output, so every row is
                     // a confident identification for finetuning.
@@ -272,7 +281,9 @@ public class OspreyBlibReader {
             throw new IOException("Failed to read Osprey blib: " + blibPath, e);
         }
         Cloger.getInstance().logger.info(
-                "OspreyBlibReader: wrote " + nRows + " identifications to " + outTsv);
+                "OspreyBlibReader: wrote " + nRows + " identifications to " + outTsv
+                        + (nSkipped > 0
+                            ? " (" + nSkipped + " skipped: unrecognized modifications)" : ""));
     }
 
     /** Read SpectrumSourceFiles into id -> fileName. */

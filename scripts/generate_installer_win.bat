@@ -33,9 +33,16 @@ if not exist "%INPUT_DIR%\%MAIN_JAR%" (
 )
 
 if not exist "%INPUT_DIR%\osprey\win-x64\Osprey.exe" (
-    echo WARNING: %INPUT_DIR%\osprey\win-x64\Osprey.exe not found.
-    echo          The MSI will build WITHOUT a bundled Osprey. Stage it first
-    echo          ^(scripts\build_ospreysharp.bat win-x64^) to include it.
+    if /I "%ALLOW_NO_OSPREY%"=="1" (
+        echo WARNING: %INPUT_DIR%\osprey\win-x64\Osprey.exe not found; building
+        echo          WITHOUT a bundled Osprey because ALLOW_NO_OSPREY=1.
+    ) else (
+        echo ERROR: %INPUT_DIR%\osprey\win-x64\Osprey.exe not found.
+        echo        This script bundles Osprey; stage it first
+        echo        ^(scripts\build_ospreysharp.bat win-x64^), or set ALLOW_NO_OSPREY=1
+        echo        to build a Carafe MSI without it.
+        exit /b 1
+    )
 )
 
 if not exist "%DEST_DIR%" mkdir "%DEST_DIR%"

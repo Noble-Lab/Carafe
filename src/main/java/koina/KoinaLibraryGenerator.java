@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -263,9 +264,9 @@ public class KoinaLibraryGenerator {
             String[] meta = fragMeta.get(idx);
             float relInt = f[1] / maxInt;
             w.write(p.form.diann + "\t" + p.form.stripped + "\t"
-                    + String.format("%.5f", p.mz) + "\t" + p.charge + "\t"
-                    + String.format("%.4f", irt) + "\t" + p.proteinId + "\t" + p.decoy + "\t"
-                    + String.format("%.5f", f[0]) + "\t" + String.format("%.6f", relInt) + "\t"
+                    + String.format(Locale.ROOT, "%.5f", p.mz) + "\t" + p.charge + "\t"
+                    + String.format(Locale.ROOT, "%.4f", irt) + "\t" + p.proteinId + "\t" + p.decoy + "\t"
+                    + String.format(Locale.ROOT, "%.5f", f[0]) + "\t" + String.format(Locale.ROOT, "%.6f", relInt) + "\t"
                     + meta[0] + "\t" + (int) f[2] + "\t" + (int) f[3] + "\t" + meta[1] + "\n");
             written++;
         }

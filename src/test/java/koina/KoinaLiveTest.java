@@ -3,6 +3,7 @@ package test.java.koina;
 import main.java.koina.KoinaClient;
 import org.testng.Assert;
 import org.testng.SkipException;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.util.Arrays;
@@ -26,6 +27,21 @@ public class KoinaLiveTest {
 
     private KoinaClient client() {
         return new KoinaClient(URL);
+    }
+
+    /**
+     * Skip every live test unless explicitly opted in (env {@code KOINA_LIVE_TESTS} or system
+     * property {@code koina.live}). Keeps networked calls out of the default {@code mvn test} run so
+     * the suite stays offline and deterministic; the per-test {@link SkipException} on a network
+     * error remains as a second line of defense.
+     */
+    @BeforeMethod
+    public void requireOptIn() {
+        if (System.getenv("KOINA_LIVE_TESTS") == null
+                && System.getProperty("koina.live") == null) {
+            throw new SkipException(
+                    "live Koina tests are opt-in; set KOINA_LIVE_TESTS=1 or -Dkoina.live=true to run");
+        }
     }
 
     /** Build an annotation -> intensity map over fragments with positive intensity and m/z. */

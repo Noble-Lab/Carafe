@@ -104,6 +104,8 @@ public class ProcessUtilsTest {
 
     @Test
     public void handlesEmptyAndAlreadyDeadProcesses() throws Exception {
+        // Null collection: best-effort no-op, as the Javadoc promises.
+        ProcessUtils.terminateAll(null);
         // Empty collection: no exception.
         ProcessUtils.terminateAll(List.of());
         // Already-finished process: no exception.

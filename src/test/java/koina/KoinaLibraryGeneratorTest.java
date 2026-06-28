@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -203,5 +204,36 @@ public class KoinaLibraryGeneratorTest {
         Assert.assertEquals(targetRows, 3, "3 target fragment rows");
         Assert.assertEquals(decoyRows, 3, "3 decoy fragment rows");
         Assert.assertEquals(topFragRows, 2, "exactly one normalized top fragment per precursor");
+    }
+
+    @Test
+    public void endToEnd_writesDotDecimalsUnderACommaLocale() throws Exception {
+        // The library TSV must use '.' as the decimal separator regardless of the JVM default
+        // locale; under a comma locale, unlocalized String.format would emit "12,3400" and break
+        // every downstream parser.
+        Locale prev = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.GERMANY); // comma decimal separator
+            Path fasta = Files.createTempFile("koina_loc", ".fasta");
+            Files.write(fasta, ">sp|P1|TEST_HUMAN\nPEPTIDEK\n".getBytes(StandardCharsets.UTF_8));
+            Path outTsv = Files.createTempFile("koina_loc_lib", ".tsv");
+
+            KoinaLibraryGenerator.Config cfg = new KoinaLibraryGenerator.Config();
+            cfg.peptideFasta = fasta.toString();
+            cfg.outputTsv = outTsv.toString();
+            cfg.ms2Model = "stub_ms2";
+            cfg.rtModel = "stub_rt";
+            cfg.minCharge = 2;
+            cfg.maxCharge = 3;
+
+            invokeRun(cfg, new StubKoinaClient());
+
+            for (String line : Files.readAllLines(outTsv, StandardCharsets.UTF_8)) {
+                Assert.assertFalse(line.matches(".*\\d,\\d.*"),
+                        "a decimal comma leaked into the TSV under a comma locale: " + line);
+            }
+        } finally {
+            Locale.setDefault(prev);
+        }
     }
 }

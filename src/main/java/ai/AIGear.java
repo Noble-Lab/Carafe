@@ -907,6 +907,11 @@ public class AIGear {
             efc.manifest = cmd.getOptionValue("manifest"); // null if not provided
             efc.addEntrapment = cmd.hasOption("entrapment");
             efc.addDecoys = !cmd.hasOption("no_decoys");
+            // Propagate an explicit -decoy_prefix into the entrapment FASTA so the flag is not
+            // silently ignored here; the Config default (decoy_) stays when the flag is absent.
+            if (cmd.hasOption("decoy_prefix")) {
+                efc.decoyPrefix = cmd.getOptionValue("decoy_prefix");
+            }
             efc.applyMzFilter = cmd.hasOption("mz_filter");
             efc.minMz = CParameter.minPeptideMz;
             efc.maxMz = CParameter.maxPeptideMz;
