@@ -5166,7 +5166,8 @@ public class CarafeGUI extends JFrame {
                 // that training. Consequently, when entrapment is requested the training and library
                 // FASTAs differ even if the two databases are the same file, so we cannot share one.
                 boolean entrap = includeEntrapmentCheckbox.isSelected();
-                boolean shareFasta = sameDb && !entrap;
+                OspreyFastaPlanner.Plan fastaPlan = OspreyFastaPlanner.plan(sameDb, entrap);
+                boolean shareFasta = fastaPlan.shareTrainingFasta;
                 // The library-DB peptide FASTA + manifest: reuse the training-DB ones only when the
                 // databases are identical AND no entrapment is requested.
                 String pep2 = shareFasta ? pep1 : outDir + File.separator + "osprey_library_db_peptides.fasta";
@@ -5174,7 +5175,7 @@ public class CarafeGUI extends JFrame {
 
                 // Build all tasks up front (output paths are deterministic). The training-DB FASTA is
                 // always target+decoy only (never entrapment) so fine-tuning is not trained on it.
-                CmdTask ent1 = buildEntrapmentFastaCommand(trainDb, pep1, man1, false);
+                CmdTask ent1 = buildEntrapmentFastaCommand(trainDb, pep1, man1, fastaPlan.trainingEntrapment);
                 ent1.task_description = "Build target-decoy peptide FASTA (training DB)";
 
                 CmdTask lib1;
@@ -5214,7 +5215,7 @@ public class CarafeGUI extends JFrame {
                 // separately whenever it can't be shared with the training-DB FASTA (different DBs,
                 // or entrapment requested). When shared, the training-DB target+decoy FASTA is reused.
                 CmdTask ent2 = shareFasta ? null
-                        : buildEntrapmentFastaCommand(libraryDb, pep2, man2, entrap);
+                        : buildEntrapmentFastaCommand(libraryDb, pep2, man2, fastaPlan.libraryEntrapment);
                 if (ent2 != null) {
                     ent2.task_description = entrap
                             ? "Build target-decoy-entrapment peptide FASTA (library DB)"
