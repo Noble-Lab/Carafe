@@ -5159,12 +5159,22 @@ public class CarafeGUI extends JFrame {
                 String blib1 = ospreyTrainDir + File.separator + "osprey.blib";
                 String lib2Tsv = outDir + File.separator + "osprey_new_library"
                         + File.separator + "carafe_spectral_library.tsv";
-                // The library-DB peptide FASTA + manifest: reuse the training-DB ones when identical.
-                String pep2 = sameDb ? pep1 : outDir + File.separator + "osprey_library_db_peptides.fasta";
-                String man2 = sameDb ? man1 : outDir + File.separator + "osprey_library_db_pairing.tsv";
+                // Entrapment peptides go ONLY into the library-DB FASTA, which feeds the finetuned
+                // library (used as the project-search library in workflow 5, and the deliverable in
+                // workflow 4). They must NOT go into the training-DB FASTA: the training search
+                // drives AI fine-tuning, and identifying random entrapment sequences would pollute
+                // that training. Consequently, when entrapment is requested the training and library
+                // FASTAs differ even if the two databases are the same file, so we cannot share one.
+                boolean entrap = includeEntrapmentCheckbox.isSelected();
+                boolean shareFasta = sameDb && !entrap;
+                // The library-DB peptide FASTA + manifest: reuse the training-DB ones only when the
+                // databases are identical AND no entrapment is requested.
+                String pep2 = shareFasta ? pep1 : outDir + File.separator + "osprey_library_db_peptides.fasta";
+                String man2 = shareFasta ? man1 : outDir + File.separator + "osprey_library_db_pairing.tsv";
 
-                // Build all tasks up front (output paths are deterministic).
-                CmdTask ent1 = buildEntrapmentFastaCommand(trainDb, pep1, man1);
+                // Build all tasks up front (output paths are deterministic). The training-DB FASTA is
+                // always target+decoy only (never entrapment) so fine-tuning is not trained on it.
+                CmdTask ent1 = buildEntrapmentFastaCommand(trainDb, pep1, man1, false);
                 ent1.task_description = "Build target-decoy peptide FASTA (training DB)";
 
                 CmdTask lib1;
@@ -5200,12 +5210,23 @@ public class CarafeGUI extends JFrame {
                 }
                 osprey1.task_description = "OspreySharp: search training files";
 
-                // Skip the library-DB FASTA build when it's identical to the training-DB one.
-                CmdTask ent2 = sameDb ? null : buildEntrapmentFastaCommand(libraryDb, pep2, man2);
+                // The library-DB FASTA carries the entrapment peptides (when requested). Build it
+                // separately whenever it can't be shared with the training-DB FASTA (different DBs,
+                // or entrapment requested). When shared, the training-DB target+decoy FASTA is reused.
+                CmdTask ent2 = shareFasta ? null
+                        : buildEntrapmentFastaCommand(libraryDb, pep2, man2, entrap);
                 if (ent2 != null) {
-                    ent2.task_description = "Build target-decoy peptide FASTA (library DB)";
+                    ent2.task_description = entrap
+                            ? "Build target-decoy-entrapment peptide FASTA (library DB)"
+                            : "Build target-decoy peptide FASTA (library DB)";
+                    if (sameDb && entrap) {
+                        logToConsole("[Carafe] Entrapment enabled: building a separate library "
+                                + "peptide FASTA WITH entrapment for the finetuned library, while the "
+                                + "training FASTA stays entrapment-free so fine-tuning is not trained "
+                                + "on entrapment sequences.\n");
+                    }
                 } else {
-                    logToConsole("[Carafe] Training and library databases are identical; "
+                    logToConsole("[Carafe] Training and library databases are identical (no entrapment); "
                             + "reusing the same peptide FASTA + manifest for both libraries.\n");
                 }
 
@@ -6952,9 +6973,16 @@ public class CarafeGUI extends JFrame {
     /**
      * Build the Carafe {@code -build_entrapment_fasta} command: digest {@code inputFasta} with the
      * GUI's configured digest options into a peptide-level FASTA plus an FDRBench pairing manifest
-     * (target+decoy, plus entrapment quartets when the checkbox is enabled).
+     * (target+decoy, plus entrapment quartets when {@code withEntrapment} is true).
+     *
+     * <p>Entrapment peptides belong ONLY in the library-DB FASTA that feeds the finetuned library
+     * used for the project search (where FDRBench measures FDP) — never in the training-DB FASTA,
+     * because the training search drives AI fine-tuning and identifying random entrapment sequences
+     * would pollute that training. Callers therefore pass {@code withEntrapment} explicitly rather
+     * than reading the checkbox here.</p>
      */
-    private CmdTask buildEntrapmentFastaCommand(String inputFasta, String outPeptideFasta, String outManifest) {
+    private CmdTask buildEntrapmentFastaCommand(String inputFasta, String outPeptideFasta, String outManifest,
+            boolean withEntrapment) {
         List<String> args = new ArrayList<>();
         String javaExec = getJavaExecutable();
         boolean exeLaunch = false;
@@ -6988,7 +7016,7 @@ public class CarafeGUI extends JFrame {
         args.add(minPepChargeSpinner.getValue().toString());
         args.add("-max_pep_charge");
         args.add(maxPepChargeSpinner.getValue().toString());
-        if (includeEntrapmentCheckbox.isSelected()) {
+        if (withEntrapment) {
             args.add("-entrapment");
         }
 
