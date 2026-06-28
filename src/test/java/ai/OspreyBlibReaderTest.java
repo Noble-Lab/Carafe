@@ -143,6 +143,43 @@ public class OspreyBlibReaderTest {
     }
 
     @Test
+    public void skipsIdentificationsWithUnrecognizedModifications() throws Exception {
+        // A peptide whose modification mass isn't recognized would otherwise be emitted with a
+        // dropped mod (wrong precursor mass). It must be skipped entirely, not partially
+        // de-modified, so only the clean peptide survives the conversion.
+        Path blib = Files.createTempFile("osprey_unrecmod", ".blib");
+        Files.deleteIfExists(blib);
+        String url = "jdbc:sqlite:" + blib;
+        try (Connection c = DriverManager.getConnection(url); Statement st = c.createStatement()) {
+            st.executeUpdate("CREATE TABLE SpectrumSourceFiles (id INTEGER PRIMARY KEY AUTOINCREMENT, fileName VARCHAR);");
+            st.executeUpdate("CREATE TABLE RefSpectra ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT, peptideSeq VARCHAR, precursorMZ REAL, "
+                    + "precursorCharge INTEGER, peptideModSeq VARCHAR, retentionTime REAL, "
+                    + "startTime REAL, endTime REAL, ionMobility REAL, fileID INTEGER);");
+            st.executeUpdate("CREATE TABLE Modifications ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT, RefSpectraID INTEGER, position INTEGER, mass REAL);");
+            st.executeUpdate("INSERT INTO SpectrumSourceFiles (id, fileName) VALUES (1, 'run.mzML');");
+            // 1: clean peptide -> kept.
+            st.executeUpdate("INSERT INTO RefSpectra (id, peptideSeq, precursorMZ, precursorCharge, "
+                    + "peptideModSeq, retentionTime, startTime, endTime, ionMobility, fileID) "
+                    + "VALUES (1, 'PEPTIDEK', 460.75, 2, 'PEPTIDEK', 10.0, 9.8, 10.2, 0.0, 1);");
+            // 2: SAMPLEK with an unrecognized +123.456 mod on M (pos 3, non-terminal) -> skipped.
+            st.executeUpdate("INSERT INTO RefSpectra (id, peptideSeq, precursorMZ, precursorCharge, "
+                    + "peptideModSeq, retentionTime, startTime, endTime, ionMobility, fileID) "
+                    + "VALUES (2, 'SAMPLEK', 400.0, 2, 'SAM[+123.5]PLEK', 12.0, 11.8, 12.2, 0.0, 1);");
+            st.executeUpdate("INSERT INTO Modifications (RefSpectraID, position, mass) VALUES (2, 3, 123.456);");
+        }
+        Path outDir = Files.createTempDirectory("osprey_out");
+        String tsv = OspreyBlibReader.convertBlibToDiannTsv(blib.toString(), outDir.toString());
+        Map<String, Map<String, String>> byPep = byPeptide(readTsv(tsv));
+
+        Assert.assertEquals(byPep.size(), 1, "the unrecognized-mod identification must be skipped");
+        Assert.assertTrue(byPep.containsKey("PEPTIDEK"), "the clean peptide must survive");
+        Assert.assertFalse(byPep.containsKey("SAMPLEK"),
+                "must not emit a partially de-modified (wrong-mass) sequence");
+    }
+
+    @Test
     public void handlesBlibWithoutModificationsTable() throws Exception {
         // A blib that only has RefSpectra + SpectrumSourceFiles (no Modifications table) must
         // still convert, treating every peptide as unmodified.
