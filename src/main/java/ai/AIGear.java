@@ -9468,10 +9468,11 @@ public class AIGear {
                     }
 
                 }
-                if(!apex_found){
-                    Cloger.getInstance().logger.error("Apex not found:"+peptideMatch.rt_apex+","+peptideMatch.rt_start+","+peptideMatch.rt_end);
-                    System.exit(1);
-                }
+                // The apex RT is the fitted peak apex, which by definition lies BETWEEN scans, so an
+                // exact scan-RT match is not expected - and on slower-cycle instruments (e.g. Stellar
+                // sDIA) the nearest scan is further than the 0.01 min window, so no scan matches. Fall
+                // through to the closest-scan re-detection below, which handles the apex and the
+                // boundaries gracefully. (Previously this hard-exited the whole run.)
                 if (!boundary_left_found || !boundary_right_found || !apex_found) {
                     // redo the peak index detection
                     rt = 0;
