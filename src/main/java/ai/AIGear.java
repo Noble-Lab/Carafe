@@ -8168,8 +8168,10 @@ public class AIGear {
         ConcurrentHashMap<Integer, ApexMatch> row2index = new ConcurrentHashMap<>();
         // only need to save information from MS2 spectra
         // index -> rt and isolation_mz
-        // Extract MS2 spectra index and MS2 spectra RT and isolation win from mzML
-        HashMap<Integer, HashMap<String, Double>> index = new HashMap<>();
+        // Extract MS2 spectra index and MS2 spectra RT and isolation win from mzML.
+        // TreeMap so iteration is by MS2 ordinal (= RT-ascending), which ApexMatcher relies on for
+        // its early-exit to be sound.
+        java.util.TreeMap<Integer, HashMap<String, Double>> index = new java.util.TreeMap<>();
         DIAMeta meta = new DIAMeta();
         meta.load_ms_data(ms_file);
         int global_index = 0;
@@ -8232,35 +8234,8 @@ public class AIGear {
                         Integer.parseInt(d[cIndex.get(PSMConfig.precursor_charge_column_name)]));
             }
 
-            double delta_rt = Double.POSITIVE_INFINITY;
-            int matched_index = -1;
-
-            for (Integer i : index.keySet()) {
-                if (index.get(i).get("isolation_mz_start") <= precursor_mz
-                        && precursor_mz <= index.get(i).get("isolation_mz_end")) {
-                    if (Math.abs(index.get(i).get("rt") - rt) < delta_rt) {
-                    // if (Math.abs(index.get(i).get("rt") - rt) < delta_rt && Math.abs(index.get(i).get("ccs") - ccs) < ccs_cutoff) {
-                        delta_rt = Math.abs(index.get(i).get("rt") - rt);
-                        // delta_ccs = Math.abs(index.get(i).get("ccs") - ccs);
-                        matched_index = i;
-                    } else if (index.get(i).get("rt") > rt + 2) {
-                        break;
-                    }
-                }
-            }
-            if (matched_index == -1) {
-                for (int i : index.keySet()) {
-                    if (index.get(i).get("isolation_mz_start") <= precursor_mz
-                            && precursor_mz <= index.get(i).get("isolation_mz_end")) {
-                        if (Math.abs(index.get(i).get("rt") - rt) < delta_rt) {
-                            delta_rt = Math.abs(index.get(i).get("rt") - rt);
-                            matched_index = i;
-                        } else if (index.get(i).get("rt") > rt + 2) {
-                            break;
-                        }
-                    }
-                }
-            }
+            int matched_index =
+                    main.java.dia.ApexMatcher.matchByIsolationRange(index, precursor_mz, rt);
 
             synchronized (this) {
                 if (index.containsKey(matched_index)) {
