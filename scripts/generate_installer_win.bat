@@ -1,12 +1,12 @@
 @echo off
 REM ---------------------------------------------------------------------------
-REM Build the Carafe Windows installer (unsigned MSI) and bundle OspreySharp.
+REM Build the Carafe Windows installer (unsigned MSI) and bundle Osprey.
 REM
 REM Prerequisites (the CI workflow performs these before calling this script):
 REM   1. "mvn -B -DskipTests package" has produced target\carafe-2.2.0\
 REM      (carafe-2.2.0.jar plus lib\).
-REM   2. The OspreySharp self-contained build is staged at
-REM      target\carafe-2.2.0\osprey\win-x64\OspreySharp.exe so it is copied into
+REM   2. The Osprey self-contained build is staged at
+REM      target\carafe-2.2.0\osprey\win-x64\Osprey.exe so it is copied into
 REM      the app image and resolveOspreyBinary() finds it next to the jar.
 REM   3. A JDK with jpackage is on PATH, and WiX 3.x (jpackage's MSI backend) is
 REM      installed and on PATH.
@@ -32,9 +32,9 @@ if not exist "%INPUT_DIR%\%MAIN_JAR%" (
     exit /b 1
 )
 
-if not exist "%INPUT_DIR%\osprey\win-x64\OspreySharp.exe" (
-    echo WARNING: %INPUT_DIR%\osprey\win-x64\OspreySharp.exe not found.
-    echo          The MSI will build WITHOUT a bundled OspreySharp. Stage it first
+if not exist "%INPUT_DIR%\osprey\win-x64\Osprey.exe" (
+    echo WARNING: %INPUT_DIR%\osprey\win-x64\Osprey.exe not found.
+    echo          The MSI will build WITHOUT a bundled Osprey. Stage it first
     echo          ^(scripts\build_ospreysharp.bat win-x64^) to include it.
 )
 

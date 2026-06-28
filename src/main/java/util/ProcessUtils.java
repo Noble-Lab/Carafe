@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Helpers for managing external processes launched by the GUI (MSConvert, DIA-NN, OspreySharp,
+ * Helpers for managing external processes launched by the GUI (MSConvert, DIA-NN, Osprey,
  * Carafe, Python). Extracted from the GUI so the termination logic is unit-testable.
  */
 public final class ProcessUtils {

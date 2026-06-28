@@ -7,7 +7,7 @@ import org.testng.annotations.Test;
 import java.io.File;
 
 /**
- * Coverage for {@link OspreyFdrBenchPlanner}: the rule that an OspreySharp FDRBench input TSV is
+ * Coverage for {@link OspreyFdrBenchPlanner}: the rule that an Osprey FDRBench input TSV is
  * emitted only for the project search (workflow 5) when entrapment is enabled, under a {@code
  * FDRBench} subfolder of the search output directory, and never for the training search.
  *

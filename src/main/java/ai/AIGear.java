@@ -715,7 +715,7 @@ public class AIGear {
         options.addOption("entrapment_seed", true, "Master RNG seed for entrapment shuffling, default is 42.");
         options.addOption("decoy_seed", true, "Master RNG seed for decoy shuffling, default is 24.");
 
-        // Koina-based initial library generation (for the OspreySharp workflow).
+        // Koina-based initial library generation (for the Osprey workflow).
         options.addOption("build_koina_library", true, "Generate an initial DIA-NN-format spectral library from the -db peptide FASTA using the Koina prediction service, writing it to the given TSV path. Use with -koina_ms2_model and -koina_rt_model.");
         options.addOption("koina_url", true, "Koina server base URL (default https://koina.wilhelmlab.org).");
         options.addOption("koina_ms2_model", true, "Koina fragment-intensity model (e.g. Prosit_2020_intensity_HCD, AlphaPeptDeep_ms2_generic).");
@@ -730,7 +730,7 @@ public class AIGear {
         options.addOption("nce", true, "NCE for in-silico spectral library");
         options.addOption("ms_instrument", true, "MS instrument for in-silico spectral library: default is Eclipse");
         options.addOption("device", true, "device for in-silico spectral library: default is gpu");
-        options.addOption("se", true, "The search engine used to generate the identification result: DIA-NN (default), OspreySharp (reads a .blib), skyline, or generic");
+        options.addOption("se", true, "The search engine used to generate the identification result: DIA-NN (default), Osprey (reads a .blib), skyline, or generic");
         options.addOption("mode", true, "Data type: general or phosphorylation");
         options.addOption("tf", true, "Fine tune type: ms2, rt, all (default)");
         options.addOption("seed", true, "Random seed, 2024 in default");
@@ -1328,10 +1328,9 @@ public class AIGear {
                     aiGear.load_data(new_psm_file, ms_file, aiGear.fdr_cutoff);
                     aiGear.get_ms2_matches_diann();
                 }
-            } else if ((aiGear.search_engine.equalsIgnoreCase("OspreySharp")
-                    || aiGear.search_engine.equalsIgnoreCase("Osprey"))
+            } else if (aiGear.search_engine.equalsIgnoreCase("Osprey")
                     && aiGear.data_type.equalsIgnoreCase("dia")) {
-                // OspreySharp does not predict its own library, so Carafe finetunes on Osprey's
+                // Osprey does not predict its own library, so Carafe finetunes on Osprey's
                 // search output. The Osprey .blib supplies the peptide IDs + RT; Carafe still
                 // extracts the measured fragment intensities and masks transitions from the mzML
                 // exactly as for a DIA-NN report. Convert the blib to a DIA-NN-style TSV, add the
@@ -1342,7 +1341,7 @@ public class AIGear {
                 String new_psm_file = aiGear.add_ms2spectrum_index(diann_like_tsv, ms_file);
                 // The converted TSV is in DIA-NN format (DIA-NN column names, possibly multiple MS
                 // runs), so switch to the DIA-NN code path for loading + interference removal +
-                // matching. (Keeping "OspreySharp" would hit the generic loader that expects a
+                // matching. (Keeping "Osprey" would hit the generic loader that expects a
                 // "q_value" column and fails.)
                 PSMConfig.use_diann_report_column_names();
                 aiGear.search_engine = "DIA-NN";

@@ -24,10 +24,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Reads an OspreySharp output {@code .blib} (BiblioSpecLite SQLite) of detected peptides and
+ * Reads an Osprey output {@code .blib} (BiblioSpecLite SQLite) of detected peptides and
  * writes a DIA-NN-style identification TSV that Carafe's existing DIA-NN report path can consume.
  *
- * <p>OspreySharp does not generate its own predicted library, so Carafe finetunes its model on
+ * <p>Osprey does not generate its own predicted library, so Carafe finetunes its model on
  * Osprey's search results. The blib supplies the peptide identifications (stripped sequence,
  * modifications, precursor charge, apex/boundary RT); Carafe still extracts the measured
  * fragment intensities and performs transition masking from the mzML files exactly as it does
@@ -44,7 +44,7 @@ import java.util.Set;
  * <p><b>Validation note:</b> the blib schema (RefSpectra / SpectrumSourceFiles / Modifications)
  * is read defensively from {@link ResultSetMetaData} so missing optional columns
  * (startTime/endTime/ionMobility) degrade gracefully. Column presence is confirmed against
- * OspreySharp's {@code BlibWriter}; validate end-to-end against a real Osprey blib.</p>
+ * Osprey's {@code BlibWriter}; validate end-to-end against a real Osprey blib.</p>
  */
 public class OspreyBlibReader {
 
@@ -89,7 +89,7 @@ public class OspreyBlibReader {
      * Convenience entry point: read {@code blibPath} and write a DIA-NN-style TSV under
      * {@code outDir}, returning the TSV path.
      *
-     * @param blibPath path to the OspreySharp output .blib
+     * @param blibPath path to the Osprey output .blib
      * @param outDir   Carafe output directory
      * @return path to the written DIA-NN-style TSV
      * @throws IOException on read/write failure
@@ -209,7 +209,7 @@ public class OspreyBlibReader {
     public void writeDiannTsv(String outTsv) throws IOException {
         File blib = new File(blibPath);
         if (!blib.isFile()) {
-            throw new IOException("OspreySharp blib not found: " + blibPath);
+            throw new IOException("Osprey blib not found: " + blibPath);
         }
 
         String url = "jdbc:sqlite:" + blibPath;
@@ -269,7 +269,7 @@ public class OspreyBlibReader {
                 }
             }
         } catch (SQLException e) {
-            throw new IOException("Failed to read OspreySharp blib: " + blibPath, e);
+            throw new IOException("Failed to read Osprey blib: " + blibPath, e);
         }
         Cloger.getInstance().logger.info(
                 "OspreyBlibReader: wrote " + nRows + " identifications to " + outTsv);

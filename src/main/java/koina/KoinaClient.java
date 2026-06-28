@@ -21,7 +21,7 @@ import java.util.Set;
  * retention-time models behind the KServe/Triton v2 inference protocol.
  *
  * <p>Carafe uses Koina to generate the <em>initial</em> (non-finetuned) spectral library for the
- * OspreySharp workflows, as an alternative to running the local AlphaPepDeep model. Different
+ * Osprey workflows, as an alternative to running the local AlphaPepDeep model. Different
  * models declare different inputs (e.g. Prosit CID has no {@code collision_energies};
  * AlphaPepDeep adds {@code instrument_types}), so callers pass the set of inputs the model
  * declares (from {@link #getModelInputNames}) and this client sends only those.</p>

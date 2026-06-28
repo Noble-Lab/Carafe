@@ -3,14 +3,14 @@ package main.java.gui;
 import java.io.File;
 
 /**
- * Decides whether (and where) OspreySharp should emit an FDRBench input TSV for an OspreySharp
+ * Decides whether (and where) Osprey should emit an FDRBench input TSV for an Osprey
  * search, via its {@code --fdrbench} option.
  *
  * <p>The FDRBench input is only meaningful for the <b>project</b> search (workflow 5) and only when
  * <b>entrapment</b> peptides are in the searched library (so FDRBench has entrapment hits to
  * estimate FDP from). It is never emitted for the training search, which drives fine-tuning. When
- * emitted, OspreySharp writes it under a {@code FDRBench} subfolder of the search output directory;
- * the FDR level is taken from OspreySharp's {@code --fdr-level} (so it follows the Osprey tab
+ * emitted, Osprey writes it under a {@code FDRBench} subfolder of the search output directory;
+ * the FDR level is taken from Osprey's {@code --fdr-level} (so it follows the Osprey tab
  * setting). Carafe copies the pairing manifest into the same folder so the FDRBench inputs are
  * bundled together.</p>
  *
@@ -20,14 +20,14 @@ public final class OspreyFdrBenchPlanner {
 
     /** Name of the per-search subfolder that holds the FDRBench inputs. */
     public static final String FDRBENCH_DIR = "FDRBench";
-    /** Name of the FDRBench input TSV OspreySharp writes. */
+    /** Name of the FDRBench input TSV Osprey writes. */
     public static final String FDRBENCH_INPUT_TSV = "FDRBench-Input.tsv";
 
     private OspreyFdrBenchPlanner() {
     }
 
     /**
-     * Path passed to OspreySharp's {@code --fdrbench}, or {@code null} when no FDRBench input should
+     * Path passed to Osprey's {@code --fdrbench}, or {@code null} when no FDRBench input should
      * be written.
      *
      * @param entrapmentEnabled whether the "Include entrapment" option is on

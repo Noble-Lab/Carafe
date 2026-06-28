@@ -5,9 +5,9 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 /**
- * Tests for {@link PSMConfig#use_osprey_blib_column_names()}. The OspreySharp path reuses the
+ * Tests for {@link PSMConfig#use_osprey_blib_column_names()}. The Osprey path reuses the
  * DIA-NN column names (since {@code OspreyBlibReader} emits a DIA-NN-style TSV) but tags the
- * search engine as "OspreySharp".
+ * search engine as "Osprey".
  *
  * <p>TestNG style (argument order {@code assertEquals(actual, expected, message)}) to match the
  * project's other tests so these run under {@code mvn test}.</p>
@@ -17,7 +17,7 @@ public class PSMConfigTest {
     @Test
     public void ospreyColumnsMatchDiannNamesButTagOspreyEngine() {
         PSMConfig.use_osprey_blib_column_names();
-        Assert.assertEquals(PSMConfig.search_engine_name, "OspreySharp");
+        Assert.assertEquals(PSMConfig.search_engine_name, "Osprey");
         Assert.assertEquals(PSMConfig.stripped_peptide_sequence_column_name, "Stripped.Sequence");
         Assert.assertEquals(PSMConfig.peptide_modification_column_name, "Modified.Sequence");
         Assert.assertEquals(PSMConfig.precursor_charge_column_name, "Precursor.Charge");

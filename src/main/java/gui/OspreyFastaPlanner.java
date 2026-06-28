@@ -1,7 +1,7 @@
 package main.java.gui;
 
 /**
- * Decides how to build the OspreySharp peptide FASTAs for workflows 4 and 5.
+ * Decides how to build the Osprey peptide FASTAs for workflows 4 and 5.
  *
  * <p>Entrapment ({@code p_target}/{@code p_decoy}) peptides belong ONLY in the library-DB FASTA —
  * the one that feeds the finetuned library used as the project-search library (workflow 5) or as
@@ -37,7 +37,7 @@ public final class OspreyFastaPlanner {
     }
 
     /**
-     * Plan the OspreySharp peptide-FASTA builds.
+     * Plan the Osprey peptide-FASTA builds.
      *
      * @param sameDb              whether the training and library databases are the same file
      * @param entrapmentRequested whether the user enabled entrapment (the "Include entrapment" box)

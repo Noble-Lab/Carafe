@@ -21,7 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Generates an initial (non-finetuned) DIA-NN-format spectral library for the OspreySharp
+ * Generates an initial (non-finetuned) DIA-NN-format spectral library for the Osprey
  * workflows by querying the <a href="https://koina.wilhelmlab.org">Koina</a> service for
  * fragment intensities and iRT, instead of running the local AlphaPepDeep model.
  *
@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  * Carbamidomethyl C, variable Oxidation M up to {@code maxVarMods}) are enumerated, precursors
  * are formed at the requested charges, and the peptidoforms are sent to Koina in ProForma/UNIMOD
  * notation. The result is written as a DIA-NN TSV (same columns Carafe's local library writer
- * uses) that OspreySharp reads directly; the {@code Decoy}/{@code ProteinID} columns come from
+ * uses) that Osprey reads directly; the {@code Decoy}/{@code ProteinID} columns come from
  * the FASTA headers.</p>
  *
  * <p><b>Supported modifications:</b> fixed Carbamidomethyl (C) and variable Oxidation (M), which

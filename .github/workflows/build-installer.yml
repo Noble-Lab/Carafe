@@ -1,12 +1,12 @@
 name: Build Windows Installer
 
-# Builds the unsigned Carafe Windows MSI with OspreySharp bundled inside, the same
+# Builds the unsigned Carafe Windows MSI with Osprey bundled inside, the same
 # way Bo's local installer does, but fully automated:
-#   mvn package  ->  publish OspreySharp (self-contained)  ->  jpackage MSI.
+#   mvn package  ->  publish Osprey (self-contained)  ->  jpackage MSI.
 #
-# OspreySharp lives in the ProteoWizard tree and is a self-contained managed .NET
+# Osprey lives in the ProteoWizard tree and is a self-contained managed .NET
 # solution (no native pwiz C++ build needed), so a runner only needs the .NET 8
-# SDK. We sparse-checkout just the OspreySharp subtree at a pinned ref.
+# SDK. We sparse-checkout just the Osprey subtree at a pinned ref.
 #
 # Triggers: manual (workflow_dispatch) and version tags (v*). MSI builds are heavy,
 # so it does NOT run on every push.
@@ -15,12 +15,12 @@ on:
   workflow_dispatch:
     inputs:
       ospreysharp_repo:
-        description: "Git repo containing pwiz_tools/OspreySharp (owner/name)"
+        description: "Git repo containing pwiz_tools/Osprey (owner/name)"
         required: true
-        # OspreySharp is public in ProteoWizard/pwiz; override only to test a fork.
+        # Osprey is public in ProteoWizard/pwiz; override only to test a fork.
         default: "ProteoWizard/pwiz"
       ospreysharp_ref:
-        description: "Branch, tag, or commit SHA of the OspreySharp source to build"
+        description: "Branch, tag, or commit SHA of the Osprey source to build"
         required: true
         default: "master"
   push:
@@ -87,49 +87,49 @@ jobs:
       - name: Build Carafe jar
         run: mvn -B -DskipTests package
 
-      # OspreySharp is public (ProteoWizard/pwiz). Sparse-checkout only what the
-      # build touches: the OspreySharp subtree, the shared PortableUtil project,
+      # Osprey is public (ProteoWizard/pwiz). Sparse-checkout only what the
+      # build touches: the Osprey subtree, the shared PortableUtil project,
       # and two vendored DLLs the projects bind to outside that subtree:
-      #   * Shared/Lib/DotNetZip  - hard <Reference> in OspreySharp.IO (build fails without it)
-      #   * Shared/Lib/Parquet    - patched ParquetNet.dll that OspreySharp's
+      #   * Shared/Lib/DotNetZip  - hard <Reference> in Osprey.IO (build fails without it)
+      #   * Shared/Lib/Parquet    - patched ParquetNet.dll that Osprey's
       #                             Directory.Build.targets overlays post-build; the
       #                             overlay is Exists()-guarded, so a missing file would
       #                             SILENTLY ship a build that can't read osprey parquet.
-      - name: Checkout OspreySharp source (sparse)
+      - name: Checkout Osprey source (sparse)
         uses: actions/checkout@v5
         with:
           repository: ${{ env.OSPREYSHARP_REPO }}
           ref: ${{ env.OSPREYSHARP_REF }}
           path: pwiz
           sparse-checkout: |
-            pwiz_tools/OspreySharp
+            pwiz_tools/Osprey
             pwiz_tools/Shared/PortableUtil
             pwiz_tools/Shared/Lib/DotNetZip
             pwiz_tools/Shared/Lib/Parquet
           sparse-checkout-cone-mode: false
 
-      # Publish a self-contained OspreySharp straight into the app directory so
+      # Publish a self-contained Osprey straight into the app directory so
       # jpackage's --input sweeps it into the MSI. resolveOspreyBinary() then finds
-      # it at <appdir>/osprey/win-x64/OspreySharp.exe next to the jar.
+      # it at <appdir>/osprey/win-x64/Osprey.exe next to the jar.
       #
-      # Do NOT use PublishSingleFile here. OspreySharp's blib writer uses
+      # Do NOT use PublishSingleFile here. Osprey's blib writer uses
       # System.Data.SQLite, whose native SQLite.Interop.dll is preloaded by resolving
       # the managed assembly's own directory (Assembly.Location). In a single-file
       # publish Assembly.Location is "", so Path.GetDirectoryName("") -> null and the
       # SQLiteConnection ctor throws "ArgumentNullException (Parameter 'path1')" from
       # Path.Combine the moment it opens the output .blib. A normal folder publish
       # ships SQLite.Interop.dll as a real sibling file, so the resolution works.
-      - name: Publish OspreySharp (self-contained ${{ env.RID }})
+      - name: Publish Osprey (self-contained ${{ env.RID }})
         run: >
           dotnet publish
-          pwiz/pwiz_tools/OspreySharp/OspreySharp/OspreySharp.csproj
+          pwiz/pwiz_tools/Osprey/Osprey/Osprey.csproj
           -c Release -f net8.0 -r ${{ env.RID }}
           --self-contained true
           -p:PublishSingleFile=false
           -p:Platform=x64
           -o target/carafe-2.2.0/osprey/${{ env.RID }}
 
-      - name: Build MSI (unsigned, OspreySharp bundled)
+      - name: Build MSI (unsigned, Osprey bundled)
         run: scripts\generate_installer_win.bat
 
       - name: Upload MSI artifact

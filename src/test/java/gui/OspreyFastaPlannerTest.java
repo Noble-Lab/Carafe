@@ -6,7 +6,7 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 /**
- * Coverage for {@link OspreyFastaPlanner}: the rule that OspreySharp entrapment peptides go only
+ * Coverage for {@link OspreyFastaPlanner}: the rule that Osprey entrapment peptides go only
  * into the library-DB FASTA (which feeds the finetuned library / project search), never into the
  * training-DB FASTA (which drives AI fine-tuning), and that the two FASTAs are shared only when the
  * databases are identical AND no entrapment is requested.

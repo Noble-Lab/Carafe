@@ -17,7 +17,7 @@ import java.util.Map;
 
 /**
  * Tests for {@link OspreyBlibReader}: builds a minimal BiblioSpec-schema SQLite blib (the same
- * tables OspreySharp's BlibWriter produces) and verifies the conversion to a DIA-NN-style
+ * tables Osprey's BlibWriter produces) and verifies the conversion to a DIA-NN-style
  * identification TSV, including reconstruction of DIA-NN UniMod modified sequences from the
  * structured Modifications table.
  *

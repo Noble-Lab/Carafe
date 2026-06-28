@@ -91,9 +91,9 @@ public class PSMConfig {
 
     /**
      * Configures the column names for the TSV that {@code OspreyBlibReader} writes when
-     * converting an OspreySharp {@code .blib} into a Carafe identification file. The converter
+     * converting an Osprey {@code .blib} into a Carafe identification file. The converter
      * emits DIA-NN-style column names (so the existing DIA-NN report path can read it), but the
-     * search engine name is set to "OspreySharp". The blib supplies the peptide identifications
+     * search engine name is set to "Osprey". The blib supplies the peptide identifications
      * (sequence, modifications, charge, apex RT); Carafe still extracts the measured fragment
      * intensities and performs transition masking from the mzML files exactly as for DIA-NN.
      */
@@ -113,7 +113,7 @@ public class PSMConfig {
         PEP_column_name = "PEP";
         im_column_name = "IM";
         ms_file_column_name = "File.Name";
-        search_engine_name = "OspreySharp";
+        search_engine_name = "Osprey";
     }
 
     public static void use_skyline_report_column_names(){

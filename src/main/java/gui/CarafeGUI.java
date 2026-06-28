@@ -94,14 +94,14 @@ public class CarafeGUI extends JFrame {
     private JTextField carafeAdditionalOptionsField;
     private JTextField diannAdditionalOptionsField;
 
-    // Search engine selection + OspreySharp settings. These are field-initialized with defaults
+    // Search engine selection + Osprey settings. These are field-initialized with defaults
     // so the search-engine choice defaults to DIA-NN (no behavior change) and the Osprey option
     // widgets are never null even before they are added to a settings panel.
-    private JComboBox<String> searchEngineCombo = new JComboBox<>(new String[] { "DIA-NN", "OspreySharp" });
+    private JComboBox<String> searchEngineCombo = new JComboBox<>(new String[] { "DIA-NN", "Osprey" });
     private JComboBox<String> ospreyPathCombo;
-    // Resolution defaults to hram (high-res Orbitrap/Astral, the common OspreySharp case).
+    // Resolution defaults to hram (high-res Orbitrap/Astral, the common Osprey case).
     private JComboBox<String> ospreyResolutionCombo = new JComboBox<>(new String[] { "hram", "unit", "auto" });
-    // FDR method is always percolator for OspreySharp (no UI control; hardcoded in buildOspreyCommand).
+    // FDR method is always percolator for Osprey (no UI control; hardcoded in buildOspreyCommand).
     private JComboBox<String> ospreyFdrLevelCombo = new JComboBox<>(new String[] { "precursor", "peptide", "both" });
     private JComboBox<String> ospreySharedPeptidesCombo = new JComboBox<>(new String[] { "all", "razor", "unique" });
     private JTextField ospreyRunFdrField = new JTextField("0.01");
@@ -124,17 +124,17 @@ public class CarafeGUI extends JFrame {
             "Koina: ms2pip timsTOF"
     });
     private JTextField koinaUrlField = new JTextField("https://koina.wilhelmlab.org");
-    // Max number of MSConvert processes to run in parallel when converting raw/.d for OspreySharp.
+    // Max number of MSConvert processes to run in parallel when converting raw/.d for Osprey.
     private JTextField ospreyConversionThreadsField = new JTextField("4");
 
-    // Per-step overrides for buildCarafeCommand, used only by the OspreySharp workflows to reuse
+    // Per-step overrides for buildCarafeCommand, used only by the Osprey workflows to reuse
     // the shared Carafe command builder for the peptide-FASTA (NoCut) library and finetune steps.
     // All null for the DIA-NN workflows (1-3), so their behavior is unchanged.
     private String carafeDbOverride = null;         // -db (peptide FASTA instead of libraryDbField)
     private String carafeIOverride = null;          // -i  (Osprey .blib instead of diannReportField)
     private String carafeOutSubdirOverride = null;  // output subdir under the output directory
     private String carafeEnzymeOverride = null;     // -enzyme value (e.g. "NoCut")
-    private String carafeSeOverride = null;         // -se value (e.g. "OspreySharp")
+    private String carafeSeOverride = null;         // -se value (e.g. "Osprey")
     private String carafeLfTypeOverride = null;     // -lf_type value (e.g. "DIA-NN")
 
     /** Reset all per-step Carafe command overrides back to default (DIA-NN-workflow) behavior. */
@@ -274,7 +274,7 @@ public class CarafeGUI extends JFrame {
     public CarafeGUI() {
         setTitle("Carafe - Spectral Library Generator");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        // Make sure external processes (MSConvert / DIA-NN / OspreySharp / Carafe / Python) and
+        // Make sure external processes (MSConvert / DIA-NN / Osprey / Carafe / Python) and
         // their children are terminated if the GUI exits without the user clicking Stop (e.g. the
         // window is closed mid-run). Runs on JVM shutdown, which EXIT_ON_CLOSE triggers.
         Runtime.getRuntime().addShutdownHook(new Thread(this::terminateAllProcesses, "carafe-process-cleanup"));
@@ -416,7 +416,7 @@ public class CarafeGUI extends JFrame {
         tabbedPane.addTab("Training Data Generation", wrapInScrollPane(createTrainingDataPanel()));
         tabbedPane.addTab("Model Training", wrapInScrollPane(createModelTrainingPanel()));
         tabbedPane.addTab("Library Generation", wrapInScrollPane(createLibraryGenerationPanel()));
-        tabbedPane.addTab("OspreySharp", wrapInScrollPane(createOspreyPanel()));
+        tabbedPane.addTab("Osprey", wrapInScrollPane(createOspreyPanel()));
         // Console is added last (rightmost); code switches to it via indexOfTab("Console"),
         // so its position is not hardcoded.
         tabbedPane.addTab("Console", createConsolePanel());
@@ -1095,8 +1095,8 @@ public class CarafeGUI extends JFrame {
                 "1. Spectral library generation: start with DIA-NN search",
                 "2. Spectral library generation: start with DIA-NN report",
                 "3. End-to-end DIA search",
-                "4. OspreySharp: search, finetune, build new library",
-                "5. OspreySharp: end-to-end (finetune, then search project files)"
+                "4. Osprey: search, finetune, build new library",
+                "5. Osprey: end-to-end (finetune, then search project files)"
         };
         workflowCombo = new JComboBox<>(workflows);
         styleComboBox(workflowCombo);
@@ -1207,8 +1207,8 @@ public class CarafeGUI extends JFrame {
                 diannAdditionalOptionsField = createTextField("DIA-NN additional options"),
                 null);
 
-        ospreyExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "OspreySharp Executable:",
-                "Path to the OspreySharp executable (OspreySharp.exe on Windows, OspreySharp on Linux/Mac).\n"
+        ospreyExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Osprey Executable:",
+                "Path to the Osprey executable (Osprey.exe on Windows, Osprey on Linux/Mac).\n"
                         + "If left blank, Carafe looks for a bundled build under osprey/<rid>/ next to the jar,\n"
                         + "then ~/.carafe/osprey/<rid>/, then the system PATH.",
                 ospreyPathCombo = createOspreyComboBox(),
@@ -1260,9 +1260,9 @@ public class CarafeGUI extends JFrame {
                         "  - Requires: DIA-NN report file, Train MS files, Library database\n\n" +
                         "Workflow 3: Complete DIA analysis pipeline (Carafe+DIA-NN)\n" +
                         "  - Requires: Train MS, Project MS, both databases\n\n" +
-                        "Workflow 4: OspreySharp search, finetune, build new library\n" +
+                        "Workflow 4: Osprey search, finetune, build new library\n" +
                         "  - Requires: Train MS, Train database, Library database\n\n" +
-                        "Workflow 5: OspreySharp end-to-end (finetune, then search project files)\n" +
+                        "Workflow 5: Osprey end-to-end (finetune, then search project files)\n" +
                         "  - Requires: Train MS, Project MS, both databases"),
                 BorderLayout.CENTER);
 
@@ -1693,7 +1693,7 @@ public class CarafeGUI extends JFrame {
                 setVisible(diannAdditionalOptionsRowComponents, true);
                 updateMsConvertVisibility();
             }
-            case 3 -> { // Workflow 4: OspreySharp search -> finetune -> new library
+            case 3 -> { // Workflow 4: Osprey search -> finetune -> new library
                 setVisible(diannReportRowComponents, false);
                 setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, true);
@@ -1704,7 +1704,7 @@ public class CarafeGUI extends JFrame {
                 setVisible(diannAdditionalOptionsRowComponents, false);
                 updateMsConvertVisibility();
             }
-            case 4 -> { // Workflow 5: OspreySharp end-to-end (then search project files)
+            case 4 -> { // Workflow 5: Osprey end-to-end (then search project files)
                 setVisible(diannReportRowComponents, false);
                 setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, true);
@@ -1732,7 +1732,7 @@ public class CarafeGUI extends JFrame {
         inputFieldsPanel.repaint();
     }
 
-    /** Settings panel for the OspreySharp search engine (Workflows 4 and 5). */
+    /** Settings panel for the Osprey search engine (Workflows 4 and 5). */
     private JPanel createOspreyPanel() {
         JPanel panel = new ScrollablePanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -1753,7 +1753,7 @@ public class CarafeGUI extends JFrame {
         gbc.gridy = row;
         gbc.weightx = 0;
         panel.add(createLabel("Initial library predictor:",
-                "How the initial (non-finetuned) library is predicted before the first OspreySharp search.\n"
+                "How the initial (non-finetuned) library is predicted before the first Osprey search.\n"
                         + "Carafe local runs AlphaPepDeep on your machine; Koina options query the Koina web\n"
                         + "service (needs network). The finetuned library is always built locally by Carafe."), gbc);
         gbc.gridx = 1;
@@ -1782,9 +1782,9 @@ public class CarafeGUI extends JFrame {
 
         Object[][] combos = {
                 { "Resolution:", ospreyResolutionCombo,
-                        "Spectral resolution mode passed to OspreySharp (--resolution). Default: hram." },
-                { "FDR level:", ospreyFdrLevelCombo, "OspreySharp --fdr-level." },
-                { "Shared peptides:", ospreySharedPeptidesCombo, "OspreySharp --shared-peptides." },
+                        "Spectral resolution mode passed to Osprey (--resolution). Default: hram." },
+                { "FDR level:", ospreyFdrLevelCombo, "Osprey --fdr-level." },
+                { "Shared peptides:", ospreySharedPeptidesCombo, "Osprey --shared-peptides." },
         };
         for (Object[] c : combos) {
             gbc.gridx = 0;
@@ -1802,10 +1802,10 @@ public class CarafeGUI extends JFrame {
                 { "Experiment FDR:", ospreyExperimentFdrField, "Experiment-wide FDR threshold (--experiment-fdr)." },
                 { "Protein FDR:", ospreyProteinFdrField, "Protein-level FDR threshold (--protein-fdr)." },
                 { "Additional options:", ospreyAdditionalOptionsField,
-                        "Extra command-line options appended to the OspreySharp command." },
+                        "Extra command-line options appended to the Osprey command." },
                 { "Parallel MSConvert processes:", ospreyConversionThreadsField,
                         "How many raw/.d files to convert to mzML at once (separate MSConvert processes).\n"
-                                + "Used by Workflows 4/5 when converting acquisition files for OspreySharp." },
+                                + "Used by Workflows 4/5 when converting acquisition files for Osprey." },
         };
         for (Object[] f : fields) {
             gbc.gridx = 0;
@@ -1822,9 +1822,9 @@ public class CarafeGUI extends JFrame {
         gbc.gridy = row;
         gbc.gridwidth = 2;
         gbc.weightx = 1;
-        panel.add(createInfoCard("OspreySharp",
-                "OspreySharp is used by Workflows 4 and 5. Carafe builds a target-decoy library\n"
-                        + "(with the digest options from the Library Generation tab), runs OspreySharp,\n"
+        panel.add(createInfoCard("Osprey",
+                "Osprey is used by Workflows 4 and 5. Carafe builds a target-decoy library\n"
+                        + "(with the digest options from the Library Generation tab), runs Osprey,\n"
                         + "finetunes its models on the resulting .blib, then predicts a new library.\n"
                         + "Fragment tolerance is taken from the Training Data Generation tab."), gbc);
 
@@ -2018,7 +2018,7 @@ public class CarafeGUI extends JFrame {
                         "NCE is one of the inputs to the deep learning model\n" +
                         "for fragment ion intensity model training and inference.\n" +
                         "When it is set to 'auto', Carafe determines the NCE from the MS/MS data and uses it\n" +
-                        "(this also applies to the OspreySharp initial library, including Koina predictions).\n" +
+                        "(this also applies to the Osprey initial library, including Koina predictions).\n" +
                         "Enter a number to override with a specific NCE."),
                 gbc);
         nceField = createTextField("e.g., 27 or auto");
@@ -3413,11 +3413,11 @@ public class CarafeGUI extends JFrame {
         JComboBox<String> combo = new JComboBox<>();
         combo.setEditable(true);
         combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        combo.setToolTipText("Select the OspreySharp executable, or leave blank to use a bundled/auto-detected build");
+        combo.setToolTipText("Select the Osprey executable, or leave blank to use a bundled/auto-detected build");
 
         String ospreyPrototype = System.getProperty("os.name").toLowerCase().contains("windows")
-                ? "C:\\Carafe\\osprey\\win-x64\\OspreySharp.exe"
-                : "/usr/local/bin/OspreySharp";
+                ? "C:\\Carafe\\osprey\\win-x64\\Osprey.exe"
+                : "/usr/local/bin/Osprey";
         combo.setPrototypeDisplayValue(ospreyPrototype);
 
         String saved = prefs.get(PREF_OSPREY_PATH, "");
@@ -3458,7 +3458,7 @@ public class CarafeGUI extends JFrame {
         styleButton(button);
         button.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser(prefs.get(PREF_LAST_DIR, System.getProperty("user.home")));
-            chooser.setDialogTitle("Select the OspreySharp executable");
+            chooser.setDialogTitle("Select the Osprey executable");
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 File selectedFile = chooser.getSelectedFile();
@@ -3692,7 +3692,7 @@ public class CarafeGUI extends JFrame {
             }
         }
 
-        // OspreySharp reads only mzML, so its workflows also need MSConvert for Bruker .d inputs
+        // Osprey reads only mzML, so its workflows also need MSConvert for Bruker .d inputs
         // (DIA-NN workflows read .d directly and keep the .raw-only rule above).
         if (!show && (globalWorkflowIndex == 3 || globalWorkflowIndex == 4)) {
             show = ospreyNeedsConversion(trainMsFiles, trainMsFileField)
@@ -3707,7 +3707,7 @@ public class CarafeGUI extends JFrame {
     }
 
     /** True if the selection contains any non-mzML acquisition file (.raw or Bruker .d) that
-     *  OspreySharp would require MSConvert to convert. */
+     *  Osprey would require MSConvert to convert. */
     private boolean ospreyNeedsConversion(java.util.List<String> selected, JTextField field) {
         java.util.List<String> cands = new java.util.ArrayList<>();
         if (selected != null && !selected.isEmpty()) {
@@ -4237,7 +4237,7 @@ public class CarafeGUI extends JFrame {
             commandArgs.add("-ccs");
         }
 
-        // For the OspreySharp peptide-FASTA path, override the enzyme with "NoCut" so AlphaPepDeep
+        // For the Osprey peptide-FASTA path, override the enzyme with "NoCut" so AlphaPepDeep
         // predicts each pre-digested peptide (target and decoy) as-is.
         String enzyme = carafeEnzymeOverride != null
                 ? carafeEnzymeOverride
@@ -5107,7 +5107,7 @@ public class CarafeGUI extends JFrame {
                 });
             }
 
-            case 3, 4 -> { // OspreySharp workflows 4 & 5
+            case 3, 4 -> { // Osprey workflows 4 & 5
                 boolean endToEnd = (workflow == 4);
                 String trainDb = trainDbFileField.getText().trim();
                 String libraryDb = libraryDbFileField.getText().trim();
@@ -5190,7 +5190,7 @@ public class CarafeGUI extends JFrame {
                     carafeEnzymeOverride = "NoCut";
                     carafeOutSubdirOverride = "osprey_initial_library";
                     carafeLfTypeOverride = "DIA-NN";
-                    carafeSeOverride = "OspreySharp";
+                    carafeSeOverride = "Osprey";
                     lib1 = buildCarafeCommand("", false); // empty -ms => library only
                     clearCarafeOverrides();
                     if (lib1 != null) {
@@ -5209,7 +5209,7 @@ public class CarafeGUI extends JFrame {
                     setInputsFrozen(false);
                     return;
                 }
-                osprey1.task_description = "OspreySharp: search training files";
+                osprey1.task_description = "Osprey: search training files";
 
                 // The library-DB FASTA carries the entrapment peptides (when requested). Build it
                 // separately whenever it can't be shared with the training-DB FASTA (different DBs,
@@ -5235,7 +5235,7 @@ public class CarafeGUI extends JFrame {
                 carafeDbOverride = pep2;
                 carafeEnzymeOverride = "NoCut";
                 carafeIOverride = blib1;
-                carafeSeOverride = "OspreySharp";
+                carafeSeOverride = "Osprey";
                 carafeOutSubdirOverride = "osprey_new_library";
                 carafeLfTypeOverride = "DIA-NN";
                 CmdTask lib2 = buildCarafeCommand(trainMsInput, isTimsTOF);
@@ -5251,7 +5251,7 @@ public class CarafeGUI extends JFrame {
                 if (endToEnd) {
                     String ospreyProjectDir = outDir + File.separator + "osprey_project";
                     new File(ospreyProjectDir).mkdirs();
-                    // When entrapment is on, have OspreySharp also write an FDRBench input TSV under
+                    // When entrapment is on, have Osprey also write an FDRBench input TSV under
                     // osprey_project/FDRBench (level follows the Osprey tab's --fdr-level); the
                     // pairing manifest is copied alongside it after the search (see buildOspreyCommand).
                     String fdrbenchOut = OspreyFdrBenchPlanner.fdrBenchInputPath(entrap, true, ospreyProjectDir);
@@ -5260,7 +5260,7 @@ public class CarafeGUI extends JFrame {
                         setInputsFrozen(false);
                         return;
                     }
-                    osprey2.task_description = "OspreySharp: search project files with the new library";
+                    osprey2.task_description = "Osprey: search project files with the new library";
                 }
 
                 // ---- Phases ----
@@ -6614,7 +6614,7 @@ public class CarafeGUI extends JFrame {
         return "DIA-NN";
     }
 
-    /** The .NET runtime identifier for the current platform (used to find the bundled OspreySharp). */
+    /** The .NET runtime identifier for the current platform (used to find the bundled Osprey). */
     private String getOspreyRid() {
         String os = System.getProperty("os.name").toLowerCase();
         String arch = System.getProperty("os.arch").toLowerCase();
@@ -6628,13 +6628,13 @@ public class CarafeGUI extends JFrame {
     }
 
     /**
-     * Resolve the OspreySharp executable. Checks, in order: the saved preference, the bundled
+     * Resolve the Osprey executable. Checks, in order: the saved preference, the bundled
      * location next to the Carafe jar ({@code osprey/<rid>/}), {@code ~/.carafe/osprey/<rid>/},
      * then the system PATH. Returns the first existing path, or an empty string if none is found.
      */
     private String resolveOspreyBinary() {
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-        String exeName = isWindows ? "OspreySharp.exe" : "OspreySharp";
+        String exeName = isWindows ? "Osprey.exe" : "Osprey";
         String rid = getOspreyRid();
 
         // 1. Saved preference (and the editable combo if present).
@@ -6649,7 +6649,7 @@ public class CarafeGUI extends JFrame {
             return saved;
         }
 
-        // 2. Bundled next to the Carafe jar: <jarDir>/osprey/<rid>/OspreySharp(.exe).
+        // 2. Bundled next to the Carafe jar: <jarDir>/osprey/<rid>/Osprey(.exe).
         try {
             File jar = new File(getCarafeJarPath());
             File jarDir = jar.getParentFile();
@@ -6663,7 +6663,7 @@ public class CarafeGUI extends JFrame {
             // fall through to other locations
         }
 
-        // 3. ~/.carafe/osprey/<rid>/OspreySharp(.exe).
+        // 3. ~/.carafe/osprey/<rid>/Osprey(.exe).
         File home = new File(System.getProperty("user.home"),
                 ".carafe" + File.separator + "osprey" + File.separator + rid + File.separator + exeName);
         if (home.isFile()) {
@@ -6688,7 +6688,7 @@ public class CarafeGUI extends JFrame {
         return "";
     }
 
-    /** Query the OspreySharp version (best effort); returns "unknown" on failure. */
+    /** Query the Osprey version (best effort); returns "unknown" on failure. */
     private String getOspreyVersion(String ospreyPath) {
         try {
             Process p = new ProcessBuilder(ospreyPath, "--version").redirectErrorStream(true).start();
@@ -6707,24 +6707,24 @@ public class CarafeGUI extends JFrame {
     }
 
     /**
-     * Build the OspreySharp search command. The library must already contain target (and decoy)
+     * Build the Osprey search command. The library must already contain target (and decoy)
      * spectra/RT; when a pairing manifest is supplied, Osprey runs with library-supplied decoys.
      *
      * @param msFiles  input mzML/raw files
      * @param library  spectral library (.tsv or .blib) Carafe generated
      * @param manifest optional FDRBench pairing manifest TSV (null/empty to let Osprey reverse-decoy)
      * @param outDir   output directory; the result blib is written to {@code outDir/osprey.blib}
-     * @return a {@link CmdTask}, or null if no OspreySharp executable could be resolved
+     * @return a {@link CmdTask}, or null if no Osprey executable could be resolved
      */
     private CmdTask buildOspreyCommand(java.util.List<String> msFiles, String library, String manifest,
             String outDir, String fdrbenchOut) {
         String ospreyPath = resolveOspreyBinary();
         if (ospreyPath == null || ospreyPath.isEmpty()) {
             JOptionPane.showMessageDialog(this,
-                    "Could not find an OspreySharp executable. Build it with scripts/build_ospreysharp.sh "
+                    "Could not find an Osprey executable. Build it with scripts/build_ospreysharp.sh "
                             + "(or .bat) and place it under osprey/" + getOspreyRid()
                             + "/ next to the Carafe jar, or set its path in preferences.",
-                    "OspreySharp Not Found", JOptionPane.WARNING_MESSAGE);
+                    "Osprey Not Found", JOptionPane.WARNING_MESSAGE);
             return null;
         }
         // Make sure the binary is executable on Unix.
@@ -6735,7 +6735,7 @@ public class CarafeGUI extends JFrame {
 
         ArrayList<String> args = new ArrayList<>();
         args.add(ospreyPath);
-        // -i is variadic in OspreySharp: one flag, then all input files.
+        // -i is variadic in Osprey: one flag, then all input files.
         args.add("-i");
         for (String ms : msFiles) {
             args.add(ms);
@@ -6743,10 +6743,10 @@ public class CarafeGUI extends JFrame {
         args.add("-l");
         args.add(library);
 
-        // OspreySharp writes its output as a SQLite .blib. SQLite cannot reliably create/lock a
+        // Osprey writes its output as a SQLite .blib. SQLite cannot reliably create/lock a
         // database over a network share (UNC \\server\... or a mapped drive backed by SMB): the
         // BlibWriter does File.Delete + recreate + WAL, which fails on SMB with "unable to open
-        // database file". So always have OspreySharp write the blib to a LOCAL temp directory and
+        // database file". So always have Osprey write the blib to a LOCAL temp directory and
         // move it to the requested (possibly network) outDir after the step succeeds. This also
         // speeds up the many small SQLite/WAL writes. The staging dir is keyed on a hash of outDir
         // so the train and project searches don't collide.
@@ -6768,9 +6768,9 @@ public class CarafeGUI extends JFrame {
         args.add("-o");
         args.add(outBlib);
 
-        // FDRBench input TSV (requires the OspreySharp --fdrbench feature). Written straight to the
+        // FDRBench input TSV (requires the Osprey --fdrbench feature). Written straight to the
         // requested (possibly network) path - it is a plain TSV, not SQLite, so no local staging is
-        // needed. The level follows OspreySharp's --fdr-level, set below from the Osprey tab.
+        // needed. The level follows Osprey's --fdr-level, set below from the Osprey tab.
         if (fdrbenchOut != null && !fdrbenchOut.trim().isEmpty()) {
             args.add("--fdrbench");
             args.add(fdrbenchOut);
@@ -6797,13 +6797,13 @@ public class CarafeGUI extends JFrame {
                     ? fragTolUnitCombo.getSelectedItem().toString().toLowerCase()
                     : "ppm";
             args.add("--fragment-unit");
-            // OspreySharp expects ppm|mz; map a "da"/"th" unit to "mz".
+            // Osprey expects ppm|mz; map a "da"/"th" unit to "mz".
             args.add(unit.startsWith("ppm") ? "ppm" : "mz");
         }
         addOspreyOption(args, "--run-fdr", ospreyRunFdrField);
         addOspreyOption(args, "--experiment-fdr", ospreyExperimentFdrField);
         addOspreyOption(args, "--protein-fdr", ospreyProteinFdrField);
-        // OspreySharp always uses percolator FDR.
+        // Osprey always uses percolator FDR.
         args.add("--fdr-method");
         args.add("percolator");
         if (ospreyFdrLevelCombo.getSelectedItem() != null) {
@@ -6824,9 +6824,9 @@ public class CarafeGUI extends JFrame {
         }
 
         prefs.put(PREF_OSPREY_PATH, ospreyPath);
-        Cloger.getInstance().logger.info("Using OspreySharp " + getOspreyVersion(ospreyPath) + " at " + ospreyPath);
+        Cloger.getInstance().logger.info("Using Osprey " + getOspreyVersion(ospreyPath) + " at " + ospreyPath);
 
-        CmdTask task = new CmdTask(args, "OspreySharp", "Running OspreySharp search");
+        CmdTask task = new CmdTask(args, "Osprey", "Running Osprey search");
         task.cmd = String.join(" ", args);
         task.input_files.addAll(msFiles);
         task.input_files.add(library);
@@ -6836,7 +6836,7 @@ public class CarafeGUI extends JFrame {
         task.out_dir = outDir;
         // Reuse is keyed on the FINAL blib (after the move), not the local staging copy.
         task.skip_check_file = finalBlib;
-        // Move the locally-staged blib (and any sidecar files OspreySharp wrote next to it) to the
+        // Move the locally-staged blib (and any sidecar files Osprey wrote next to it) to the
         // final output directory once the search exits cleanly.
         final String fStageDir = stageDir;
         final String fOutDir = outDir;
@@ -6848,7 +6848,7 @@ public class CarafeGUI extends JFrame {
             File[] staged = new File(fStageDir).listFiles();
             if (staged == null || staged.length == 0) {
                 throw new java.io.IOException(
-                        "OspreySharp produced no output in the staging directory: " + fStageDir);
+                        "Osprey produced no output in the staging directory: " + fStageDir);
             }
             for (File stagedFile : staged) {
                 java.nio.file.Path dest = new File(fOutDir, stagedFile.getName()).toPath();
@@ -6863,7 +6863,7 @@ public class CarafeGUI extends JFrame {
                     stagedFile.delete();
                 }
             }
-            logToConsole("[Carafe] Moved OspreySharp blib from local staging to " + fFinalBlib + "\n");
+            logToConsole("[Carafe] Moved Osprey blib from local staging to " + fFinalBlib + "\n");
 
             // When an FDRBench input was requested, copy the pairing manifest next to it so the
             // FDRBench folder holds everything needed to run FDRBench (input TSV + pairing manifest).
@@ -6884,7 +6884,7 @@ public class CarafeGUI extends JFrame {
         return task;
     }
 
-    /** Append an OspreySharp {@code --flag value} pair when the field has a non-empty value. */
+    /** Append an Osprey {@code --flag value} pair when the field has a non-empty value. */
     private void addOspreyOption(ArrayList<String> args, String flag, JTextField field) {
         if (field == null) {
             return;
@@ -7051,7 +7051,7 @@ public class CarafeGUI extends JFrame {
             args.add("-entrapment");
         }
 
-        CmdTask task = new CmdTask(args, "Carafe", "Build target-decoy peptide FASTA for OspreySharp");
+        CmdTask task = new CmdTask(args, "Carafe", "Build target-decoy peptide FASTA for Osprey");
         task.cmd = String.join(" ", args);
         task.input_files.add(inputFasta);
         File parent = new File(outPeptideFasta).getParentFile();
@@ -7063,7 +7063,7 @@ public class CarafeGUI extends JFrame {
     }
 
     /**
-     * Resolve a train/project MS selection into a list of mzML inputs for OspreySharp. OspreySharp
+     * Resolve a train/project MS selection into a list of mzML inputs for Osprey. Osprey
      * only reads mzML, so EVERY non-mzML acquisition (Thermo .raw, Bruker .d, ...) is routed through
      * MSConvert; an MSConvert task is queued into {@code convTasks} for those. Existing .mzML files
      * pass through unchanged.
@@ -7084,9 +7084,9 @@ public class CarafeGUI extends JFrame {
             if (low.endsWith(".mzml")) {
                 files.add(path);
             } else if (low.endsWith(".d") && f.isDirectory()) {
-                toConvert.add(path); // Bruker .d -> mzML for OspreySharp
+                toConvert.add(path); // Bruker .d -> mzML for Osprey
             } else if (low.endsWith(".raw")) {
-                toConvert.add(path); // Thermo .raw -> mzML for OspreySharp
+                toConvert.add(path); // Thermo .raw -> mzML for Osprey
             } else if (f.isDirectory()) {
                 File[] mz = f.listFiles((d, n) -> n.toLowerCase().endsWith(".mzml"));
                 if (mz != null) {
@@ -7260,7 +7260,7 @@ public class CarafeGUI extends JFrame {
     }
 
     /**
-     * Forcibly terminate every tracked external process (MSConvert / DIA-NN / OspreySharp /
+     * Forcibly terminate every tracked external process (MSConvert / DIA-NN / Osprey /
      * Carafe / Python) <em>and its descendants</em>. Called by Stop and by the JVM shutdown hook,
      * so closing the window mid-run does not leave orphaned converter processes behind.
      */
@@ -7605,8 +7605,8 @@ public class CarafeGUI extends JFrame {
                     checkMsConvert.accept(null);
                 break;
 
-            case 3: // OspreySharp: search -> finetune -> new library
-            case 4: // OspreySharp: end-to-end
+            case 3: // Osprey: search -> finetune -> new library
+            case 4: // Osprey: end-to-end
                 // 1. Train MS Files
                 if (effectiveTrainFiles.isEmpty())
                     errors.add("- No Training MS data files selected.");
@@ -7643,11 +7643,11 @@ public class CarafeGUI extends JFrame {
                             }
                 }
 
-                // 5. Output Directory + 6. Python (OspreySharp is auto-detected/bundled; the
-                // OspreySharp command builder reports a clear error if no executable is found).
+                // 5. Output Directory + 6. Python (Osprey is auto-detected/bundled; the
+                // Osprey command builder reports a clear error if no executable is found).
                 checkOutDir.accept(null);
                 checkPython.accept(null);
-                // OspreySharp needs mzML, so any non-mzML acquisition (.raw or Bruker .d) requires
+                // Osprey needs mzML, so any non-mzML acquisition (.raw or Bruker .d) requires
                 // MSConvert.
                 if (hasRaw || hasTimsTof)
                     checkMsConvert.accept(null);
@@ -8158,7 +8158,7 @@ public class CarafeGUI extends JFrame {
         reg.add(comboSetting("library_format", libraryFormatCombo));
         reg.add(checkSetting("benchmark", benchmarkCheckbox));
 
-        // OspreySharp settings (Workflows 4 & 5).
+        // Osprey settings (Workflows 4 & 5).
         reg.add(comboSetting("osprey_resolution", ospreyResolutionCombo));
         reg.add(comboSetting("osprey_fdr_level", ospreyFdrLevelCombo));
         reg.add(comboSetting("osprey_shared_peptides", ospreySharedPeptidesCombo));
@@ -8339,7 +8339,7 @@ public class CarafeGUI extends JFrame {
                 minPepChargeSpinner, maxPepChargeSpinner, libMinFragMzSpinner, libMaxFragMzSpinner,
                 LibTopNFragIonsSpinner, libMinNumFragSpinner, libFragNumMinSpinner, libraryFormatCombo,
                 benchmarkCheckbox,
-                // OspreySharp
+                // Osprey
                 ospreyResolutionCombo, ospreyFdrLevelCombo, ospreySharedPeptidesCombo,
                 ospreyRunFdrField, ospreyExperimentFdrField, ospreyProteinFdrField,
                 ospreyAdditionalOptionsField, includeEntrapmentCheckbox, initialLibraryPredictorCombo,
