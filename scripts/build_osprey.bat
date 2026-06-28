@@ -11,7 +11,7 @@ REM %USERPROFILE%\.carafe\osprey\win-x64\) at runtime with no separate .NET
 REM runtime install.
 REM
 REM Usage:
-REM   scripts\build_ospreysharp.bat [rid]
+REM   scripts\build_osprey.bat [rid]
 REM
 REM Environment overrides:
 REM   OSPREY_CSPROJ  Path to Osprey.csproj

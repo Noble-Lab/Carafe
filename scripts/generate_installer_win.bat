@@ -41,7 +41,7 @@ if not exist "%INPUT_DIR%\osprey\win-x64\Osprey.exe" (
     ) else (
         echo ERROR: %INPUT_DIR%\osprey\win-x64\Osprey.exe not found.
         echo        This script bundles Osprey; stage it first
-        echo        ^(scripts\build_ospreysharp.bat win-x64^), or set ALLOW_NO_OSPREY=1
+        echo        ^(scripts\build_osprey.bat win-x64^), or set ALLOW_NO_OSPREY=1
         echo        to build a Carafe MSI without it.
         exit /b 1
     )

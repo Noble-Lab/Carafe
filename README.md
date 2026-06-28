@@ -153,19 +153,19 @@ For comparison purposes, Workflow 3 also provides the option shown below to perf
 
  <img src="docs/images/CarafeGUI-workflow3-benchmark.png" alt="Carafe2 GUI install" width="70%">
 
-### Using OspreySharp as the search engine
+### Using Osprey as the search engine
 
-In addition to DIA-NN, Carafe2 can drive **OspreySharp**, the MacCoss-lab DIA search tool, for the peptide-detection steps of the workflows. Unlike DIA-NN, OspreySharp does not build its own AI-predicted library, so Carafe2 supplies the library and finetunes its models on OspreySharp's search output.
+In addition to DIA-NN, Carafe2 can drive **Osprey**, the MacCoss-lab DIA search tool, for the peptide-detection steps of the workflows. Unlike DIA-NN, Osprey does not build its own AI-predicted library, so Carafe2 supplies the library and finetunes its models on Osprey's search output.
 
-OspreySharp is used by **Workflow 4** (search, finetune, build a new library) and **Workflow 5** (end-to-end: finetune, then search the project files), both selectable from the **Workflow** dropdown:
+Osprey is used by **Workflow 4** (search, finetune, build a new library) and **Workflow 5** (end-to-end: finetune, then search the project files), both selectable from the **Workflow** dropdown:
 
-![Carafe2 workflow dropdown showing the OspreySharp workflows 4 and 5](docs/images/CarafeGUI-ospreysharp-workflows.png)
+![Carafe2 workflow dropdown showing the Osprey workflows 4 and 5](docs/images/CarafeGUI-osprey-workflows.png)
 
-The **OspreySharp** tab holds the OspreySharp-specific settings: the initial library predictor (local AlphaPepDeep or a Koina model), the optional entrapment-peptide toggle, FDR levels, and the number of parallel MSConvert processes:
+The **Osprey** tab holds the Osprey-specific settings: the initial library predictor (local AlphaPepDeep or a Koina model), the optional entrapment-peptide toggle, FDR levels, and the number of parallel MSConvert processes:
 
-![Carafe2 OspreySharp settings tab](docs/images/CarafeGUI-ospreysharp-tab.png)
+![Carafe2 Osprey settings tab](docs/images/CarafeGUI-osprey-tab.png)
 
-**How Carafe2 prepares the library for OspreySharp.** OspreySharp prefers a library that already contains both target and decoy retention times and spectra. When OspreySharp is selected as the search engine, Carafe2 (behind the scenes):
+**How Carafe2 prepares the library for Osprey.** Osprey prefers a library that already contains both target and decoy retention times and spectra. When Osprey is selected as the search engine, Carafe2 (behind the scenes):
 
 1. Digests the input protein FASTA with the configured **Library generation** digest options (enzyme, missed cleavages, peptide length) into a peptide-level FASTA, adding a deterministic decoy for each target (and, when **Include entrapment peptides** is enabled, the FDRBench `p_target`/`p_decoy` entrapment quartets), and writes a 5-column FDRBench pairing manifest. This is the Java port of `build_entrapment_peptide_fasta.py` (`EntrapmentFastaGear`); it can also be run standalone:
 
@@ -174,21 +174,21 @@ The **OspreySharp** tab holds the OspreySharp-specific settings: the initial lib
    ```
 
 2. Runs Carafe2 library generation over that peptide FASTA with `-enzyme NoCut`, so AlphaPepDeep predicts spectra/RT for every target and decoy peptide.
-3. Runs the search with `OspreySharp -i <mzML...> -l <library> -o osprey.blib --decoys-in-library --decoy-pairing-manifest pairing.tsv`.
+3. Runs the search with `Osprey -i <mzML...> -l <library> -o osprey.blib --decoys-in-library --decoy-pairing-manifest pairing.tsv`.
 4. Finetunes its models on the resulting `osprey.blib`. The blib supplies the peptide identifications (sequence, modifications, charge, apex RT); Carafe2 still extracts the measured fragment intensities and performs transition masking from the mzML files, exactly as it does for a DIA-NN report.
 
-**Installing OspreySharp.** OspreySharp is bundled with the Carafe2 distribution as a self-contained, per-platform build (no separate .NET runtime required). To produce it, run the in-repo build script (requires the .NET 8 SDK and a checkout of ProteoWizard's `pwiz` tree containing OspreySharp):
+**Installing Osprey.** Osprey is bundled with the Carafe2 distribution as a self-contained, per-platform build (no separate .NET runtime required). To produce it, run the in-repo build script (requires the .NET 8 SDK and a checkout of ProteoWizard's `pwiz` tree containing Osprey):
 
 ```bash
 # Linux/macOS
-scripts/build_ospreysharp.sh            # current platform
-scripts/build_ospreysharp.sh win-x64 linux-x64 osx-arm64
+scripts/build_osprey.sh            # current platform
+scripts/build_osprey.sh win-x64 linux-x64 osx-arm64
 
 # Windows
-scripts\build_ospreysharp.bat win-x64
+scripts\build_osprey.bat win-x64
 ```
 
-This stages `OspreySharp(.exe)` under `target/osprey/<rid>/`. Place the appropriate `<rid>/` directory beside the Carafe2 jar as `osprey/<rid>/` (or under `~/.carafe/osprey/<rid>/`); Carafe2 locates it automatically at runtime. You can also point Carafe2 at a custom OspreySharp build via its path preference. Override the OspreySharp source location with the `OSPREY_CSPROJ` environment variable if your `pwiz` checkout is elsewhere.
+This stages `Osprey(.exe)` under `target/osprey/<rid>/`. Place the appropriate `<rid>/` directory beside the Carafe2 jar as `osprey/<rid>/` (or under `~/.carafe/osprey/<rid>/`); Carafe2 locates it automatically at runtime. You can also point Carafe2 at a custom Osprey build via its path preference. Override the Osprey source location with the `OSPREY_CSPROJ` environment variable if your `pwiz` checkout is elsewhere.
 
 ### Using Carafe2 in Skyline
 

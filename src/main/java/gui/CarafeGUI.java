@@ -6738,7 +6738,7 @@ public class CarafeGUI extends JFrame {
         String ospreyPath = resolveOspreyBinary();
         if (ospreyPath == null || ospreyPath.isEmpty()) {
             JOptionPane.showMessageDialog(this,
-                    "Could not find an Osprey executable. Build it with scripts/build_ospreysharp.sh "
+                    "Could not find an Osprey executable. Build it with scripts/build_osprey.sh "
                             + "(or .bat) and place it under osprey/" + getOspreyRid()
                             + "/ next to the Carafe jar, or set its path in preferences.",
                     "Osprey Not Found", JOptionPane.WARNING_MESSAGE);

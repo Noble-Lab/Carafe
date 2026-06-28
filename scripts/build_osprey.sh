@@ -11,7 +11,7 @@
 # ~/.carafe/osprey/<rid>/) at runtime with no separate .NET runtime install.
 #
 # Usage:
-#   scripts/build_ospreysharp.sh [rid ...]
+#   scripts/build_osprey.sh [rid ...]
 #
 # Environment overrides:
 #   OSPREY_CSPROJ  Path to Osprey.csproj
@@ -20,8 +20,8 @@
 #                  (default: <repo>/target/osprey)
 #
 # Examples:
-#   scripts/build_ospreysharp.sh                # build the default RID for this host
-#   scripts/build_ospreysharp.sh win-x64 linux-x64 osx-arm64
+#   scripts/build_osprey.sh                # build the default RID for this host
+#   scripts/build_osprey.sh win-x64 linux-x64 osx-arm64
 #
 set -euo pipefail
 

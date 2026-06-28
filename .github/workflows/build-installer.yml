@@ -14,12 +14,12 @@ name: Build Windows Installer
 on:
   workflow_dispatch:
     inputs:
-      ospreysharp_repo:
+      osprey_repo:
         description: "Git repo containing pwiz_tools/Osprey (owner/name)"
         required: true
         # Osprey is public in ProteoWizard/pwiz; override only to test a fork.
         default: "ProteoWizard/pwiz"
-      ospreysharp_ref:
+      osprey_ref:
         description: "Branch, tag, or commit SHA of the Osprey source to build"
         required: true
         default: "master"
@@ -38,8 +38,8 @@ jobs:
 
     env:
       # Defaults used when the workflow is triggered by a tag (no manual inputs).
-      OSPREYSHARP_REPO: ${{ github.event.inputs.ospreysharp_repo || 'ProteoWizard/pwiz' }}
-      OSPREYSHARP_REF: ${{ github.event.inputs.ospreysharp_ref || 'master' }}
+      OSPREY_REPO: ${{ github.event.inputs.osprey_repo || 'ProteoWizard/pwiz' }}
+      OSPREY_REF: ${{ github.event.inputs.osprey_ref || 'master' }}
       RID: win-x64
 
     steps:
@@ -110,8 +110,8 @@ jobs:
       - name: Checkout Osprey source (sparse)
         uses: actions/checkout@v5
         with:
-          repository: ${{ env.OSPREYSHARP_REPO }}
-          ref: ${{ env.OSPREYSHARP_REF }}
+          repository: ${{ env.OSPREY_REPO }}
+          ref: ${{ env.OSPREY_REF }}
           path: pwiz
           sparse-checkout: |
             pwiz_tools/Osprey
