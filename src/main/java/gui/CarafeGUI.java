@@ -1209,8 +1209,10 @@ public class CarafeGUI extends JFrame {
 
         ospreyExeRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Osprey Executable:",
                 "Path to the Osprey executable (Osprey.exe on Windows, Osprey on Linux/Mac).\n"
-                        + "If left blank, Carafe looks for a bundled build under osprey/<rid>/ next to the jar,\n"
-                        + "then ~/.carafe/osprey/<rid>/, then the system PATH.",
+                        + "An Osprey bundled with the installer always takes precedence, so MSI installs use the\n"
+                        + "installed build automatically and you can leave this blank. Set it only for source /\n"
+                        + "command-line runs with no bundled build (e.g. a local pwiz build folder). Remaining\n"
+                        + "fallbacks: ~/.carafe/osprey/<rid>/, then the system PATH.",
                 ospreyPathCombo = createOspreyComboBox(),
                 createOspreyBrowseButton());
 
@@ -6644,7 +6646,26 @@ public class CarafeGUI extends JFrame {
         String exeName = isWindows ? "Osprey.exe" : "Osprey";
         String rid = getOspreyRid();
 
-        // 1. Saved preference (and the editable combo if present).
+        // 1. Bundled next to the Carafe jar: <jarDir>/osprey/<rid>/Osprey(.exe). A build shipped
+        //    with the installer (every MSI install has one) is the matched, tested version, so it
+        //    takes precedence over a saved path -- otherwise a stale dev override silently shadows
+        //    the Osprey that was installed.
+        String bundled = null;
+        try {
+            File jar = new File(getCarafeJarPath());
+            File jarDir = jar.getParentFile();
+            if (jarDir != null) {
+                File f = new File(jarDir, "osprey" + File.separator + rid + File.separator + exeName);
+                if (f.isFile()) {
+                    bundled = f.getAbsolutePath();
+                }
+            }
+        } catch (Exception ignore) {
+            // fall through to other locations
+        }
+
+        // 2. Saved preference (and the editable combo if present). Used for source / command-line
+        //    runs that have no bundled build -- e.g. pointing at a local pwiz build folder.
         String saved = prefs.get(PREF_OSPREY_PATH, "");
         if (ospreyPathCombo != null && ospreyPathCombo.getSelectedItem() != null) {
             String fromCombo = ospreyPathCombo.getSelectedItem().toString().trim();
@@ -6652,32 +6673,20 @@ public class CarafeGUI extends JFrame {
                 saved = fromCombo;
             }
         }
-        if (!saved.isEmpty() && new File(saved).isFile()) {
-            return saved;
-        }
-
-        // 2. Bundled next to the Carafe jar: <jarDir>/osprey/<rid>/Osprey(.exe).
-        try {
-            File jar = new File(getCarafeJarPath());
-            File jarDir = jar.getParentFile();
-            if (jarDir != null) {
-                File bundled = new File(jarDir, "osprey" + File.separator + rid + File.separator + exeName);
-                if (bundled.isFile()) {
-                    return bundled.getAbsolutePath();
-                }
-            }
-        } catch (Exception ignore) {
-            // fall through to other locations
+        if (saved.isEmpty() || !new File(saved).isFile()) {
+            saved = null;
         }
 
         // 3. ~/.carafe/osprey/<rid>/Osprey(.exe).
-        File home = new File(System.getProperty("user.home"),
+        String home = null;
+        File homeFile = new File(System.getProperty("user.home"),
                 ".carafe" + File.separator + "osprey" + File.separator + rid + File.separator + exeName);
-        if (home.isFile()) {
-            return home.getAbsolutePath();
+        if (homeFile.isFile()) {
+            home = homeFile.getAbsolutePath();
         }
 
         // 4. System PATH.
+        String onPath = null;
         try {
             String which = isWindows ? "where" : "which";
             Process p = new ProcessBuilder(which, exeName).redirectErrorStream(true).start();
@@ -6686,13 +6695,14 @@ public class CarafeGUI extends JFrame {
                 String line = r.readLine();
                 p.waitFor();
                 if (line != null && !line.trim().isEmpty() && new File(line.trim()).isFile()) {
-                    return line.trim();
+                    onPath = line.trim();
                 }
             }
         } catch (Exception ignore) {
             // not on PATH
         }
-        return "";
+
+        return OspreyBinaryResolver.choose(bundled, saved, home, onPath);
     }
 
     /** Query the Osprey version (best effort); returns "unknown" on failure. */
