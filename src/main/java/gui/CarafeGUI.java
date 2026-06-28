@@ -5204,7 +5204,7 @@ public class CarafeGUI extends JFrame {
                 lib1.skip_check_file = lib1Tsv;
 
                 new File(ospreyTrainDir).mkdirs();
-                CmdTask osprey1 = buildOspreyCommand(trainMs, lib1Tsv, man1, ospreyTrainDir);
+                CmdTask osprey1 = buildOspreyCommand(trainMs, lib1Tsv, man1, ospreyTrainDir, null);
                 if (osprey1 == null) {
                     setInputsFrozen(false);
                     return;
@@ -5251,7 +5251,11 @@ public class CarafeGUI extends JFrame {
                 if (endToEnd) {
                     String ospreyProjectDir = outDir + File.separator + "osprey_project";
                     new File(ospreyProjectDir).mkdirs();
-                    osprey2 = buildOspreyCommand(projMs, lib2Tsv, man2, ospreyProjectDir);
+                    // When entrapment is on, have OspreySharp also write an FDRBench input TSV under
+                    // osprey_project/FDRBench (level follows the Osprey tab's --fdr-level); the
+                    // pairing manifest is copied alongside it after the search (see buildOspreyCommand).
+                    String fdrbenchOut = OspreyFdrBenchPlanner.fdrBenchInputPath(entrap, true, ospreyProjectDir);
+                    osprey2 = buildOspreyCommand(projMs, lib2Tsv, man2, ospreyProjectDir, fdrbenchOut);
                     if (osprey2 == null) {
                         setInputsFrozen(false);
                         return;
@@ -6713,7 +6717,7 @@ public class CarafeGUI extends JFrame {
      * @return a {@link CmdTask}, or null if no OspreySharp executable could be resolved
      */
     private CmdTask buildOspreyCommand(java.util.List<String> msFiles, String library, String manifest,
-            String outDir) {
+            String outDir, String fdrbenchOut) {
         String ospreyPath = resolveOspreyBinary();
         if (ospreyPath == null || ospreyPath.isEmpty()) {
             JOptionPane.showMessageDialog(this,
@@ -6763,6 +6767,14 @@ public class CarafeGUI extends JFrame {
         String outBlib = stageDir + File.separator + "osprey.blib";
         args.add("-o");
         args.add(outBlib);
+
+        // FDRBench input TSV (requires the OspreySharp --fdrbench feature). Written straight to the
+        // requested (possibly network) path - it is a plain TSV, not SQLite, so no local staging is
+        // needed. The level follows OspreySharp's --fdr-level, set below from the Osprey tab.
+        if (fdrbenchOut != null && !fdrbenchOut.trim().isEmpty()) {
+            args.add("--fdrbench");
+            args.add(fdrbenchOut);
+        }
 
         // Library-supplied decoys via the FDRBench pairing manifest, when present.
         if (manifest != null && !manifest.trim().isEmpty()) {
@@ -6829,6 +6841,8 @@ public class CarafeGUI extends JFrame {
         final String fStageDir = stageDir;
         final String fOutDir = outDir;
         final String fFinalBlib = finalBlib;
+        final String fFdrbenchOut = fdrbenchOut;
+        final String fManifest = manifest;
         task.postAction = () -> {
             new File(fOutDir).mkdirs();
             File[] staged = new File(fStageDir).listFiles();
@@ -6850,6 +6864,22 @@ public class CarafeGUI extends JFrame {
                 }
             }
             logToConsole("[Carafe] Moved OspreySharp blib from local staging to " + fFinalBlib + "\n");
+
+            // When an FDRBench input was requested, copy the pairing manifest next to it so the
+            // FDRBench folder holds everything needed to run FDRBench (input TSV + pairing manifest).
+            if (fFdrbenchOut != null && !fFdrbenchOut.trim().isEmpty()
+                    && fManifest != null && !fManifest.trim().isEmpty()) {
+                File benchDir = new File(fFdrbenchOut).getParentFile();
+                File manSrc = new File(fManifest);
+                if (benchDir != null && manSrc.exists()) {
+                    benchDir.mkdirs();
+                    java.nio.file.Files.copy(manSrc.toPath(),
+                            new File(benchDir, manSrc.getName()).toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    logToConsole("[Carafe] Copied pairing manifest into the FDRBench folder: "
+                            + benchDir.getAbsolutePath() + "\n");
+                }
+            }
         };
         return task;
     }
