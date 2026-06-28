@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -369,10 +370,13 @@ public class EntrapmentFastaGear {
                         + "%d dropped (out of m/z range)",
                 r.proteins, r.uniqueTargets, r.droppedUnknownAa, r.droppedOutOfMz));
 
-        // Step 2: build quartets. Entrapment (p_target) sequences are deterministic shuffles, while
-        // decoys (decoy / p_decoy) are reverse-with-C-term-preserved, cycling internal residues to
-        // avoid collisions with real targets, matching Osprey's DecoyGenerator. A target whose decoy
-        // cannot be made unique yields a null decoy and is dropped below.
+        // Step 2: build quartets in two passes, matching how Osprey would build decoys over a
+        // library that contains both targets and entrapments. Pass 1 adds the deterministic-shuffle
+        // entrapments (p_target). Pass 2 adds the decoys (decoy / p_decoy) the Osprey way: reverse
+        // with the C-terminus preserved, cycling the internal residues by 1..min(len, 10) until the
+        // result is unique against the combined target+entrapment set (entrapments are targets in
+        // Osprey's world, so decoys must dodge them too). Like Osprey, decoys are NOT checked against
+        // other decoys. A target whose decoy cannot be made unique yields a null decoy, dropped below.
         Set<String> targetSet = targetToSources.keySet();
         List<Quartet> quartets = new ArrayList<>(targetToSources.size());
         for (Map.Entry<String, List<ProteinRecord>> e : targetToSources.entrySet()) {
@@ -381,13 +385,24 @@ public class EntrapmentFastaGear {
             if (cfg.addEntrapment) {
                 q.pTarget = shufflePreservingCterm(q.target, cfg.entrapmentSeed);
             }
-            if (cfg.addDecoys) {
-                q.decoy = generateReverseDecoy(q.target, targetSet);
-                if (cfg.addEntrapment && q.pTarget != null) {
-                    q.pDecoy = generateReverseDecoy(q.pTarget, targetSet);
+            quartets.add(q);
+        }
+        // Decoys stay unique against every real target PLUS every entrapment.
+        Set<String> targetSideSet = new HashSet<>(targetSet);
+        if (cfg.addEntrapment) {
+            for (Quartet q : quartets) {
+                if (q.pTarget != null) {
+                    targetSideSet.add(q.pTarget);
                 }
             }
-            quartets.add(q);
+        }
+        if (cfg.addDecoys) {
+            for (Quartet q : quartets) {
+                q.decoy = generateReverseDecoy(q.target, targetSideSet);
+                if (cfg.addEntrapment && q.pTarget != null) {
+                    q.pDecoy = generateReverseDecoy(q.pTarget, targetSideSet);
+                }
+            }
         }
         r.quartetsBuilt = quartets.size();
 
