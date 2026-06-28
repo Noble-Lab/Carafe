@@ -3,6 +3,8 @@ package test.java.db;
 import main.java.db.EntrapmentFastaGear;
 import main.java.input.CParameter;
 import org.testng.Assert;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
@@ -36,6 +38,29 @@ public class EntrapmentFastaGearTest {
         Path in = Files.createTempFile("entrap_in", ".fasta");
         Files.writeString(in, FASTA, StandardCharsets.UTF_8);
         return in;
+    }
+
+    // baseConfig() mutates global CParameter digest settings; save/restore so these tests don't
+    // leak state into others that read CParameter (e.g. AIGear digestion tests).
+    private int savedEnzyme, savedMissed, savedMinLen, savedMaxLen;
+    private boolean savedClipM;
+
+    @BeforeMethod
+    public void saveCParameter() {
+        savedEnzyme = CParameter.enzyme;
+        savedMissed = CParameter.maxMissedCleavages;
+        savedMinLen = CParameter.minPeptideLength;
+        savedMaxLen = CParameter.maxPeptideLength;
+        savedClipM = CParameter.clip_nTerm_M;
+    }
+
+    @AfterMethod
+    public void restoreCParameter() {
+        CParameter.enzyme = savedEnzyme;
+        CParameter.maxMissedCleavages = savedMissed;
+        CParameter.minPeptideLength = savedMinLen;
+        CParameter.maxPeptideLength = savedMaxLen;
+        CParameter.clip_nTerm_M = savedClipM;
     }
 
     private Path writeFastaFrom(String content) throws IOException {

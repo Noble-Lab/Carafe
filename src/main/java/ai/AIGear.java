@@ -988,8 +988,12 @@ public class AIGear {
             kc.minPrecursorMz = CParameter.minPeptideMz;
             kc.maxPrecursorMz = CParameter.maxPeptideMz;
             // Carbamidomethyl C (fixMod 1) and Oxidation M (varMod 2) toggles from the GUI settings.
-            kc.fixedCarbamidomethylC = CParameter.fixMods != null && CParameter.fixMods.contains("1");
-            kc.variableOxidationM = CParameter.varMods != null && CParameter.varMods.contains("2");
+            // Exact id membership (split on , ; or whitespace) -- a substring contains("1") would
+            // also match mod ids like "10"/"21" and mis-toggle the modification.
+            kc.fixedCarbamidomethylC = java.util.Arrays.asList(
+                    (CParameter.fixMods == null ? "" : CParameter.fixMods).split("[,;\\s]+")).contains("1");
+            kc.variableOxidationM = java.util.Arrays.asList(
+                    (CParameter.varMods == null ? "" : CParameter.varMods).split("[,;\\s]+")).contains("2");
             if (cmd.hasOption("lf_top_n_frag")) {
                 kc.topNFragments = Integer.parseInt(cmd.getOptionValue("lf_top_n_frag"));
             }

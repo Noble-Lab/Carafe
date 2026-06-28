@@ -2,6 +2,7 @@ package test.java.ai;
 
 import main.java.ai.PSMConfig;
 import org.testng.Assert;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.Test;
 
 /**
@@ -13,6 +14,13 @@ import org.testng.annotations.Test;
  * project's other tests so these run under {@code mvn test}.</p>
  */
 public class PSMConfigTest {
+
+    // PSMConfig is static, mutable global state; reset to the DIA-NN defaults after each test so
+    // column-name changes here can't leak into other tests.
+    @AfterMethod
+    public void resetColumnConfig() {
+        PSMConfig.use_diann_report_column_names();
+    }
 
     @Test
     public void ospreyColumnsMatchDiannNamesButTagOspreyEngine() {
