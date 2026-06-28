@@ -100,6 +100,15 @@ public class KoinaLibraryGenerator {
     }
 
     public static void run(Config cfg) throws IOException, InterruptedException {
+        run(cfg, new KoinaClient(cfg.koinaUrl));
+    }
+
+    /**
+     * Run with an injected {@link KoinaClient} so the full FASTA -&gt; enumerate -&gt; infer -&gt;
+     * write-TSV pipeline can be exercised without a live Koina server (the no-arg overload builds a
+     * real client). Package-private for tests.
+     */
+    static void run(Config cfg, KoinaClient client) throws IOException, InterruptedException {
         Cloger.getInstance().logger.info("Koina library generation: ms2=" + cfg.ms2Model
                 + ", rt=" + cfg.rtModel + ", url=" + cfg.koinaUrl);
 
@@ -145,7 +154,6 @@ public class KoinaLibraryGenerator {
         }
 
         // 2. Resolve model inputs once.
-        KoinaClient client = new KoinaClient(cfg.koinaUrl);
         Set<String> ms2Inputs = client.getModelInputNames(cfg.ms2Model);
         Set<String> rtInputs = client.getModelInputNames(cfg.rtModel);
 

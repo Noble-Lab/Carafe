@@ -1348,6 +1348,15 @@ public class AIGear {
                 // matching. (Keeping "Osprey" would hit the generic loader that expects a
                 // "q_value" column and fails.)
                 PSMConfig.use_diann_report_column_names();
+                // The Osprey .blib carries no usable DIA-NN MS2 scan index, so
+                // convertBlibToDiannTsv writes MS2.Scan=0 and add_ms2spectrum_index() synthesizes
+                // the true per-precursor MS2 ordinal into an "ms2index" column (plus the matched
+                // apex RT into "apex_rt"). use_diann_report_column_names() just reset the reader
+                // back to MS2.Scan/RT, so re-point it at the synthesized columns -- exactly as the
+                // Skyline path does (PSMConfig.use_skyline_report_column_names sets ms2index).
+                // Without this every precursor maps to MS2 scan 0 and the fragment lookup fails
+                // ("Spectrum not found" for all but the one precursor sharing scan 0's window).
+                PSMConfig.use_added_ms2index_columns();
                 aiGear.search_engine = "DIA-NN";
                 aiGear.load_data(new_psm_file, ms_file, aiGear.fdr_cutoff);
                 aiGear.get_ms2_matches_diann();

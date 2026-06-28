@@ -116,6 +116,25 @@ public class PSMConfig {
         search_engine_name = "Osprey";
     }
 
+    /**
+     * Point the reader at the columns that {@code AIGear.add_ms2spectrum_index} synthesizes: the
+     * true per-precursor MS2 scan ordinal ({@code ms2index}) and the matched apex retention time
+     * ({@code apex_rt}). Call this after the report has been run through
+     * {@code add_ms2spectrum_index} and after any {@code use_*_report_column_names()} reset.
+     *
+     * <p>This matters for the Osprey {@code .blib} path: the blib has no usable DIA-NN MS2 scan
+     * index, so {@code OspreyBlibReader.convertBlibToDiannTsv} writes {@code MS2.Scan=0} for every
+     * precursor. If the reader is left on the default {@code MS2.Scan} column, every precursor maps
+     * to MS2 scan 0 and fragment extraction fails ("Spectrum not found" for all but the one
+     * precursor whose isolation window happens to contain scan 0). The Skyline path avoids this by
+     * defaulting {@code ms2_index_column_name} to {@code ms2index}; the Osprey path resets to
+     * DIA-NN column names afterward, so it must re-point explicitly.
+     */
+    public static void use_added_ms2index_columns() {
+        ms2_index_column_name = "ms2index";
+        rt_column_name = "apex_rt";
+    }
+
     public static void use_skyline_report_column_names(){
         stripped_peptide_sequence_column_name = "Peptide";
         peptide_modification_column_name = "Peptide Modified Sequence Unimod Ids";

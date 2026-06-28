@@ -6,4 +6,5 @@
 *.class
 
 target/*
+test-output/
 settings.json

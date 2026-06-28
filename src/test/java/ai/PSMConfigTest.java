@@ -39,4 +39,35 @@ public class PSMConfigTest {
         Assert.assertEquals(PSMConfig.peptide_modification_column_name, diannMod);
         Assert.assertEquals(PSMConfig.rt_column_name, diannRt);
     }
+
+    /**
+     * Regression for the Osprey finetune "Spectrum not found" bug. The Osprey {@code .blib} has no
+     * usable DIA-NN MS2 scan index, so {@code MS2.Scan} is written as 0 for every precursor and
+     * {@code add_ms2spectrum_index} synthesizes the true ordinal into an {@code ms2index} column.
+     * The finetune path resets to DIA-NN column names afterward, which points the reader back at
+     * the all-zero {@code MS2.Scan} placeholder -- so it must re-point at {@code ms2index} via
+     * {@link PSMConfig#use_added_ms2index_columns()}. If that re-point is dropped, every precursor
+     * resolves to MS2 scan 0 and MS2 training data collapses to zero valid PSMs.
+     */
+    @Test
+    public void ospreyFinetuneReadsSynthesizedMs2IndexNotZeroPlaceholder() {
+        // Reproduce the exact sequence in AIGear's Osprey finetune branch.
+        PSMConfig.use_osprey_blib_column_names();
+        Assert.assertEquals(PSMConfig.ms2_index_column_name, "MS2.Scan",
+                "blib placeholder column before correction");
+
+        PSMConfig.use_diann_report_column_names();
+        Assert.assertEquals(PSMConfig.ms2_index_column_name, "MS2.Scan",
+                "DIA-NN reset still points at the placeholder");
+
+        PSMConfig.use_added_ms2index_columns();
+        // The fix: the reader must use the column add_ms2spectrum_index actually populated.
+        Assert.assertEquals(PSMConfig.ms2_index_column_name, "ms2index",
+                "reader must use the synthesized MS2 ordinal, not MS2.Scan=0");
+        Assert.assertEquals(PSMConfig.rt_column_name, "apex_rt",
+                "reader must use the matched apex RT column");
+
+        // Restore DIA-NN defaults so static config does not leak into other tests.
+        PSMConfig.use_diann_report_column_names();
+    }
 }
