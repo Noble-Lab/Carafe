@@ -18,7 +18,9 @@ REM ---------------------------------------------------------------------------
 setlocal
 
 set "APP_NAME=Carafe"
-set "APP_VERSION=2.2.0"
+REM APP_VERSION may be supplied by the CI workflow (derived from the Maven project version);
+REM fall back to a literal default for local runs so a pom bump only changes one place.
+if not defined APP_VERSION set "APP_VERSION=2.2.0"
 set "MAIN_JAR=carafe-%APP_VERSION%.jar"
 set "MAIN_CLASS=main.java.gui.CarafeLauncher"
 set "INPUT_DIR=target\carafe-%APP_VERSION%"

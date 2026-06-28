@@ -7002,6 +7002,8 @@ public class CarafeGUI extends JFrame {
         args.add(LibTopNFragIonsSpinner.getValue().toString());
         args.add("-lf_frag_mz_min");
         args.add(libMinFragMzSpinner.getValue().toString());
+        args.add("-lf_frag_mz_max");
+        args.add(libMaxFragMzSpinner.getValue().toString());
 
         CmdTask task = new CmdTask(args, "Carafe-Koina", "Build initial library via Koina ("
                 + models[0] + ")");

@@ -63,6 +63,7 @@ public class KoinaLibraryGenerator {
         public int maxVarMods = 1;
         public int topNFragments = 20;
         public double minFragmentMz = 200;
+        public double maxFragmentMz = 1800;
         public double minPrecursorMz = 400;
         public double maxPrecursorMz = 900;
         public int batchSize = 1000;
@@ -187,6 +188,10 @@ public class KoinaLibraryGenerator {
                 }
                 List<KoinaClient.Ms2> preds = client.inferMs2(cfg.ms2Model, seqs, charges, ces,
                         instruments, ms2Inputs);
+                if (preds.size() != batch.size()) {
+                    throw new IOException("Koina MS2 model " + cfg.ms2Model + " returned "
+                            + preds.size() + " spectra for " + batch.size() + " precursors");
+                }
                 for (int i = 0; i < batch.size(); i++) {
                     written += writePrecursor(w, batch.get(i), preds.get(i),
                             proforma2irt.getOrDefault(batch.get(i).form.proforma, 0f), cfg);
@@ -214,6 +219,10 @@ public class KoinaLibraryGenerator {
             int end = Math.min(start + cfg.batchSize, unique.size());
             List<String> batch = unique.subList(start, end);
             float[] irt = client.inferRt(cfg.rtModel, batch, rtInputs);
+            if (irt.length != batch.size()) {
+                throw new IOException("Koina RT model " + cfg.rtModel + " returned " + irt.length
+                        + " values for " + batch.size() + " peptides");
+            }
             for (int i = 0; i < batch.size(); i++) {
                 map.put(batch.get(i), irt[i]);
             }
@@ -231,7 +240,7 @@ public class KoinaLibraryGenerator {
         for (int j = 0; j < pred.annotation.length; j++) {
             float intensity = pred.intensity[j];
             float mz = pred.mz[j];
-            if (intensity <= 0 || mz <= 0 || mz < cfg.minFragmentMz) {
+            if (intensity <= 0 || mz <= 0 || mz < cfg.minFragmentMz || mz > cfg.maxFragmentMz) {
                 continue;
             }
             Matcher m = ANNOTATION.matcher(pred.annotation[j]);

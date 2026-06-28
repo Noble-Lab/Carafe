@@ -82,6 +82,39 @@ public class ReuseSignatureTest {
     }
 
     @Test
+    public void nestedDirectoryFileChangeIsDetected() throws Exception {
+        // Directory-backed inputs (e.g. Bruker .d) keep their data in nested files, so the
+        // fingerprint must walk the whole tree, not just the top level.
+        Path dir = Files.createTempDirectory("reuse_nested");
+        Path sub = Files.createDirectories(dir.resolve("analysis").resolve("0_0_1"));
+        Files.writeString(sub.resolve("data.bin"), "x", StandardCharsets.UTF_8);
+        List<String> cmd = Arrays.asList("java", "-jar", "carafe.jar", "-ms", dir.toString());
+        String before = ReuseSignature.compute(cmd, null, List.of(dir.toString()));
+        Files.writeString(sub.resolve("data.bin"), "xy", StandardCharsets.UTF_8); // nested change
+        String after = ReuseSignature.compute(cmd, null, List.of(dir.toString()));
+        Assert.assertNotEquals(before, after, "a change to a nested file must invalidate the signature");
+    }
+
+    @Test
+    public void sameBasenameInDifferentDirsDoesNotCollide() throws Exception {
+        // Two distinct inputs with the same filename must produce different fingerprints even when
+        // size, content and mtime are identical -- otherwise a changed input reads as unchanged.
+        Path d1 = Files.createTempDirectory("reuse_c1");
+        Path d2 = Files.createTempDirectory("reuse_c2");
+        Path f1 = d1.resolve("run.mzML");
+        Path f2 = d2.resolve("run.mzML");
+        Files.writeString(f1, "SAME", StandardCharsets.UTF_8);
+        Files.writeString(f2, "SAME", StandardCharsets.UTF_8);
+        java.nio.file.attribute.FileTime t = java.nio.file.attribute.FileTime.fromMillis(1700000000000L);
+        Files.setLastModifiedTime(f1, t);
+        Files.setLastModifiedTime(f2, t);
+        List<String> cmd = Arrays.asList("java", "-jar", "carafe.jar", "-ms", "x");
+        Assert.assertNotEquals(ReuseSignature.compute(cmd, null, List.of(f1.toString())),
+                ReuseSignature.compute(cmd, null, List.of(f2.toString())),
+                "same basename in different folders must not collide");
+    }
+
+    @Test
     public void tokenizesRawCmdWhenArgsEmpty() {
         // MSConvert tasks carry only a cmd string (with quoted paths).
         String raw = "msconvert --filter \"peakPicking true 1-2\" --mzML \"in.raw\" -o \"out\"";

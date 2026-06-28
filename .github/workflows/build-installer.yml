@@ -28,7 +28,9 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  # write is required so the "Attach MSI to release" step (softprops/action-gh-release) can
+  # upload the MSI asset on v* tag builds; contents: read would block the upload.
+  contents: write
 
 jobs:
   build-msi:
@@ -87,6 +89,16 @@ jobs:
       - name: Build Carafe jar
         run: mvn -B -DskipTests package
 
+      # Single source of truth for the version: the Maven project version. Used below for the
+      # Osprey publish path and passed to the MSI script as APP_VERSION, so a pom bump can't drift
+      # from a hard-coded 2.2.0 in two files.
+      - name: Resolve Carafe version
+        shell: bash
+        run: |
+          v=$(mvn -q -B help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "CARAFE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "Resolved Carafe version: $v"
+
       # Osprey is public (ProteoWizard/pwiz). Sparse-checkout only what the
       # build touches: the Osprey subtree, the shared PortableUtil project,
       # and two vendored DLLs the projects bind to outside that subtree:
@@ -127,9 +139,11 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=false
           -p:Platform=x64
-          -o target/carafe-2.2.0/osprey/${{ env.RID }}
+          -o target/carafe-${{ env.CARAFE_VERSION }}/osprey/${{ env.RID }}
 
       - name: Build MSI (unsigned, Osprey bundled)
+        env:
+          APP_VERSION: ${{ env.CARAFE_VERSION }}
         run: scripts\generate_installer_win.bat
 
       - name: Upload MSI artifact

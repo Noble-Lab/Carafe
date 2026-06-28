@@ -154,6 +154,15 @@ public class KoinaClient {
             throw new IllegalStateException("Koina MS2 response missing intensities/mz/annotation: "
                     + truncate(json));
         }
+        if (intensities.length != mz.length || intensities.length != annotation.length) {
+            throw new IllegalStateException("Koina MS2 response arrays differ in length (intensities="
+                    + intensities.length + ", mz=" + mz.length + ", annotation=" + annotation.length
+                    + "): " + truncate(json));
+        }
+        if (n <= 0 || intensities.length % n != 0) {
+            throw new IllegalStateException("Koina MS2 response length " + intensities.length
+                    + " is not a multiple of the " + n + " requested precursors: " + truncate(json));
+        }
         int f = intensities.length / n;
         List<Ms2> out = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {

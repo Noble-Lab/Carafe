@@ -996,6 +996,9 @@ public class AIGear {
             if (cmd.hasOption("lf_frag_mz_min")) {
                 kc.minFragmentMz = Double.parseDouble(cmd.getOptionValue("lf_frag_mz_min"));
             }
+            if (cmd.hasOption("lf_frag_mz_max")) {
+                kc.maxFragmentMz = Double.parseDouble(cmd.getOptionValue("lf_frag_mz_max"));
+            }
             // Map the MS instrument to a Koina/AlphaPepDeep instrument code (ignored by Prosit/ms2pip).
             String msi = cmd.hasOption("ms_instrument") ? cmd.getOptionValue("ms_instrument").toLowerCase() : "";
             if (msi.contains("tims")) {

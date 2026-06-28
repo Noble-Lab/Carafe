@@ -23,8 +23,8 @@ import java.util.List;
  *       {@code -python}, {@code -Xmx}/{@code -Xms}, {@code -Djava.security.manager*},
  *       {@code --threads}, {@code --verbose}), so it reflects analysis parameters rather than the
  *       machine; and</li>
- *   <li>a fingerprint of each input file: {@code basename|size|lastModified} (directories are
- *       expanded to their top-level files), so re-converted / edited / swapped inputs are
+ *   <li>a fingerprint of each input file: {@code absolutePath|size|lastModified} (directories are
+ *       expanded recursively to every file), so re-converted / edited / swapped inputs are
  *       detected.</li>
  * </ol>
  *
@@ -35,7 +35,7 @@ import java.util.List;
 public final class ReuseSignature {
 
     /** Bump if the signature scheme changes (invalidates old sidecars). */
-    private static final int SCHEME_VERSION = 1;
+    private static final int SCHEME_VERSION = 2;
 
     /** Flags whose following token is also volatile and should be dropped together. */
     private static final List<String> VOLATILE_FLAG_WITH_VALUE = List.of(
@@ -65,6 +65,9 @@ public final class ReuseSignature {
 
     /** Argument tokens: {@code commandTokens} when non-empty, else {@code rawCmd} tokenized. */
     static List<String> tokenize(List<String> commandTokens, String rawCmd) {
+        // Both inputs carry the executable as token 0: CmdTask.args is a ProcessBuilder command
+        // list (args.add(ospreyPath) ... ; pb.command(task.args)), and a raw command line starts
+        // with the program. normalizeCommand drops that token 0.
         if (commandTokens != null && !commandTokens.isEmpty()) {
             return new ArrayList<>(commandTokens);
         }
@@ -104,11 +107,13 @@ public final class ReuseSignature {
                 }
                 File f = new File(path);
                 if (f.isDirectory()) {
-                    File[] kids = f.listFiles(File::isFile);
-                    if (kids != null) {
-                        for (File k : kids) {
-                            lines.add(fingerprintFile(k));
-                        }
+                    // Walk the whole tree: directory-backed inputs (e.g. Bruker .d) keep their data
+                    // in nested files, so a single-level listing would miss real changes.
+                    try (java.util.stream.Stream<java.nio.file.Path> walk = Files.walk(f.toPath())) {
+                        walk.filter(Files::isRegularFile)
+                                .forEach(p -> lines.add(fingerprintFile(p.toFile())));
+                    } catch (java.io.IOException e) {
+                        lines.add("in:" + f.getAbsolutePath() + "|DIR_WALK_FAILED");
                     }
                 } else {
                     lines.add(fingerprintFile(f));
@@ -120,10 +125,14 @@ public final class ReuseSignature {
     }
 
     private static String fingerprintFile(File f) {
+        // Key on the absolute path, not just the basename: two distinct inputs that share a
+        // filename (different folders, or directory-expanded files) must not collide and be
+        // mistaken for unchanged.
+        String key = f.getAbsolutePath();
         if (f.exists()) {
-            return "in:" + f.getName() + "|" + f.length() + "|" + f.lastModified();
+            return "in:" + key + "|" + f.length() + "|" + f.lastModified();
         }
-        return "in:" + f.getName() + "|MISSING";
+        return "in:" + key + "|MISSING";
     }
 
     /**
