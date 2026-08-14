@@ -1,0 +1,570 @@
+package test.java.dia;
+
+import main.java.dia.IsolationWindow;
+import main.java.dia.MsRunMeta;
+import main.java.dia.MsRunMeta.AcquisitionEvidence;
+import main.java.dia.MsRunMeta.AcquisitionType;
+import main.java.dia.MsRunMeta.IsolationScheme;
+import main.java.dia.MsRunMeta.SchemeMetrics;
+
+import org.testng.SkipException;
+import org.testng.annotations.Test;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertNotEquals;
+import static org.testng.Assert.assertTrue;
+
+/**
+ * Tests for MsRunMeta.
+ *
+ * <p>The classification tests are pure and need no MS data. The two tests at the end need a real
+ * mzML file and skip when none is available; point them at one with -Dcarafe.testdata=&lt;dir&gt;
+ * or $CARAFE_TESTDATA.
+ */
+public class MsRunMetaTest {
+
+    private static final double EPS = 1e-6;
+
+    /**
+     * Builds n windows of a fixed width, each stepped by step m/z from the previous one.
+     */
+    private static List<IsolationWindow> fixed_windows(double first_lower, double width,
+                                                       double step, int n) {
+        List<IsolationWindow> windows = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            double lo = first_lower + i * step;
+            windows.add(new IsolationWindow(lo, lo + width));
+        }
+        return windows;
+    }
+
+    private static List<IsolationWindow> windows_of(double[][] pairs) {
+        List<IsolationWindow> windows = new ArrayList<>(pairs.length);
+        for (double[] pair : pairs) {
+            windows.add(new IsolationWindow(pair[0], pair[1]));
+        }
+        return windows;
+    }
+
+    /**
+     * Windows that tile a range with widths growing linearly, as a variable-window SWATH method does.
+     */
+    private static List<IsolationWindow> variable_tiling(double from, double to, int n) {
+        List<IsolationWindow> windows = new ArrayList<>(n);
+        // widths grow linearly from w0 to 3*w0 and sum to (to - from)
+        double w0 = (to - from) / (2.0 * n);
+        double lo = from;
+        for (int i = 0; i < n; i++) {
+            double width = w0 * (1.0 + 2.0 * i / Math.max(1, n - 1));
+            windows.add(new IsolationWindow(lo, lo + width));
+            lo += width;
+        }
+        return windows;
+    }
+
+    private static AcquisitionEvidence evidence(int n_ms2, int n_distinct, double periodicity,
+                                                double median_width, double coverage,
+                                                double charge_frac) {
+        double distinct_ratio = n_ms2 == 0 ? 0 : (double) n_distinct / n_ms2;
+        double cycles = n_distinct == 0 ? 0 : (double) n_ms2 / n_distinct;
+        return new AcquisitionEvidence(n_ms2 / 10, n_ms2, n_distinct, distinct_ratio, periodicity,
+                median_width, charge_frac, charge_frac, coverage, 10, cycles, false);
+    }
+
+    /**
+     * A DIA-style window sequence: the same schedule stepped through over and over.
+     */
+    private static int[] cyclic_sequence(int n_windows, int n_cycles) {
+        int[] seq = new int[n_windows * n_cycles];
+        for (int i = 0; i < seq.length; i++) {
+            seq[i] = i % n_windows;
+        }
+        return seq;
+    }
+
+    // ------------------------------------------------------------------ isolation scheme
+
+    @Test
+    public void testFixedNonOverlapping() {
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(fixed_windows(400, 8, 8, 75));
+        assertEquals(m.scheme(), IsolationScheme.FIXED);
+        assertTrue(m.is_fixed_width());
+        assertFalse(m.is_overlapped());
+        assertEquals(m.median_offset_ratio(), 1.0, 1e-9);
+        assertEquals(m.n_width_outliers(), 0);
+    }
+
+    /**
+     * A 1 m/z guard band on an 8 m/z window gives an offset ratio of 0.875. This must not be read
+     * as staggered - it is the misclassification the 0.70 upper bound exists to prevent.
+     */
+    @Test
+    public void testFixedWithGuardBand() {
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(fixed_windows(400, 8, 7, 75));
+        assertEquals(m.scheme(), IsolationScheme.FIXED);
+        assertFalse(m.is_overlapped());
+        assertEquals(m.median_offset_ratio(), 0.875, 1e-9);
+    }
+
+    /**
+     * The tightest realistic guard band case: a 1 m/z band on a 4 m/z window sits at 0.75, just
+     * outside the overlapped range.
+     */
+    @Test
+    public void testNarrowWindowGuardBand() {
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(fixed_windows(400, 4, 3, 100));
+        assertFalse(m.is_overlapped());
+        assertEquals(m.median_offset_ratio(), 0.75, 1e-9);
+        assertEquals(m.scheme(), IsolationScheme.FIXED);
+    }
+
+    @Test
+    public void testStaggered() {
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(fixed_windows(400, 8, 4, 75));
+        assertEquals(m.scheme(), IsolationScheme.OVERLAPPED);
+        assertTrue(m.is_overlapped());
+        // staggered schemes are still uniform in width, and that fact must survive
+        assertTrue(m.is_fixed_width());
+        assertEquals(m.median_offset_ratio(), 0.5, 1e-9);
+    }
+
+    @Test
+    public void testStaggeredNarrow() {
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(fixed_windows(400, 2, 1, 300));
+        assertEquals(m.scheme(), IsolationScheme.OVERLAPPED);
+        assertTrue(m.is_fixed_width());
+    }
+
+    @Test
+    public void testVariableWidth() {
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(variable_tiling(400, 1000, 40));
+        assertEquals(m.scheme(), IsolationScheme.VARIABLE);
+        assertFalse(m.is_fixed_width());
+        assertFalse(m.is_overlapped());
+    }
+
+    /**
+     * The common "N equal windows plus one narrow remainder" layout. A plain coefficient of
+     * variation rule calls this VARIABLE; the modal width rule gets it right.
+     */
+    @Test
+    public void testFixedPlusRemainderWindow() {
+        List<IsolationWindow> windows = fixed_windows(400, 25, 25, 23);
+        double lo = 400 + 23 * 25.0;
+        windows.add(new IsolationWindow(lo, lo + 13));
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(windows);
+        assertEquals(m.scheme(), IsolationScheme.FIXED);
+        assertTrue(m.is_fixed_width());
+        assertEquals(m.n_width_outliers(), 1);
+        assertTrue(m.width_cv() > 0.05, "the CV alone would have called this VARIABLE: " + m.width_cv());
+    }
+
+    @Test
+    public void testVariableStaggered() {
+        List<IsolationWindow> tiling = variable_tiling(400, 1000, 40);
+        List<IsolationWindow> staggered = new ArrayList<>();
+        for (IsolationWindow w : tiling) {
+            double width = w.mz_upper - w.mz_lower;
+            staggered.add(new IsolationWindow(w.mz_lower, w.mz_upper));
+            staggered.add(new IsolationWindow(w.mz_lower + width / 2, w.mz_upper + width / 2));
+        }
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(staggered);
+        assertEquals(m.scheme(), IsolationScheme.OVERLAPPED);
+        assertFalse(m.is_fixed_width());
+    }
+
+    @Test
+    public void testTooFewWindows() {
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(fixed_windows(400, 8, 4, 2));
+        assertFalse(m.is_overlapped(), "two windows cannot support an overlap call");
+    }
+
+    @Test
+    public void testEmptyWindowList() {
+        SchemeMetrics m = MsRunMeta.classify_isolation_scheme(new ArrayList<>());
+        assertEquals(m.scheme(), IsolationScheme.UNKNOWN);
+        assertEquals(m.n_windows(), 0);
+    }
+
+    @Test
+    public void testCoverageFractionTiling() {
+        assertEquals(MsRunMeta.coverage_fraction(fixed_windows(400, 8, 8, 75)), 1.0, 1e-9);
+    }
+
+    @Test
+    public void testCoverageFractionStaggeredIsNotAboveOne() {
+        double coverage = MsRunMeta.coverage_fraction(fixed_windows(400, 8, 4, 75));
+        assertTrue(coverage <= 1.0 + 1e-9, "union coverage must not exceed 1, got " + coverage);
+        assertTrue(coverage > 0.95, "a staggered scheme still tiles its range, got " + coverage);
+    }
+
+    @Test
+    public void testCoverageFractionSparseTargets() {
+        double[][] targets = new double[20][2];
+        for (int i = 0; i < 20; i++) {
+            targets[i][0] = 400 + i * 30.0;
+            targets[i][1] = targets[i][0] + 4;
+        }
+        assertTrue(MsRunMeta.coverage_fraction(windows_of(targets)) < 0.2);
+    }
+
+    // ------------------------------------------------------------------ window merging
+
+    @Test
+    public void testMergeWindowsJitter() {
+        List<double[]> raw = new ArrayList<>();
+        for (int i = 0; i < 500; i++) {
+            double jitter = ((i % 3) - 1) * 1e-4;
+            raw.add(new double[]{400.04 + jitter, 424.04 + jitter});
+        }
+        // an edge sitting right on a 0.1 m/z bin boundary must not split the window
+        raw.add(new double[]{400.06, 424.06});
+        assertEquals(MsRunMeta.merge_windows(raw, 0.05).size(), 1);
+    }
+
+    @Test
+    public void testMergeWindowsDistinct() {
+        List<double[]> raw = new ArrayList<>();
+        raw.add(new double[]{400.0, 424.0});
+        raw.add(new double[]{400.06, 424.06});
+        assertEquals(MsRunMeta.merge_windows(raw, 0.05).size(), 2);
+    }
+
+    @Test
+    public void testMergeWindowsAveragesEdges() {
+        List<double[]> raw = new ArrayList<>();
+        raw.add(new double[]{400.00, 424.00});
+        raw.add(new double[]{400.02, 424.02});
+        List<IsolationWindow> merged = MsRunMeta.merge_windows(raw, 0.05);
+        assertEquals(merged.size(), 1);
+        assertEquals(merged.get(0).mz_lower, 400.01, 1e-9);
+        assertEquals(merged.get(0).mz_upper, 424.01, 1e-9);
+    }
+
+    @Test
+    public void testMergeWindowsSortsByLower() {
+        List<double[]> raw = new ArrayList<>();
+        raw.add(new double[]{700.0, 708.0});
+        raw.add(new double[]{400.0, 408.0});
+        raw.add(new double[]{550.0, 558.0});
+        List<IsolationWindow> merged = MsRunMeta.merge_windows(raw, 0.05);
+        assertEquals(merged.size(), 3);
+        assertEquals(merged.get(0).mz_lower, 400.0, EPS);
+        assertEquals(merged.get(1).mz_lower, 550.0, EPS);
+        assertEquals(merged.get(2).mz_lower, 700.0, EPS);
+    }
+
+    @Test
+    public void testMergeWindowsEmpty() {
+        assertTrue(MsRunMeta.merge_windows(new ArrayList<>(), 0.05).isEmpty());
+    }
+
+    // ------------------------------------------------------------------ acquisition type
+
+    @Test
+    public void testAcqDia() {
+        assertEquals(MsRunMeta.classify_acquisition(evidence(3000, 60, 1.0, 10, 1.0, 0.0)),
+                AcquisitionType.DIA);
+    }
+
+    @Test
+    public void testAcqDda() {
+        assertEquals(MsRunMeta.classify_acquisition(evidence(3000, 2800, 0.002, 1.6, 0.99, 0.95)),
+                AcquisitionType.DDA);
+    }
+
+    /**
+     * Wide-window DDA: a width-first rule would call this DIA.
+     */
+    @Test
+    public void testAcqWideWindowDda() {
+        assertEquals(MsRunMeta.classify_acquisition(evidence(3000, 2600, 0.001, 25, 1.0, 0.9)),
+                AcquisitionType.DDA);
+    }
+
+    /**
+     * Narrow-window DIA on an Astral: a width-first rule would call this DDA. Real Astral data has
+     * 1-2 m/z windows, narrower than the 2 m/z a Q Exactive uses for DDA.
+     */
+    @Test
+    public void testAcqNarrowWindowDia() {
+        assertEquals(MsRunMeta.classify_acquisition(evidence(3000, 300, 1.0, 2, 1.0, 0.0)),
+                AcquisitionType.DIA);
+    }
+
+    /**
+     * Regression guard for the discriminator this class originally used. Over a long gradient a
+     * DDA run re-selects the same precursors many times, so its distinct-window ratio falls into
+     * the range DIA occupies - these numbers are measured from a real 200 minute Q Exactive run,
+     * where a ratio rule called it PRM. Only the lack of periodicity separates it.
+     */
+    @Test
+    public void testAcqLongGradientDdaIsNotMistakenForTargeted() {
+        AcquisitionEvidence e = evidence(33042, 4583, 0.0004, 2.0, 0.69, 1.0);
+        assertTrue(e.distinct_ratio() < 0.5, "the ratio alone no longer says DDA here");
+        assertEquals(MsRunMeta.classify_acquisition(e), AcquisitionType.DDA);
+    }
+
+    @Test
+    public void testAcqPrm() {
+        assertEquals(MsRunMeta.classify_acquisition(evidence(3000, 20, 1.0, 4, 0.15, 0.0)),
+                AcquisitionType.PRM);
+    }
+
+    @Test
+    public void testAcqMs1Only() {
+        assertEquals(MsRunMeta.classify_acquisition(evidence(0, 0, 0, 0, 0, 0)),
+                AcquisitionType.MS1_ONLY);
+    }
+
+    @Test
+    public void testAcqSrmScanType() {
+        AcquisitionEvidence e = new AcquisitionEvidence(10, 3000, 2000, 0.67, 0.0, 1.0, 0.0, 0.0,
+                0.9, 10, 1.5, true);
+        assertEquals(MsRunMeta.classify_acquisition(e), AcquisitionType.SRM);
+    }
+
+    @Test
+    public void testAcqNoIsolationWindowsIsDda() {
+        assertEquals(MsRunMeta.classify_acquisition(evidence(3000, 0, 0, 0, 0, 0.9)),
+                AcquisitionType.DDA);
+    }
+
+    // ------------------------------------------------------------------ periodicity
+
+    @Test
+    public void testPeriodicityCyclic() {
+        assertEquals(MsRunMeta.periodicity(cyclic_sequence(60, 50), 60), 1.0, 1e-9);
+        assertEquals(MsRunMeta.periodicity(cyclic_sequence(250, 30), 250), 1.0, 1e-9);
+    }
+
+    @Test
+    public void testPeriodicityScattered() {
+        // pseudo-random but deterministic, standing in for DDA precursor selection
+        int[] seq = new int[8000];
+        long state = 12345;
+        for (int i = 0; i < seq.length; i++) {
+            state = state * 6364136223846793005L + 1442695040888963407L;
+            seq[i] = (int) Math.floorMod(state >> 20, 4000);
+        }
+        assertTrue(MsRunMeta.periodicity(seq, 4000) < 0.1,
+                "scattered precursors must not look periodic");
+    }
+
+    @Test
+    public void testPeriodicitySequenceShorterThanCycle() {
+        assertEquals(MsRunMeta.periodicity(cyclic_sequence(60, 1), 60), 0.0, 1e-9);
+        assertEquals(MsRunMeta.periodicity(new int[0], 10), 0.0, 1e-9);
+        assertEquals(MsRunMeta.periodicity(cyclic_sequence(10, 5), 0), 0.0, 1e-9);
+    }
+
+    @Test
+    public void testPeriodicityIgnoresUnassignedScans() {
+        int[] seq = cyclic_sequence(20, 20);
+        for (int i = 0; i < seq.length; i += 37) {
+            seq[i] = -1;
+        }
+        assertEquals(MsRunMeta.periodicity(seq, 20), 1.0, 1e-9);
+    }
+
+    @Test
+    public void testPeriodicityToleratesOccasionalGaps() {
+        int[] seq = cyclic_sequence(20, 40);
+        // a handful of cycles miss a window; the schedule is still clearly periodic
+        for (int i = 5; i < seq.length; i += 200) {
+            seq[i] = 19;
+        }
+        assertTrue(MsRunMeta.periodicity(seq, 20) > 0.9);
+    }
+
+    // ------------------------------------------------------------------ window assignment
+
+    @Test
+    public void testAssignWindowsMapsBackToMerged() {
+        List<double[]> raw = new ArrayList<>();
+        for (int cycle = 0; cycle < 10; cycle++) {
+            for (int w = 0; w < 5; w++) {
+                double lo = 400.0 + w * 8.0;
+                raw.add(new double[]{lo, lo + 8.0});
+            }
+        }
+        List<IsolationWindow> merged = MsRunMeta.merge_windows(raw, 0.05);
+        assertEquals(merged.size(), 5);
+        int[] assigned = MsRunMeta.assign_windows(raw, merged, 0.05);
+        assertEquals(assigned.length, raw.size());
+        for (int i = 0; i < assigned.length; i++) {
+            assertEquals(assigned[i], i % 5, "position " + i);
+        }
+        assertEquals(MsRunMeta.periodicity(assigned, 5), 1.0, 1e-9);
+    }
+
+    @Test
+    public void testAssignWindowsMarksUnassignable() {
+        List<IsolationWindow> merged = windows_of(new double[][]{{400.0, 408.0}});
+        int[] assigned = MsRunMeta.assign_windows(
+                List.of(new double[]{400.0, 408.0}, new double[]{600.0, 608.0}), merged, 0.05);
+        assertEquals(assigned[0], 0);
+        assertEquals(assigned[1], -1);
+    }
+
+    // ------------------------------------------------------------------ instrument mapping
+
+    @Test
+    public void testInstrumentFromModel() {
+        assertEquals(MsRunMeta.instrument_from_model("Orbitrap Astral"), "Astral");
+        assertEquals(MsRunMeta.instrument_from_model("Orbitrap Eclipse"), "Eclipse");
+        assertEquals(MsRunMeta.instrument_from_model("Orbitrap Exploris 480"), "Exploris");
+        assertEquals(MsRunMeta.instrument_from_model("Q Exactive HF-X Orbitrap"), "QEHFX");
+        assertEquals(MsRunMeta.instrument_from_model("Q Exactive HF"), "QEHF");
+        assertEquals(MsRunMeta.instrument_from_model("Q Exactive Plus"), "QE+");
+        assertEquals(MsRunMeta.instrument_from_model("Q Exactive"), "QE");
+        assertEquals(MsRunMeta.instrument_from_model("TripleTOF 6600"), "SciexTOF");
+        assertEquals(MsRunMeta.instrument_from_model("timsTOF Pro 2"), "timsTOF");
+        assertEquals(MsRunMeta.instrument_from_model("Some Future Instrument"), "");
+        assertEquals(MsRunMeta.instrument_from_model(""), "");
+        assertEquals(MsRunMeta.instrument_from_model(null), "");
+    }
+
+    /**
+     * "Orbitrap Fusion Lumos" also matches "Orbitrap Fusion", so pattern order matters.
+     */
+    @Test
+    public void testInstrumentFromModelPrefersMostSpecific() {
+        assertEquals(MsRunMeta.instrument_from_model("Orbitrap Fusion Lumos"), "Lumos");
+        assertEquals(MsRunMeta.instrument_from_model("Orbitrap Fusion"), "Fusion");
+    }
+
+    @Test
+    public void testAccessionMapMatchesDiaMeta() {
+        // the accessions DIAMeta.get_ms_instrument ships with must all still resolve here
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1003029"), "Eclipse");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1003028"), "Exploris");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1003378"), "Astral");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1002416"), "Fusion");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1002732"), "Lumos");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1001911"), "QE");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1002523"), "QEHF");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1002526"), "QE+");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1002634"), "QE+");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1002877"), "QEHFX");
+        assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1002533"), "SciexTOF");
+    }
+
+    @Test
+    public void testIsMzml() {
+        assertTrue(MsRunMeta.is_mzml("a.mzML"));
+        assertTrue(MsRunMeta.is_mzml("a.mzml"));
+        assertTrue(MsRunMeta.is_mzml("/path/to/A_RUN.MZML"));
+        assertFalse(MsRunMeta.is_mzml("a.mgf"));
+        assertFalse(MsRunMeta.is_mzml("a.mzML.gz"));
+        assertFalse(MsRunMeta.is_mzml(null));
+    }
+
+    // ------------------------------------------------------------------ report shape
+
+    @Test
+    public void testAsRowHasNoNullsAndNoTabs() {
+        MsRunMeta meta = new MsRunMeta();
+        meta.ms_file = "/tmp/example.mzML";
+        meta.notes.add("a note");
+        meta.as_row().forEach((k, v) -> {
+            assertNotEquals(v, null, "column " + k + " is null");
+            assertFalse(String.valueOf(v).contains("\t"), "column " + k + " contains a tab");
+        });
+    }
+
+    @Test
+    public void testAsRowColumnsAreStableAcrossRuns() {
+        MsRunMeta profiled = new MsRunMeta();
+        profiled.ms_file = "/tmp/dia.mzML";
+        profiled.scheme_metrics = MsRunMeta.classify_isolation_scheme(fixed_windows(400, 8, 8, 75));
+        MsRunMeta bare = new MsRunMeta();
+        bare.ms_file = "/tmp/failed.mzML";
+        // the batch TSV writes one header from the first row, so every row needs the same columns
+        assertEquals(new ArrayList<>(profiled.as_row().keySet()),
+                new ArrayList<>(bare.as_row().keySet()));
+    }
+
+    @Test
+    public void testBatchTsvRoundTrip() throws IOException {
+        MsRunMeta meta = new MsRunMeta();
+        meta.ms_file = "/tmp/example.mzML";
+        File out = File.createTempFile("mzml_acquisition_summary", ".tsv");
+        out.deleteOnExit();
+        MsRunMeta.write_batch_tsv(List.of(meta), out);
+        List<String> lines = java.nio.file.Files.readAllLines(out.toPath());
+        assertEquals(lines.size(), 2);
+        assertEquals(lines.get(0).split("\t", -1).length, lines.get(1).split("\t", -1).length);
+    }
+
+    // ------------------------------------------------------------------ real files
+
+    private static File resolve_testdata() {
+        String p = System.getProperty("carafe.testdata");
+        if (p == null || p.isEmpty()) {
+            p = System.getenv("CARAFE_TESTDATA");
+        }
+        if (p == null || p.isEmpty()) {
+            p = new File("testdata").getAbsolutePath();
+        }
+        return new File(p);
+    }
+
+    private static List<File> testdata_mzml_files() throws IOException {
+        File dir = resolve_testdata();
+        if (!dir.isDirectory()) {
+            throw new SkipException("no test data directory at " + dir
+                    + "; set -Dcarafe.testdata=<dir> or $CARAFE_TESTDATA");
+        }
+        List<File> files = MsRunMeta.find_mzml_files(dir);
+        if (files.isEmpty()) {
+            throw new SkipException("no .mzML file under " + dir
+                    + "; set -Dcarafe.testdata=<dir> or $CARAFE_TESTDATA");
+        }
+        return files;
+    }
+
+    @Test
+    public void testProfileRealMzml() throws IOException {
+        for (File f : testdata_mzml_files()) {
+            MsRunMeta meta = new MsRunMeta().profile(f.getAbsolutePath());
+            System.out.println(meta.summary());
+            assertNotEquals(meta.acquisition_type, AcquisitionType.UNKNOWN,
+                    "could not classify " + f.getName());
+            if (meta.acquisition_type == AcquisitionType.DIA) {
+                assertFalse(meta.isolation_windows.isEmpty());
+                assertNotEquals(meta.isolation_scheme, IsolationScheme.UNKNOWN);
+                assertNotEquals(meta.isolation_scheme, IsolationScheme.NOT_APPLICABLE);
+            }
+        }
+    }
+
+    /**
+     * The test that actually validates the sampling strategy: reading three slices must reach the
+     * same verdict as reading every scan header.
+     */
+    @Test
+    public void testSampledMatchesFull() throws IOException {
+        for (File f : testdata_mzml_files()) {
+            MsRunMeta sampled = new MsRunMeta();
+            sampled.profile(f.getAbsolutePath());
+            MsRunMeta full = new MsRunMeta();
+            full.full_scan = true;
+            full.profile(f.getAbsolutePath());
+            System.out.printf(Locale.ROOT, "%s: sampled=%s/%s full=%s/%s%n", f.getName(),
+                    sampled.acquisition_type, sampled.isolation_scheme,
+                    full.acquisition_type, full.isolation_scheme);
+            assertEquals(sampled.acquisition_type, full.acquisition_type,
+                    "acquisition type differs for " + f.getName());
+            assertEquals(sampled.isolation_scheme, full.isolation_scheme,
+                    "isolation scheme differs for " + f.getName());
+        }
+    }
+}
