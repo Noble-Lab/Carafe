@@ -59,6 +59,11 @@ public class MsRunMeta {
     public String ms_file = "";
 
     /**
+     * Size of the mzML in bytes, 0 when it does not exist or cannot be read.
+     */
+    public long file_size_bytes = 0;
+
+    /**
      * Carafe short instrument name, e.g. "Astral". Empty when unrecognised - this matches the
      * contract of DIAMeta.get_ms_instrument, which callers test with isEmpty().
      */
@@ -396,6 +401,7 @@ public class MsRunMeta {
      */
     private void reset_results(String ms_file) {
         this.ms_file = ms_file;
+        this.file_size_bytes = ms_file == null ? 0 : new File(ms_file).length();
         this.ms_instrument = "";
         this.instrument_model = "";
         this.instrument_vendor = "";
@@ -1458,7 +1464,8 @@ public class MsRunMeta {
      */
     public String summary() {
         StringBuilder sb = new StringBuilder();
-        sb.append("MS file: ").append(this.ms_file).append("\n");
+        sb.append("MS file: ").append(this.ms_file)
+                .append("  (").append(human_size(this.file_size_bytes)).append(")\n");
         sb.append("  Instrument: ").append(this.ms_instrument.isEmpty() ? "-" : this.ms_instrument)
                 .append("  model=").append(blank_to_dash(this.instrument_model))
                 .append("  vendor=").append(blank_to_dash(this.instrument_vendor))
@@ -1518,6 +1525,9 @@ public class MsRunMeta {
         LinkedHashMap<String, Object> row = new LinkedHashMap<>();
         row.put("ms_file", this.ms_file);
         row.put("file_name", new File(this.ms_file).getName());
+        // raw bytes rather than a scaled string: this column gets sorted and filtered, and
+        // "790M" would order above "1.9G" as text
+        row.put("file_size_bytes", this.file_size_bytes);
         row.put("instrument", blank_to_dash(this.ms_instrument));
         row.put("instrument_model", blank_to_dash(this.instrument_model));
         row.put("instrument_vendor", blank_to_dash(this.instrument_vendor));
@@ -1576,6 +1586,30 @@ public class MsRunMeta {
 
     private static String blank_to_dash(String s) {
         return s == null || s.isEmpty() ? "-" : s;
+    }
+
+    /**
+     * Formats a byte count for a human reader, e.g. {@code 1.9G} or {@code 790M}.
+     *
+     * <p>Only for display. Machine readable output carries the raw byte count, which sorts and
+     * compares correctly where a scaled string does not.
+     *
+     * @param bytes the size in bytes
+     * @return the scaled size with a single letter unit
+     */
+    public static String human_size(long bytes) {
+        if (bytes < 1024) {
+            return bytes + "B";
+        }
+        String[] units = {"K", "M", "G", "T", "P"};
+        double size = bytes;
+        int unit = -1;
+        while (size >= 1024 && unit < units.length - 1) {
+            size /= 1024;
+            unit++;
+        }
+        String format = size >= 100 ? "%.0f%s" : "%.1f%s";
+        return String.format(Locale.ROOT, format, size, units[unit]);
     }
 
     /**
@@ -1848,8 +1882,8 @@ public class MsRunMeta {
                 Cloger.getInstance().logger.warn("Skipped " + file.getAbsolutePath() + ": " + e.getMessage());
             }
             results.add(meta);
-            System.out.println("[" + (i + 1) + "/" + files.size() + "] " + file.getName() + " -> "
-                    + meta.acquisition_type
+            System.out.println("[" + (i + 1) + "/" + files.size() + "] " + file.getName()
+                    + " (" + human_size(meta.file_size_bytes) + ") -> " + meta.acquisition_type
                     + (meta.acquisition_type == AcquisitionType.DIA ? "/" + meta.isolation_scheme : ""));
             if (detail) {
                 try {

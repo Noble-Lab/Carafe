@@ -692,6 +692,41 @@ public class MsRunMetaTest {
     }
 
     @Test
+    public void testHumanSize() {
+        assertEquals(MsRunMeta.human_size(0), "0B");
+        assertEquals(MsRunMeta.human_size(512), "512B");
+        assertEquals(MsRunMeta.human_size(1024), "1.0K");
+        assertEquals(MsRunMeta.human_size(4L * 1024), "4.0K");
+        assertEquals(MsRunMeta.human_size(790L * 1024 * 1024), "790M");
+        assertEquals(MsRunMeta.human_size(1932L * 1024 * 1024), "1.9G");
+        assertEquals(MsRunMeta.human_size(3L * 1024 * 1024 * 1024 * 1024), "3.0T");
+    }
+
+    @Test
+    public void testSummaryStatesFileSize() {
+        MsRunMeta meta = new MsRunMeta();
+        meta.ms_file = "/tmp/example.mzML";
+        meta.file_size_bytes = 1932L * 1024 * 1024;
+        assertTrue(meta.summary().contains("(1.9G)"), meta.summary());
+        // the row keeps raw bytes so the column sorts correctly
+        assertEquals(meta.as_row().get("file_size_bytes"), 1932L * 1024 * 1024);
+    }
+
+    @Test
+    public void testProfileRecordsFileSize() throws Exception {
+        Path root = Files.createTempDirectory("mzml_size");
+        try {
+            Path file = root.resolve("sized.mzML");
+            write_minimal_mzml(file);
+            MsRunMeta meta = new MsRunMeta().profile(file.toString());
+            assertEquals(meta.file_size_bytes, Files.size(file));
+            assertTrue(meta.file_size_bytes > 0);
+        } finally {
+            delete_tree(root);
+        }
+    }
+
+    @Test
     public void testSummaryStatesScanReadMode() {
         MsRunMeta unread = new MsRunMeta();
         unread.ms_file = "/tmp/example.mzML";
