@@ -420,6 +420,31 @@ public class MsRunMetaTest {
                 "using the window count as the period is what broke on the real file");
     }
 
+    /**
+     * The Exploris yeast DIA case: each isolation window is acquired twice in a row, so a distance
+     * of 1 is the most frequently observed repeat distance while the cycle is 300 scans long.
+     * Taking the most common distance gives a period of 1 and scores the run at 0.4975.
+     */
+    @Test
+    public void testWindowsAcquiredTwiceInARow() {
+        int windows = 150;
+        int[] seq = new int[windows * 2 * 25];
+        for (int i = 0; i < seq.length; i++) {
+            seq[i] = (i % (windows * 2)) / 2;
+        }
+        assertEquals(MsRunMeta.estimate_cycle_length(seq), windows * 2);
+        assertEquals(MsRunMeta.periodicity(seq, MsRunMeta.estimate_cycle_length(seq)), 1.0, 1e-9);
+        assertEquals(MsRunMeta.periodicity(seq, 1), 0.5, 0.01,
+                "the most common repeat distance here is 1, which is what broke on the real file");
+    }
+
+    @Test
+    public void testEstimateCycleLengthPrefersTheShortestTruePeriod() {
+        // a period of 60 also repeats at 120; the shorter one is the real cycle
+        int[] seq = cyclic_sequence(60, 40);
+        assertEquals(MsRunMeta.estimate_cycle_length(seq), 60);
+    }
+
     @Test
     public void testEstimateCycleLengthToleratesMissingScans() {
         int[] seq = cyclic_sequence(20, 40);

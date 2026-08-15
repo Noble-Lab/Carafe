@@ -912,35 +912,84 @@ public class MsRunMeta {
      * the window count would then test the sequence against a period one too long and score a
      * cleanly periodic DIA run at zero.
      *
+     * <p>The candidates are the distances actually observed between repeat visits, because a
+     * schedule of period p necessarily puts some pair of visits exactly p apart. Each candidate is
+     * then scored with {@link #periodicity(int[], int)} and the best scoring one wins, rather than
+     * simply taking the most common distance: methods that acquire each window more than once in
+     * a row make a distance of 1 the most common one while the cycle is hundreds of scans long.
+     *
      * @param window_seq the isolation window index per MS2 scan, in acquisition order, -1 where
      *                   the window is unknown
      * @return the estimated cycle length, or 0 when no window is ever revisited
      */
     public static int estimate_cycle_length(int[] window_seq) {
-        Map<Integer, Integer> last_seen = new HashMap<>();
-        Map<Integer, Integer> gap_counts = new HashMap<>();
+        Map<Integer, List<Integer>> positions = new LinkedHashMap<>();
         for (int i = 0; i < window_seq.length; i++) {
             int window = window_seq[i];
             if (window < 0) {
                 continue;
             }
-            Integer previous = last_seen.put(window, i);
-            if (previous != null) {
-                gap_counts.merge(i - previous, 1, Integer::sum);
+            List<Integer> seen = positions.computeIfAbsent(window, k -> new ArrayList<>());
+            if (seen.size() < MAX_OCCURRENCES_TRACKED) {
+                seen.add(i);
             }
         }
-        int best_gap = 0;
-        int best_count = 0;
-        for (Map.Entry<Integer, Integer> entry : gap_counts.entrySet()) {
-            // ties go to the shorter cycle, which is the one that actually repeats
-            if (entry.getValue() > best_count
-                    || (entry.getValue() == best_count && entry.getKey() < best_gap)) {
-                best_count = entry.getValue();
-                best_gap = entry.getKey();
+        // distances are measured from a window's FIRST visit, not between successive visits. A
+        // window acquired twice per cycle has successive distances of 1 and p-1, so the period p
+        // itself is never one of them.
+        Set<Integer> candidates = new TreeSet<>();
+        int windows_used = 0;
+        for (List<Integer> seen : positions.values()) {
+            if (seen.size() < 2) {
+                continue; // a window visited once says nothing about the period
+            }
+            for (int j = 1; j < seen.size(); j++) {
+                candidates.add(seen.get(j) - seen.get(0));
+            }
+            if (++windows_used >= WINDOWS_SAMPLED_FOR_CYCLE) {
+                break;
             }
         }
-        return best_gap;
+        if (candidates.isEmpty()) {
+            return 0;
+        }
+        int best = 0;
+        double best_score = -1;
+        int considered = 0;
+        // ascending, and only replaced on a clearly better score, so a true period p is kept in
+        // preference to 2p, which scores just as well
+        for (int candidate : candidates) {
+            if (++considered > MAX_CYCLE_CANDIDATES) {
+                break;
+            }
+            double score = periodicity(window_seq, candidate);
+            if (score > best_score + CYCLE_SCORE_EPS) {
+                best_score = score;
+                best = candidate;
+            }
+        }
+        return best;
     }
+
+    /**
+     * How many visits to one isolation window are remembered when estimating the cycle length.
+     */
+    private static final int MAX_OCCURRENCES_TRACKED = 8;
+
+    /**
+     * How many distinct isolation windows contribute cycle length candidates.
+     */
+    private static final int WINDOWS_SAMPLED_FOR_CYCLE = 5;
+
+    /**
+     * How many candidate cycle lengths are scored.
+     */
+    private static final int MAX_CYCLE_CANDIDATES = 24;
+
+    /**
+     * Two cycle length candidates scoring within this of each other are treated as equally good.
+     */
+    private static final double CYCLE_SCORE_EPS = 0.01;
 
     /**
      * Fraction of MS2 scans whose isolation window is repeated exactly one cycle later.
