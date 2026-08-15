@@ -414,6 +414,100 @@ public class MsRunMetaTest {
         assertEquals(assigned[1], -1);
     }
 
+    /**
+     * A scan that declares no isolation window must occupy a slot rather than be dropped.
+     * Dropping it shifts every later scan by one and destroys periodicity for the rest of the run.
+     */
+    @Test
+    public void testAssignWindowsKeepsSlotForNullWindow() {
+        List<IsolationWindow> merged = windows_of(new double[][]{{400.0, 408.0}, {408.0, 416.0}});
+        List<double[]> raw = new ArrayList<>();
+        raw.add(new double[]{400.0, 408.0});
+        raw.add(null);
+        raw.add(new double[]{408.0, 416.0});
+        int[] assigned = MsRunMeta.assign_windows(raw, merged, 0.05);
+        assertEquals(assigned.length, 3);
+        assertEquals(assigned[0], 0);
+        assertEquals(assigned[1], -1);
+        assertEquals(assigned[2], 1);
+    }
+
+    /**
+     * The end-to-end version of the gap bug: a DIA run where a small fraction of MS2 scans carry
+     * no isolation window must still measure as periodic.
+     */
+    @Test
+    public void testPeriodicitySurvivesScansWithoutWindows() {
+        int n_windows = 60;
+        List<double[]> raw = new ArrayList<>();
+        for (int cycle = 0; cycle < 200; cycle++) {
+            for (int w = 0; w < n_windows; w++) {
+                // every 199th scan reports no window at all
+                if ((cycle * n_windows + w) % 199 == 0) {
+                    raw.add(null);
+                } else {
+                    double lo = 400.0 + w * 10.0;
+                    raw.add(new double[]{lo, lo + 10.0});
+                }
+            }
+        }
+        List<double[]> present = new ArrayList<>();
+        for (double[] w : raw) {
+            if (w != null) {
+                present.add(w);
+            }
+        }
+        List<IsolationWindow> merged = MsRunMeta.merge_windows(present, 0.05);
+        assertEquals(merged.size(), n_windows);
+        int[] assigned = MsRunMeta.assign_windows(raw, merged, 0.05);
+        assertEquals(MsRunMeta.periodicity(assigned, n_windows), 1.0, 1e-9);
+    }
+
+    /**
+     * Two windows 0.08 m/z apart merge to distinct entries but collide on IsolationWindow's
+     * 0.1 m/z id, so per-window counts must not be keyed on that id.
+     */
+    @Test
+    public void testDistinctWindowsCanShareAnId() {
+        List<double[]> raw = new ArrayList<>();
+        raw.add(new double[]{399.96, 423.96});
+        raw.add(new double[]{400.04, 424.04});
+        List<IsolationWindow> merged = MsRunMeta.merge_windows(raw, 0.05);
+        assertEquals(merged.size(), 2, "the two windows are further apart than the tolerance");
+        assertEquals(merged.get(0).id, merged.get(1).id,
+                "and they collide on the 0.1 m/z id, which is why it cannot be the count key");
+    }
+
+    /**
+     * A single repeated window is trivially periodic and trivially covers its own range, so it
+     * cannot be called DIA - it is equally consistent with SIM or a single-target PRM method.
+     */
+    @Test
+    public void testAcqSingleWindowIsUnknown() {
+        assertEquals(MsRunMeta.classify_acquisition(evidence(3000, 1, 1.0, 4.0, 1.0, 0.0)),
+                AcquisitionType.UNKNOWN);
+    }
+
+    @Test
+    public void testCoverageFractionSingleWindowIsDegenerate() {
+        // documents why n_distinct == 1 is special-cased: coverage cannot fall below 1 for n=1
+        assertEquals(MsRunMeta.coverage_fraction(windows_of(new double[][]{{500.0, 504.0}})),
+                1.0, 1e-9);
+    }
+
+    @Test
+    public void testWindowSetsDifferAcrossRun() {
+        // same schedule throughout
+        int[] steady = cyclic_sequence(20, 30);
+        assertFalse(MsRunMeta.window_sets_differ(steady, 20));
+        // first half uses windows 0-9, second half uses 10-19
+        int[] segmented = new int[600];
+        for (int i = 0; i < segmented.length; i++) {
+            segmented[i] = (i < 300 ? 0 : 10) + (i % 10);
+        }
+        assertTrue(MsRunMeta.window_sets_differ(segmented, 20));
+    }
+
     // ------------------------------------------------------------------ instrument mapping
 
     @Test
@@ -441,9 +535,15 @@ public class MsRunMetaTest {
         assertEquals(MsRunMeta.instrument_from_model("Orbitrap Fusion"), "Fusion");
     }
 
+    /**
+     * Pins the accession mappings this class ships with.
+     *
+     * <p>This does NOT verify agreement with DIAMeta.get_ms_instrument. That map is a local
+     * variable inside the method, so it cannot be read from here, and the two are already known to
+     * differ: MS:1000932 and MS:1002417 exist only in MsRunMeta. Keeping them in step is manual.
+     */
     @Test
-    public void testAccessionMapMatchesDiaMeta() {
-        // the accessions DIAMeta.get_ms_instrument ships with must all still resolve here
+    public void testAccessionMapEntries() {
         assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1003029"), "Eclipse");
         assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1003028"), "Exploris");
         assertEquals(MsRunMeta.CV_ACCESSION_2_INSTRUMENT.get("MS:1003378"), "Astral");
@@ -502,6 +602,28 @@ public class MsRunMetaTest {
         List<String> lines = java.nio.file.Files.readAllLines(out.toPath());
         assertEquals(lines.size(), 2);
         assertEquals(lines.get(0).split("\t", -1).length, lines.get(1).split("\t", -1).length);
+    }
+
+    /**
+     * Parser exception messages routinely embed newlines. Left unsanitized they split one run
+     * across several lines and corrupt every row after it.
+     */
+    @Test
+    public void testBatchTsvSurvivesMultilineNotes() throws IOException {
+        MsRunMeta bad = new MsRunMeta();
+        bad.ms_file = "/tmp/broken.mzML";
+        bad.notes.add("Failed to read the file: ParseError at [row,col]:[12,34]\r\nMessage: boom\ttab");
+        MsRunMeta good = new MsRunMeta();
+        good.ms_file = "/tmp/fine.mzML";
+        File out = File.createTempFile("mzml_acquisition_summary_multiline", ".tsv");
+        out.deleteOnExit();
+        MsRunMeta.write_batch_tsv(List.of(bad, good), out);
+        List<String> lines = java.nio.file.Files.readAllLines(out.toPath());
+        assertEquals(lines.size(), 3, "one header plus exactly one row per run");
+        int columns = lines.get(0).split("\t", -1).length;
+        for (String line : lines) {
+            assertEquals(line.split("\t", -1).length, columns, "ragged row: " + line);
+        }
     }
 
     // ------------------------------------------------------------------ real files

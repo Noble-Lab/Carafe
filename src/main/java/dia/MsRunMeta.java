@@ -33,13 +33,13 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Run level metadata read from an mzML header plus a sample of scan headers: the MS instrument,
@@ -103,9 +103,9 @@ public class MsRunMeta {
     public List<IsolationWindow> isolation_windows = new ArrayList<>();
 
     /**
-     * Number of sampled MS2 scans per isolation window id.
+     * Number of sampled MS2 scans per entry of {@link #isolation_windows}, aligned by index.
      */
-    public HashMap<String, Integer> isolation_window2n_scan = new HashMap<>();
+    public int[] window_scan_counts = new int[0];
 
     public AcquisitionEvidence evidence = null;
     public SchemeMetrics scheme_metrics = null;
@@ -304,6 +304,12 @@ public class MsRunMeta {
      */
     private static final String CV_CUSTOMIZATION = "MS:1000032";
 
+    /**
+     * The generic "instrument model" root term. Converters emit this when they cannot identify the
+     * instrument, so it must not be taken as a model or it would mask the real one.
+     */
+    private static final String CV_GENERIC_INSTRUMENT_MODEL = "MS:1000031";
+
     // ------------------------------------------------------------------ entry points
 
     /**
@@ -339,9 +345,12 @@ public class MsRunMeta {
             Cloger.getInstance().logger.error("Failed to profile " + ms_file + ": " + e.getMessage());
         } finally {
             try {
-                source.releaseMemory();
+                // close(), not releaseMemory(): releaseMemory only drops the index and run info
+                // and then calls System.gc(), leaving the cached RandomAccessFile open. Over a
+                // folder of many runs that leaks a file handle each time and forces a full GC.
+                source.close();
             } catch (RuntimeException ignored) {
-                // releasing a partially initialised source is not worth failing the run over
+                // closing a partially initialised source is not worth failing the run over
             }
         }
         return this;
@@ -378,13 +387,10 @@ public class MsRunMeta {
 
         int mid = lo + (n_total - this.probe_scans_per_slice) / 2;
         int tail = hi - this.probe_scans_per_slice + 1;
-        List<List<IScan>> slices = new ArrayList<>(3);
         TreeMap<Integer, IScan> by_num = new TreeMap<>();
         for (int start : new int[]{lo, mid, tail}) {
-            List<IScan> slice = source.parse(new LCMSDataSubset(start,
-                    start + this.probe_scans_per_slice - 1, Collections.<Integer>emptySet(), null));
-            slices.add(slice);
-            for (IScan scan : slice) {
+            for (IScan scan : source.parse(new LCMSDataSubset(start,
+                    start + this.probe_scans_per_slice - 1, Collections.<Integer>emptySet(), null))) {
                 by_num.put(scan.getNum(), scan);
             }
         }
@@ -395,9 +401,6 @@ public class MsRunMeta {
                     + "scan headers instead.");
             return source.parse(LCMSDataSubset.STRUCTURE_ONLY);
         }
-        // only meaningful once the run is known to be DIA - in DDA every slice has different
-        // precursors by construction, so classify_from_scans decides whether to keep this
-        this.has_multiple_window_sets = window_sets_differ(slices);
         return sample;
     }
 
@@ -439,28 +442,33 @@ public class MsRunMeta {
     }
 
     /**
-     * Whether the distinct isolation window sets of the slices disagree.
+     * Whether the isolation windows used at the start, middle and end of the run differ.
      *
-     * @param slices the per slice scan lists
-     * @return {@code true} when any two slices with MS2 scans have different window sets
+     * <p>Works from the assigned window sequence rather than from the sampled slices, so it gives
+     * the same answer whether the scan headers were sampled or read in full.
+     *
+     * @param assigned  the merged window index per MS2 scan, in acquisition order
+     * @param n_windows the number of distinct windows
+     * @return {@code true} when any two thirds of the run use different window sets
      */
-    private boolean window_sets_differ(List<List<IScan>> slices) {
-        Set<String> reference = null;
-        for (List<IScan> slice : slices) {
-            List<double[]> raw = new ArrayList<>();
-            for (IScan scan : slice) {
-                if (is_ms2(scan)) {
-                    double[] win = isolation_window_of(scan);
-                    if (win != null) {
-                        raw.add(win);
-                    }
+    public static boolean window_sets_differ(int[] assigned, int n_windows) {
+        if (n_windows == 0 || assigned.length < 3) {
+            return false;
+        }
+        int third = assigned.length / 3;
+        Set<Integer> reference = null;
+        for (int part = 0; part < 3; part++) {
+            int from = part * third;
+            int to = part == 2 ? assigned.length : from + third;
+            Set<Integer> ids = new HashSet<>();
+            for (int i = from; i < to; i++) {
+                if (assigned[i] >= 0) {
+                    ids.add(assigned[i]);
                 }
             }
-            if (raw.isEmpty()) {
+            if (ids.isEmpty()) {
                 continue;
             }
-            Set<String> ids = merge_windows(raw, this.window_merge_tol).stream()
-                    .map(w -> w.id).collect(Collectors.toSet());
             if (reference == null) {
                 reference = ids;
             } else if (!reference.equals(ids)) {
@@ -512,34 +520,37 @@ public class MsRunMeta {
     public static List<IsolationWindow> merge_windows(List<double[]> raw, double tol) {
         List<double[]> sorted = new ArrayList<>(raw);
         sorted.sort(Comparator.comparingDouble(w -> w[0]));
-        // each cluster is {sum_lo, sum_hi, n}
+        // each cluster is {anchor_lo, anchor_hi, sum_lo, sum_hi, n}. Membership is tested against
+        // the anchor - the first window that formed the cluster - rather than against the running
+        // mean. A mean drifts upward as members are added, which can push one cluster's key above
+        // its successor's and so break the ordering the early exit below depends on. Anchors are
+        // ascending by construction because the input is sorted by lower edge.
         List<double[]> clusters = new ArrayList<>();
         for (double[] w : sorted) {
             boolean merged = false;
             for (int i = clusters.size() - 1; i >= 0; i--) {
                 double[] c = clusters.get(i);
-                double lo = c[0] / c[2];
-                double hi = c[1] / c[2];
-                if (lo < w[0] - tol) {
-                    // clusters are created in ascending lo order and we scan backwards, so every
-                    // earlier cluster is further below w and cannot match either
+                if (c[0] < w[0] - tol) {
+                    // anchors ascend and we scan backwards, so every earlier cluster is further
+                    // below w and cannot match either
                     break;
                 }
-                if (Math.abs(w[0] - lo) <= tol && Math.abs(w[1] - hi) <= tol) {
-                    c[0] += w[0];
-                    c[1] += w[1];
-                    c[2] += 1;
+                if (Math.abs(w[0] - c[0]) <= tol && Math.abs(w[1] - c[1]) <= tol) {
+                    c[2] += w[0];
+                    c[3] += w[1];
+                    c[4] += 1;
                     merged = true;
                     break;
                 }
             }
             if (!merged) {
-                clusters.add(new double[]{w[0], w[1], 1});
+                clusters.add(new double[]{w[0], w[1], w[0], w[1], 1});
             }
         }
         List<IsolationWindow> out = new ArrayList<>(clusters.size());
         for (double[] c : clusters) {
-            out.add(new IsolationWindow(c[0] / c[2], c[1] / c[2]));
+            // report the averaged edges, which removes converter jitter from the bounds
+            out.add(new IsolationWindow(c[2] / c[4], c[3] / c[4]));
         }
         out.sort(Comparator.comparingDouble(w -> w.mz_lower));
         return out;
@@ -551,7 +562,7 @@ public class MsRunMeta {
      * Measures the sampled scans and fills in the acquisition type, isolation scheme and every
      * supporting statistic.
      *
-     * @param scans the sampled scan headers
+     * @param input the sampled scan headers
      */
     private void classify_from_scans(List<IScan> input) {
         // the periodicity test reads the window sequence in acquisition order, so make the order
@@ -559,6 +570,8 @@ public class MsRunMeta {
         List<IScan> scans = new ArrayList<>(input);
         scans.sort(Comparator.comparingInt(IScan::getNum));
         List<double[]> raw = new ArrayList<>();
+        // one slot per MS2 scan in acquisition order, null where no window was declared
+        List<double[]> ms2_windows = new ArrayList<>();
         List<Integer> ms2_per_ms1 = new ArrayList<>();
         int n_charge = 0;
         int n_mono = 0;
@@ -611,6 +624,10 @@ public class MsRunMeta {
                     }
                 }
                 double[] win = isolation_window_of(scan);
+                // keep a slot even when there is no window: the periodicity test walks this list
+                // positionally, so dropping an entry would shift every later scan by one and
+                // break the comparison for the whole remainder of the run
+                ms2_windows.add(win);
                 if (win == null) {
                     n_no_window++;
                 } else {
@@ -635,8 +652,9 @@ public class MsRunMeta {
         }
 
         this.isolation_windows = merge_windows(raw, this.window_merge_tol);
-        int[] assigned = assign_windows(raw, this.isolation_windows, this.window_merge_tol);
+        int[] assigned = assign_windows(ms2_windows, this.isolation_windows, this.window_merge_tol);
         count_scans_per_window(assigned);
+        this.has_multiple_window_sets = window_sets_differ(assigned, this.isolation_windows.size());
 
         int n_distinct = this.isolation_windows.size();
         double distinct_ratio = this.n_ms2 == 0 ? 0 : (double) n_distinct / this.n_ms2;
@@ -660,6 +678,15 @@ public class MsRunMeta {
             this.isolation_scheme = this.scheme_metrics.scheme();
             this.is_fixed_width = this.scheme_metrics.is_fixed_width();
             this.is_overlapped = this.scheme_metrics.is_overlapped();
+            if (this.has_multiple_window_sets && this.is_overlapped) {
+                // the windows were interleaved from sets that were never in use at the same time,
+                // so an overlap measured across them says nothing about the real acquisition
+                this.isolation_scheme = IsolationScheme.UNKNOWN;
+                this.is_overlapped = false;
+                this.notes.add("Windows from different parts of the run interleave to look "
+                        + "staggered, but they were never acquired together, so the scheme cannot "
+                        + "be determined from the union.");
+            }
             double ratio = this.scheme_metrics.median_offset_ratio();
             if (ratio > 0.70 && ratio < 0.85) {
                 this.notes.add(String.format(Locale.ROOT, "Adjacent windows overlap more than a "
@@ -686,7 +713,8 @@ public class MsRunMeta {
      * distinct windows and tens of thousands of MS2 scans, where a linear scan per scan would be
      * hundreds of millions of comparisons.
      *
-     * @param raw     per scan {@code {lo, hi}} pairs in acquisition order
+     * @param raw     per scan {@code {lo, hi}} pairs in acquisition order, null where the scan
+     *                declared no isolation window
      * @param merged  the distinct windows, sorted by mz_lower
      * @param tol     edge agreement tolerance in m/z
      * @return the index into {@code merged} per raw window, -1 when unassignable
@@ -700,6 +728,9 @@ public class MsRunMeta {
         for (int i = 0; i < raw.size(); i++) {
             double[] w = raw.get(i);
             out[i] = -1;
+            if (w == null) {
+                continue;
+            }
             for (List<Integer> candidates : by_lower.subMap(w[0] - tol, true, w[0] + tol, true).values()) {
                 for (int index : candidates) {
                     if (Math.abs(w[1] - merged.get(index).mz_upper) <= tol) {
@@ -715,10 +746,20 @@ public class MsRunMeta {
         return out;
     }
 
+    /**
+     * Counts sampled MS2 scans per merged window.
+     *
+     * <p>Keyed on the merged window index, not on {@link IsolationWindow#generate_id}: that id
+     * rounds to 0.1 m/z, which is coarser than the 0.05 m/z merge tolerance, so two genuinely
+     * distinct windows can share one id and would have their counts summed together.
+     *
+     * @param assigned the merged window index per MS2 scan
+     */
     private void count_scans_per_window(int[] assigned) {
+        this.window_scan_counts = new int[this.isolation_windows.size()];
         for (int index : assigned) {
             if (index >= 0) {
-                this.isolation_window2n_scan.merge(this.isolation_windows.get(index).id, 1, Integer::sum);
+                this.window_scan_counts[index]++;
             }
         }
     }
@@ -743,6 +784,11 @@ public class MsRunMeta {
         if (e.n_distinct_windows() == 0) {
             // MS2 present but no isolation windows declared at all - a DDA converter artefact
             return AcquisitionType.DDA;
+        }
+        if (e.n_distinct_windows() == 1) {
+            // one window repeated is trivially periodic and trivially "covers" its own range, so
+            // neither test can separate AIF (DIA) from SIM or a single-target PRM method
+            return AcquisitionType.UNKNOWN;
         }
         if (e.periodicity() >= 0.70) {
             // a repeating window schedule: DIA when it tiles the precursor range, otherwise a
@@ -1038,7 +1084,9 @@ public class MsRunMeta {
                     if (this.instrument_serial.isEmpty() && param.getValue() != null) {
                         this.instrument_serial = param.getValue();
                     }
-                } else if (!CV_CUSTOMIZATION.equals(accession) && this.instrument_model.isEmpty()) {
+                } else if (!CV_CUSTOMIZATION.equals(accession)
+                        && !CV_GENERIC_INSTRUMENT_MODEL.equals(accession)
+                        && this.instrument_model.isEmpty()) {
                     this.instrument_accession = accession;
                     this.instrument_model = param.getName() == null ? "" : param.getName();
                     this.instrument_source = "instrumentConfiguration";
@@ -1303,8 +1351,11 @@ public class MsRunMeta {
         row.put("coverage_fraction", this.evidence == null ? "-" : fmt(this.evidence.coverage_fraction()));
         row.put("precursor_mz_min", fmt(this.precursor_mz_min));
         row.put("precursor_mz_max", fmt(this.precursor_mz_max));
-        row.put("n_ms1", this.n_ms1);
-        row.put("n_ms2", this.n_ms2);
+        // these counts, and everything derived from them, cover the scan headers that were
+        // actually read - the whole run under -full, a bounded sample otherwise
+        row.put("scan_read_mode", this.full_scan ? "full" : "sampled");
+        row.put("n_ms1_read", this.n_ms1);
+        row.put("n_ms2_read", this.n_ms2);
         row.put("median_ms2_per_ms1", this.evidence == null ? "-" : fmt(this.evidence.median_ms2_per_ms1()));
         row.put("cycles_observed", this.evidence == null ? "-" : fmt(this.evidence.cycles_observed()));
         row.put("rt_min", fmt(this.rt_min));
@@ -1379,7 +1430,9 @@ public class MsRunMeta {
     public File write_isolation_window_tsv(String out_dir, String base_name) throws IOException {
         File out = new File(out_dir, base_name + "_isolation_windows.tsv");
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(out))) {
-            writer.write("window_id\tmz_lower\tmz_upper\twidth\tcenter\tn_scans\tstep_to_next\toffset_ratio");
+            // window_index is the unique key: window_id rounds to 0.1 m/z and can repeat
+            writer.write("window_index\twindow_id\tmz_lower\tmz_upper\twidth\tcenter\tn_scans"
+                    + "\tstep_to_next\toffset_ratio");
             writer.newLine();
             for (int i = 0; i < this.isolation_windows.size(); i++) {
                 IsolationWindow w = this.isolation_windows.get(i);
@@ -1391,10 +1444,10 @@ public class MsRunMeta {
                     step = fmt(s);
                     ratio = width > 0 ? fmt(s / width) : "-";
                 }
-                writer.write(w.id + "\t" + fmt(w.mz_lower) + "\t" + fmt(w.mz_upper) + "\t"
+                int n_scans = i < this.window_scan_counts.length ? this.window_scan_counts[i] : 0;
+                writer.write(i + "\t" + w.id + "\t" + fmt(w.mz_lower) + "\t" + fmt(w.mz_upper) + "\t"
                         + fmt(width) + "\t" + fmt(0.5 * (w.mz_lower + w.mz_upper)) + "\t"
-                        + this.isolation_window2n_scan.getOrDefault(w.id, 0) + "\t" + step + "\t"
-                        + ratio);
+                        + n_scans + "\t" + step + "\t" + ratio);
                 writer.newLine();
             }
         }
@@ -1416,13 +1469,27 @@ public class MsRunMeta {
      * @throws IOException when the folder cannot be walked
      */
     public static List<File> find_mzml_files(File dir) throws IOException {
-        try (Stream<Path> paths = Files.walk(dir.toPath())) {
-            return paths.filter(Files::isRegularFile)
-                    .filter(p -> is_mzml(p.getFileName().toString()))
-                    .map(Path::toFile)
-                    .sorted(Comparator.comparing(File::getAbsolutePath))
-                    .collect(Collectors.toList());
-        }
+        List<File> found = new ArrayList<>();
+        // Files.walk would abort the whole scan with an UncheckedIOException on the first
+        // directory it cannot list, so visit the tree and skip unreadable entries instead
+        Files.walkFileTree(dir.toPath(), new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) {
+                if (attrs.isRegularFile() && is_mzml(path.getFileName().toString())) {
+                    found.add(path.toFile());
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path path, IOException e) {
+                Cloger.getInstance().logger.warn("Skipped unreadable path " + path + ": "
+                        + e.getMessage());
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        found.sort(Comparator.comparing(File::getAbsolutePath));
+        return found;
     }
 
     /**
@@ -1445,7 +1512,10 @@ public class MsRunMeta {
                 List<String> values = new ArrayList<>(columns.size());
                 for (String column : columns) {
                     Object v = row.get(column);
-                    values.add(v == null ? "-" : String.valueOf(v).replace('\t', ' '));
+                    // notes carry raw exception messages, which routinely contain newlines; left
+                    // in place they would split one run across several rows
+                    values.add(v == null ? "-"
+                            : String.valueOf(v).replaceAll("[\\t\\r\\n]+", " ").trim());
                 }
                 writer.write(String.join("\t", values));
                 writer.newLine();
@@ -1538,7 +1608,15 @@ public class MsRunMeta {
                     + meta.acquisition_type
                     + (meta.acquisition_type == AcquisitionType.DIA ? "/" + meta.isolation_scheme : ""));
             if (detail) {
-                write_detail_files(meta, out_dir, used_names);
+                try {
+                    write_detail_files(meta, out_dir, used_names);
+                } catch (IOException | RuntimeException e) {
+                    // a detail file that cannot be written must not cost us the summary row, nor
+                    // the rows of every file already profiled
+                    meta.notes.add("Could not write the detail files: " + e.getMessage());
+                    Cloger.getInstance().logger.warn("Could not write detail files for "
+                            + file.getAbsolutePath() + ": " + e.getMessage());
+                }
             }
         }
         File out_file = new File(out_dir, "mzml_acquisition_summary.tsv");
