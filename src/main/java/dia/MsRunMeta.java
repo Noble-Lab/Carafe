@@ -431,6 +431,20 @@ public class MsRunMeta {
     }
 
     /**
+     * The instrument in as few characters as carry meaning: the Carafe short name when the model
+     * is one Carafe knows, otherwise the raw model string so an unrecognised instrument is still
+     * named rather than shown as a dash.
+     *
+     * @return the short name, the raw model, or "-"
+     */
+    public String display_instrument() {
+        if (!this.ms_instrument.isEmpty()) {
+            return this.ms_instrument;
+        }
+        return blank_to_dash(this.instrument_model);
+    }
+
+    /**
      * Whether the file could not be read at all - wrong format, missing or empty index, or a parse
      * failure. Distinct from an inconclusive verdict: a run that was read fine but whose
      * acquisition type could not be decided is {@link AcquisitionType#UNKNOWN} while still having
@@ -1883,7 +1897,8 @@ public class MsRunMeta {
             }
             results.add(meta);
             System.out.println("[" + (i + 1) + "/" + files.size() + "] " + file.getName()
-                    + " (" + human_size(meta.file_size_bytes) + ") -> " + meta.acquisition_type
+                    + " (" + human_size(meta.file_size_bytes) + ") -> " + meta.display_instrument()
+                    + "  " + meta.acquisition_type
                     + (meta.acquisition_type == AcquisitionType.DIA ? "/" + meta.isolation_scheme : ""));
             if (detail) {
                 try {

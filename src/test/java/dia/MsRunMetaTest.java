@@ -703,6 +703,21 @@ public class MsRunMetaTest {
     }
 
     @Test
+    public void testDisplayInstrumentPrefersShortNameThenModel() {
+        MsRunMeta known = new MsRunMeta();
+        known.ms_instrument = "Eclipse";
+        known.instrument_model = "Orbitrap Eclipse";
+        assertEquals(known.display_instrument(), "Eclipse");
+
+        // an instrument Carafe has no short name for is still worth naming
+        MsRunMeta unknown_model = new MsRunMeta();
+        unknown_model.instrument_model = "Orbitrap Ascend";
+        assertEquals(unknown_model.display_instrument(), "Orbitrap Ascend");
+
+        assertEquals(new MsRunMeta().display_instrument(), "-");
+    }
+
+    @Test
     public void testSummaryStatesFileSize() {
         MsRunMeta meta = new MsRunMeta();
         meta.ms_file = "/tmp/example.mzML";
