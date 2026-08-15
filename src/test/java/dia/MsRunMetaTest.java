@@ -79,8 +79,8 @@ public class MsRunMetaTest {
                                                 double charge_frac) {
         double distinct_ratio = n_ms2 == 0 ? 0 : (double) n_distinct / n_ms2;
         double cycles = n_distinct == 0 ? 0 : (double) n_ms2 / n_distinct;
-        return new AcquisitionEvidence(n_ms2 / 10, n_ms2, n_distinct, distinct_ratio, periodicity,
-                median_width, charge_frac, charge_frac, coverage, 10, cycles, false);
+        return new AcquisitionEvidence(n_ms2 / 10, n_ms2, n_distinct, distinct_ratio, n_distinct,
+                periodicity, median_width, charge_frac, charge_frac, coverage, 10, cycles, false);
     }
 
     /**
@@ -331,8 +331,8 @@ public class MsRunMetaTest {
 
     @Test
     public void testAcqSrmScanType() {
-        AcquisitionEvidence e = new AcquisitionEvidence(10, 3000, 2000, 0.67, 0.0, 1.0, 0.0, 0.0,
-                0.9, 10, 1.5, true);
+        AcquisitionEvidence e = new AcquisitionEvidence(10, 3000, 2000, 0.67, 2000, 0.0, 1.0, 0.0,
+                0.0, 0.9, 10, 1.5, true);
         assertEquals(MsRunMeta.classify_acquisition(e), AcquisitionType.SRM);
     }
 
@@ -387,6 +387,56 @@ public class MsRunMetaTest {
             seq[i] = 19;
         }
         assertTrue(MsRunMeta.periodicity(seq, 20) > 0.9);
+    }
+
+    // ------------------------------------------------------------------ cycle length
+
+    @Test
+    public void testEstimateCycleLengthOnCleanSchedule() {
+        assertEquals(MsRunMeta.estimate_cycle_length(cyclic_sequence(60, 40)), 60);
+        assertEquals(MsRunMeta.estimate_cycle_length(cyclic_sequence(250, 12)), 250);
+    }
+
+    /**
+     * The Eclipse plant DIA case: a 101 window schedule plus one stray window seen once. Taking
+     * the period from the distinct window count gives 102 and scores a clean DIA run at zero, so
+     * the cycle length has to be measured from the sequence instead.
+     */
+    @Test
+    public void testStrayWindowDoesNotChangeTheCycleLength() {
+        int cycle = 101;
+        int[] seq = new int[cycle * 70 + 1];
+        seq[0] = cycle; // the stray window, never seen again
+        for (int i = 1; i < seq.length; i++) {
+            seq[i] = (i - 1) % cycle;
+        }
+        int n_distinct = cycle + 1;
+        assertEquals(MsRunMeta.estimate_cycle_length(seq), cycle);
+        // the stray scan itself is the one position that cannot match a cycle later
+        double measured = MsRunMeta.periodicity(seq, MsRunMeta.estimate_cycle_length(seq));
+        assertTrue(measured > 0.99, "expected a clearly periodic sequence, got " + measured);
+        assertTrue(measured < 1.0, "the stray scan should still cost exactly one comparison");
+        assertEquals(MsRunMeta.periodicity(seq, n_distinct), 0.0, 1e-9,
+                "using the window count as the period is what broke on the real file");
+    }
+
+    @Test
+    public void testEstimateCycleLengthToleratesMissingScans() {
+        int[] seq = cyclic_sequence(20, 40);
+        for (int i = 7; i < seq.length; i += 111) {
+            seq[i] = -1;
+        }
+        assertEquals(MsRunMeta.estimate_cycle_length(seq), 20);
+    }
+
+    @Test
+    public void testEstimateCycleLengthWithNoRepeats() {
+        int[] seq = new int[50];
+        for (int i = 0; i < seq.length; i++) {
+            seq[i] = i;
+        }
+        assertEquals(MsRunMeta.estimate_cycle_length(seq), 0);
+        assertEquals(MsRunMeta.periodicity(seq, 0), 0.0, 1e-9);
     }
 
     // ------------------------------------------------------------------ window assignment

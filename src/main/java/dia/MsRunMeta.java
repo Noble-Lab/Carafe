@@ -244,6 +244,8 @@ public class MsRunMeta {
      * @param n_ms2              number of MS2 scans in the sample
      * @param n_distinct_windows number of distinct isolation windows
      * @param distinct_ratio     n_distinct_windows / n_ms2
+     * @param cycle_length       MS2 scans per acquisition cycle, measured from the window
+     *                           sequence; the period the periodicity test was run at
      * @param periodicity        fraction of MS2 scans whose isolation window repeats exactly one
      *                           cycle later; about 1 for DIA and about 0 for DDA
      * @param median_width       median isolation window width in m/z
@@ -255,7 +257,7 @@ public class MsRunMeta {
      * @param any_srm_scan_type  whether any scan is typed SRM, MRM or CRM
      */
     public record AcquisitionEvidence(int n_ms1, int n_ms2, int n_distinct_windows,
-                                      double distinct_ratio, double periodicity,
+                                      double distinct_ratio, int cycle_length, double periodicity,
                                       double median_width,
                                       double charge_frac, double mono_frac,
                                       double coverage_fraction, double median_ms2_per_ms1,
@@ -757,8 +759,9 @@ public class MsRunMeta {
         int n_distinct = this.isolation_windows.size();
         double distinct_ratio = this.n_ms2 == 0 ? 0 : (double) n_distinct / this.n_ms2;
         double cycles = n_distinct == 0 ? 0 : (double) this.n_ms2 / n_distinct;
+        int cycle_length = estimate_cycle_length(assigned);
         this.evidence = new AcquisitionEvidence(this.n_ms1, this.n_ms2, n_distinct, distinct_ratio,
-                periodicity(assigned, n_distinct),
+                cycle_length, periodicity(assigned, cycle_length),
                 median_width(this.isolation_windows),
                 this.n_ms2 == 0 ? 0 : (double) n_charge / this.n_ms2,
                 this.n_ms2 == 0 ? 0 : (double) n_mono / this.n_ms2,
@@ -900,8 +903,47 @@ public class MsRunMeta {
     }
 
     /**
-     * Fraction of MS2 scans whose isolation window is repeated exactly one cycle later, where the
-     * cycle length is taken to be the number of distinct windows.
+     * Estimates how many MS2 scans one acquisition cycle spans, as the most common distance
+     * between successive visits to the same isolation window.
+     *
+     * <p>Measured rather than assumed to equal the number of distinct windows. Real runs carry
+     * stray windows - a partial first cycle, an occasional extra survey window - and a single one
+     * of those inflates the window count without lengthening the cycle. Deriving the period from
+     * the window count would then test the sequence against a period one too long and score a
+     * cleanly periodic DIA run at zero.
+     *
+     * @param window_seq the isolation window index per MS2 scan, in acquisition order, -1 where
+     *                   the window is unknown
+     * @return the estimated cycle length, or 0 when no window is ever revisited
+     */
+    public static int estimate_cycle_length(int[] window_seq) {
+        Map<Integer, Integer> last_seen = new HashMap<>();
+        Map<Integer, Integer> gap_counts = new HashMap<>();
+        for (int i = 0; i < window_seq.length; i++) {
+            int window = window_seq[i];
+            if (window < 0) {
+                continue;
+            }
+            Integer previous = last_seen.put(window, i);
+            if (previous != null) {
+                gap_counts.merge(i - previous, 1, Integer::sum);
+            }
+        }
+        int best_gap = 0;
+        int best_count = 0;
+        for (Map.Entry<Integer, Integer> entry : gap_counts.entrySet()) {
+            // ties go to the shorter cycle, which is the one that actually repeats
+            if (entry.getValue() > best_count
+                    || (entry.getValue() == best_count && entry.getKey() < best_gap)) {
+                best_count = entry.getValue();
+                best_gap = entry.getKey();
+            }
+        }
+        return best_gap;
+    }
+
+    /**
+     * Fraction of MS2 scans whose isolation window is repeated exactly one cycle later.
      *
      * <p>This is what actually separates DIA from DDA. DIA steps through one fixed window schedule
      * over and over, so the sequence is periodic with period equal to the window count. DDA picks
@@ -1397,12 +1439,13 @@ public class MsRunMeta {
                 .append(" (").append(this.scan_read_mode.description).append(")\n");
         if (this.evidence != null) {
             sb.append(String.format(Locale.ROOT,
-                    "  Evidence: n_ms1=%d  n_ms2=%d  n_windows=%d  periodicity=%.4f  "
-                            + "distinct_ratio=%.4f%n            median_width=%.4f  "
-                            + "charge_frac=%.3f  mono_frac=%.3f  coverage=%.3f  "
+                    "  Evidence: n_ms1=%d  n_ms2=%d  n_windows=%d  cycle_length=%d  "
+                            + "periodicity=%.4f%n            distinct_ratio=%.4f  "
+                            + "median_width=%.4f  charge_frac=%.3f  mono_frac=%.3f  coverage=%.3f  "
                             + "ms2_per_ms1=%.1f  cycles=%.1f%n",
                     this.evidence.n_ms1(), this.evidence.n_ms2(), this.evidence.n_distinct_windows(),
-                    this.evidence.periodicity(), this.evidence.distinct_ratio(),
+                    this.evidence.cycle_length(), this.evidence.periodicity(),
+                    this.evidence.distinct_ratio(),
                     this.evidence.median_width(),
                     this.evidence.charge_frac(), this.evidence.mono_frac(),
                     this.evidence.coverage_fraction(), this.evidence.median_ms2_per_ms1(),
@@ -1468,6 +1511,7 @@ public class MsRunMeta {
         row.put("nce", fmt(this.nce));
         row.put("run_start_time", blank_to_dash(this.run_start_time));
         row.put("software", blank_to_dash(this.software));
+        row.put("cycle_length", this.evidence == null ? "-" : this.evidence.cycle_length());
         row.put("periodicity", this.evidence == null ? "-" : fmt(this.evidence.periodicity()));
         row.put("distinct_ratio", this.evidence == null ? "-" : fmt(this.evidence.distinct_ratio()));
         row.put("charge_frac", this.evidence == null ? "-" : fmt(this.evidence.charge_frac()));
