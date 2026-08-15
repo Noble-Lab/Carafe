@@ -1470,6 +1470,42 @@ public class MsRunMeta {
     }
 
     /**
+     * Writes every output file for this run under a base name taken from the mzML.
+     *
+     * @param out_dir the output directory
+     * @throws IOException when a file cannot be written
+     */
+    public void write_detail_outputs(String out_dir) throws IOException {
+        write_detail_outputs(out_dir, strip_extension(new File(this.ms_file).getName()));
+    }
+
+    /**
+     * Writes every output file for this run: the JSON summary always, and the isolation window
+     * table only when the run is DIA.
+     *
+     * <p>A window table left over from an earlier run under the same base name is deleted rather
+     * than left in place. Otherwise profiling a DIA run and then a non-DIA run into one directory
+     * leaves a summary saying DDA beside a window table from the DIA run, and anything reading the
+     * tables by name pairs the two up.
+     *
+     * @param out_dir   the output directory
+     * @param base_name the output file name without the suffix
+     * @throws IOException when a file cannot be written or a stale one cannot be removed
+     */
+    public void write_detail_outputs(String out_dir, String base_name) throws IOException {
+        write_summary_json(out_dir, base_name);
+        if (this.acquisition_type == AcquisitionType.DIA) {
+            write_isolation_window_tsv(out_dir, base_name);
+            return;
+        }
+        File stale = new File(out_dir, base_name + "_isolation_windows.tsv");
+        if (Files.deleteIfExists(stale.toPath())) {
+            Cloger.getInstance().logger.info("Removed an isolation window table left by an earlier "
+                    + "run: " + stale.getAbsolutePath());
+        }
+    }
+
+    /**
      * Writes the JSON summary for one run.
      *
      * @param out_dir the output directory
@@ -1661,11 +1697,13 @@ public class MsRunMeta {
             meta.full_scan = full;
             meta.profile(input.getAbsolutePath());
             System.out.println(meta.summary());
-            File json = meta.write_summary_json(out_dir);
-            Cloger.getInstance().logger.info("Summary written to " + json.getAbsolutePath());
+            meta.write_detail_outputs(out_dir);
+            String base = strip_extension(input.getName());
+            Cloger.getInstance().logger.info("Summary written to "
+                    + new File(out_dir, base + "_acquisition.json").getAbsolutePath());
             if (meta.acquisition_type == AcquisitionType.DIA) {
-                File tsv = meta.write_isolation_window_tsv(out_dir);
-                Cloger.getInstance().logger.info("Isolation windows written to " + tsv.getAbsolutePath());
+                Cloger.getInstance().logger.info("Isolation windows written to "
+                        + new File(out_dir, base + "_isolation_windows.tsv").getAbsolutePath());
             }
             return;
         }
@@ -1744,9 +1782,6 @@ public class MsRunMeta {
         while (!used_names.add(name)) {
             name = base + "_" + (++suffix);
         }
-        meta.write_summary_json(out_dir, name);
-        if (meta.acquisition_type == AcquisitionType.DIA) {
-            meta.write_isolation_window_tsv(out_dir, name);
-        }
+        meta.write_detail_outputs(out_dir, name);
     }
 }

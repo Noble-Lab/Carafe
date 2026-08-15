@@ -753,6 +753,51 @@ public class MsRunMetaTest {
         }
     }
 
+    /**
+     * Re-profiling into an output directory that already holds a window table from a DIA run must
+     * not leave that table behind when the new run is not DIA. A stale table beside a DDA summary
+     * reads as belonging to it.
+     */
+    @Test
+    public void testNonDiaRunRemovesStaleIsolationWindowTable() throws Exception {
+        Path root = Files.createTempDirectory("mzml_stale_windows");
+        try {
+            Path output = Files.createDirectories(root.resolve("output"));
+            Path stale = output.resolve("sample_isolation_windows.tsv");
+            Files.writeString(stale, "window_index\tmz_lower\n0\t400.0\n");
+
+            MsRunMeta dda = new MsRunMeta();
+            dda.ms_file = root.resolve("sample.mzML").toString();
+            dda.acquisition_type = AcquisitionType.DDA;
+            dda.write_detail_outputs(output.toString());
+
+            assertTrue(Files.exists(output.resolve("sample_acquisition.json")));
+            assertFalse(Files.exists(stale), "a window table from an earlier DIA run was left behind");
+        } finally {
+            delete_tree(root);
+        }
+    }
+
+    @Test
+    public void testDiaRunWritesIsolationWindowTable() throws Exception {
+        Path root = Files.createTempDirectory("mzml_dia_windows");
+        try {
+            Path output = Files.createDirectories(root.resolve("output"));
+            MsRunMeta dia = new MsRunMeta();
+            dia.ms_file = root.resolve("sample.mzML").toString();
+            dia.acquisition_type = AcquisitionType.DIA;
+            dia.isolation_windows = fixed_windows(400, 8, 8, 4);
+            dia.window_scan_counts = new int[]{3, 3, 3, 3};
+            dia.write_detail_outputs(output.toString());
+
+            Path table = output.resolve("sample_isolation_windows.tsv");
+            assertTrue(Files.exists(table));
+            assertEquals(Files.readAllLines(table).size(), 5, "header plus one row per window");
+        } finally {
+            delete_tree(root);
+        }
+    }
+
     @Test
     public void testFolderDetailNamesUseNormalizedRelativePaths() throws Exception {
         Path root = Files.createTempDirectory("mzml_detail_names");
