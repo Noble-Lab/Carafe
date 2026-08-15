@@ -597,6 +597,25 @@ public class MsRunMetaTest {
                 new ArrayList<>(bare.as_row().keySet()));
     }
 
+    /**
+     * A file that could not be read is a failure; a file that was read but whose acquisition type
+     * could not be decided is an honest verdict. The exit code keys on the first, not the second.
+     */
+    @Test
+    public void testFailedToReadDistinguishesUnreadableFromUndecided() {
+        MsRunMeta unread = new MsRunMeta();
+        assertTrue(unread.failed_to_read());
+
+        MsRunMeta wrong_format = new MsRunMeta().profile("not_an_ms_file.txt");
+        assertTrue(wrong_format.failed_to_read());
+
+        MsRunMeta undecided = new MsRunMeta();
+        undecided.scan_read_mode = ScanReadMode.FULL;
+        undecided.acquisition_type = AcquisitionType.UNKNOWN;
+        assertFalse(undecided.failed_to_read(),
+                "an undecided verdict on a file that was read is not a read failure");
+    }
+
     @Test
     public void testSummaryStatesScanReadMode() {
         MsRunMeta unread = new MsRunMeta();

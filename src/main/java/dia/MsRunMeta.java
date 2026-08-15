@@ -423,6 +423,18 @@ public class MsRunMeta {
     }
 
     /**
+     * Whether the file could not be read at all - wrong format, missing or empty index, or a parse
+     * failure. Distinct from an inconclusive verdict: a run that was read fine but whose
+     * acquisition type could not be decided is {@link AcquisitionType#UNKNOWN} while still having
+     * been read, and is not a failure.
+     *
+     * @return {@code true} when no scan headers back the result
+     */
+    public boolean failed_to_read() {
+        return this.scan_read_mode == ScanReadMode.NOT_READ;
+    }
+
+    /**
      * Whether a path looks like an mzML file.
      *
      * @param ms_file the path
@@ -447,12 +459,14 @@ public class MsRunMeta {
      */
     private List<IScan> sample_scan_headers(MZMLFile source, int lo, int hi) throws FileParsingException {
         int n_total = hi - lo + 1;
+        // the mode is recorded only once a parse has actually returned, so that NOT_READ means
+        // exactly what it says: no scan headers back the result
         if (this.full_scan || 3L * this.probe_scans_per_slice >= n_total) {
+            List<IScan> all = source.parse(LCMSDataSubset.STRUCTURE_ONLY);
             this.scan_read_mode = ScanReadMode.FULL;
-            return source.parse(LCMSDataSubset.STRUCTURE_ONLY);
+            return all;
         }
 
-        this.scan_read_mode = ScanReadMode.SAMPLED;
         int mid = lo + (n_total - this.probe_scans_per_slice) / 2;
         int tail = hi - this.probe_scans_per_slice + 1;
         TreeMap<Integer, IScan> by_num = new TreeMap<>();
@@ -467,9 +481,11 @@ public class MsRunMeta {
         String reason = inconclusive_reason(sample);
         if (reason != null) {
             this.notes.add("The sampled scans " + reason + "; read all scan headers instead.");
+            List<IScan> all = source.parse(LCMSDataSubset.STRUCTURE_ONLY);
             this.scan_read_mode = ScanReadMode.FULL;
-            return source.parse(LCMSDataSubset.STRUCTURE_ONLY);
+            return all;
         }
+        this.scan_read_mode = ScanReadMode.SAMPLED;
         return sample;
     }
 
@@ -1705,13 +1721,19 @@ public class MsRunMeta {
                 Cloger.getInstance().logger.info("Isolation windows written to "
                         + new File(out_dir, base + "_isolation_windows.tsv").getAbsolutePath());
             }
+            if (meta.failed_to_read()) {
+                // the report is still written as a record of the attempt, but the run did not
+                // produce a profile and a caller checking the exit code has to see that
+                Cloger.getInstance().logger.error("Could not profile " + input.getAbsolutePath());
+                System.exit(1);
+            }
             return;
         }
 
         List<File> files = find_mzml_files(input);
         if (files.isEmpty()) {
             Cloger.getInstance().logger.error("No mzML file found under " + input.getAbsolutePath());
-            return;
+            System.exit(1);
         }
         Cloger.getInstance().logger.info("Found " + files.size() + " mzML files under "
                 + input.getAbsolutePath());
@@ -1753,6 +1775,17 @@ public class MsRunMeta {
         write_batch_tsv(results, out_file);
         Cloger.getInstance().logger.info("Summary of " + results.size() + " runs written to "
                 + out_file.getAbsolutePath());
+        long n_failed = results.stream().filter(MsRunMeta::failed_to_read).count();
+        if (n_failed > 0) {
+            Cloger.getInstance().logger.warn(n_failed + " of " + results.size()
+                    + " files could not be read; their rows report UNKNOWN.");
+        }
+        if (n_failed == results.size()) {
+            // some files read is a usable batch; none read is a failed run
+            Cloger.getInstance().logger.error("No file under " + input.getAbsolutePath()
+                    + " could be profiled.");
+            System.exit(1);
+        }
     }
 
     /**
