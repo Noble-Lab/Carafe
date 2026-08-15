@@ -137,6 +137,12 @@ public class MsRunMeta {
     public boolean full_scan = false;
 
     /**
+     * How the scan headers backing the current result were read: full, sampled or not_read.
+     * Unlike {@link #full_scan}, this records the effective mode after automatic fallbacks.
+     */
+    public String scan_read_mode = "not_read";
+
+    /**
      * Two windows whose lower and upper edges both agree to within this many m/z are the same
      * window.
      */
@@ -321,7 +327,7 @@ public class MsRunMeta {
      * @return this, for chaining
      */
     public MsRunMeta profile(String ms_file) {
-        this.ms_file = ms_file;
+        reset_results(ms_file);
         if (!is_mzml(ms_file)) {
             this.notes.add("Not an mzML file; only mzML is supported.");
             Cloger.getInstance().logger.error("Only mzML is supported for run profiling: " + ms_file);
@@ -357,6 +363,39 @@ public class MsRunMeta {
     }
 
     /**
+     * Clears per-run output before profiling another file while preserving caller configuration.
+     */
+    private void reset_results(String ms_file) {
+        this.ms_file = ms_file;
+        this.ms_instrument = "";
+        this.instrument_model = "";
+        this.instrument_vendor = "";
+        this.instrument_serial = "";
+        this.instrument_accession = "";
+        this.instrument_source = "none";
+        this.acquisition_type = AcquisitionType.UNKNOWN;
+        this.isolation_scheme = IsolationScheme.UNKNOWN;
+        this.is_overlapped = false;
+        this.is_fixed_width = false;
+        this.has_multiple_window_sets = false;
+        this.isolation_windows = new ArrayList<>();
+        this.window_scan_counts = new int[0];
+        this.evidence = null;
+        this.scheme_metrics = null;
+        this.notes = new ArrayList<>();
+        this.n_ms1 = 0;
+        this.n_ms2 = 0;
+        this.rt_min = -1;
+        this.rt_max = -1;
+        this.nce = -1;
+        this.precursor_mz_min = -1;
+        this.precursor_mz_max = -1;
+        this.run_start_time = "";
+        this.software = "";
+        this.scan_read_mode = "not_read";
+    }
+
+    /**
      * Whether a path looks like an mzML file.
      *
      * @param ms_file the path
@@ -382,9 +421,11 @@ public class MsRunMeta {
     private List<IScan> sample_scan_headers(MZMLFile source, int lo, int hi) throws FileParsingException {
         int n_total = hi - lo + 1;
         if (this.full_scan || 3L * this.probe_scans_per_slice >= n_total) {
+            this.scan_read_mode = "full";
             return source.parse(LCMSDataSubset.STRUCTURE_ONLY);
         }
 
+        this.scan_read_mode = "sampled";
         int mid = lo + (n_total - this.probe_scans_per_slice) / 2;
         int tail = hi - this.probe_scans_per_slice + 1;
         TreeMap<Integer, IScan> by_num = new TreeMap<>();
@@ -396,9 +437,10 @@ public class MsRunMeta {
         }
 
         List<IScan> sample = new ArrayList<>(by_num.values());
-        if (!sample_is_conclusive(sample)) {
-            this.notes.add("The sampled scans did not span a full acquisition cycle; read all "
-                    + "scan headers instead.");
+        String reason = inconclusive_reason(sample);
+        if (reason != null) {
+            this.notes.add("The sampled scans " + reason + "; read all scan headers instead.");
+            this.scan_read_mode = "full";
             return source.parse(LCMSDataSubset.STRUCTURE_ONLY);
         }
         return sample;
@@ -411,18 +453,21 @@ public class MsRunMeta {
     private static final int MIN_PERIODICITY_COMPARISONS = 100;
 
     /**
-     * Whether the sample already settles the acquisition type, so that reading every scan header
-     * would not change the answer.
+     * Why the sample does not yet settle the acquisition type, or null when it does.
      *
      * <p>The periodicity test needs the MS2 sequence to be longer than one cycle before it can
      * compare anything at all. Once it can, its result is conclusive in both directions: a high
      * value means a repeating schedule and a low value means precursors chosen on the fly, and
      * neither verdict moves when more of the same run is added.
      *
+     * <p>Returns a reason rather than a bare {@code false} so the note left on the result says
+     * which of the two very different situations was hit - a run that looks MS1-only so far, or
+     * one whose acquisition cycle is longer than the sample.
+     *
      * @param scans the sampled scans
-     * @return {@code true} when the sample is sufficient
+     * @return the reason the sample is insufficient, or null when it is sufficient
      */
-    private boolean sample_is_conclusive(List<IScan> scans) {
+    private String inconclusive_reason(List<IScan> scans) {
         List<double[]> raw = new ArrayList<>();
         int n_ms2 = 0;
         for (IScan scan : scans) {
@@ -434,11 +479,19 @@ public class MsRunMeta {
                 }
             }
         }
-        if (n_ms2 == 0 || raw.isEmpty()) {
-            return true; // MS1 only, or no isolation windows at all; more scans will not help
+        // A bounded probe cannot prove that the unsampled parts of the run contain no MS2 scans
+        // or no isolation windows, so read the whole structure before reporting MS1_ONLY or DDA.
+        if (n_ms2 == 0) {
+            return "contained no MS2 scans";
+        }
+        if (raw.isEmpty()) {
+            return "contained no MS2 scan declaring an isolation window";
         }
         int n_distinct = merge_windows(raw, this.window_merge_tol).size();
-        return raw.size() >= n_distinct + MIN_PERIODICITY_COMPARISONS;
+        if (raw.size() < n_distinct + MIN_PERIODICITY_COMPARISONS) {
+            return "did not span a full acquisition cycle";
+        }
+        return null;
     }
 
     /**
@@ -647,8 +700,10 @@ public class MsRunMeta {
         this.precursor_mz_max = mz_hi == -Double.MAX_VALUE ? -1 : mz_hi;
 
         if (n_no_window > 0) {
-            this.notes.add(n_no_window + " of " + this.n_ms2
-                    + " MS2 scans declared no isolation window and were excluded.");
+            // they still occupy a slot in the window sequence - only the window set omits them
+            this.notes.add(n_no_window + " of " + this.n_ms2 + " MS2 scans declared no isolation "
+                    + "window; they are excluded from the window list but still hold their place "
+                    + "in the acquisition order.");
         }
 
         this.isolation_windows = merge_windows(raw, this.window_merge_tol);
@@ -767,9 +822,12 @@ public class MsRunMeta {
     /**
      * Decides DDA against DIA from the scan level evidence.
      *
-     * <p>The primary discriminator is window reuse, not window width. Width fails at both ends:
-     * narrow window DIA exists (2 m/z Astral methods) and wide window DDA exists. Reuse does not
-     * fail that way, because repeating one small window set is structural to what DIA is.
+     * <p>The discriminator is {@link #periodicity(int[], int)} - whether the isolation windows
+     * step through one repeating schedule. Two more obvious measures were tried first and both
+     * fail on real data. Window width fails at both ends: a Q Exactive DDA run and an Astral DIA
+     * run both sit at 2 m/z, and Astral gas-phase-fractionation methods are narrower still.
+     * Window reuse fails because it is not invariant to how much of the run is read - see the
+     * note on {@link #periodicity(int[], int)}.
      *
      * @param e the measurements
      * @return the acquisition type
@@ -1352,8 +1410,8 @@ public class MsRunMeta {
         row.put("precursor_mz_min", fmt(this.precursor_mz_min));
         row.put("precursor_mz_max", fmt(this.precursor_mz_max));
         // these counts, and everything derived from them, cover the scan headers that were
-        // actually read - the whole run under -full, a bounded sample otherwise
-        row.put("scan_read_mode", this.full_scan ? "full" : "sampled");
+        // actually read; automatic full-read fallbacks are reflected in scan_read_mode
+        row.put("scan_read_mode", this.scan_read_mode);
         row.put("n_ms1_read", this.n_ms1);
         row.put("n_ms2_read", this.n_ms2);
         row.put("median_ms2_per_ms1", this.evidence == null ? "-" : fmt(this.evidence.median_ms2_per_ms1()));
@@ -1589,7 +1647,9 @@ public class MsRunMeta {
         Cloger.getInstance().logger.info("Found " + files.size() + " mzML files under "
                 + input.getAbsolutePath());
         List<MsRunMeta> results = new ArrayList<>(files.size());
-        Set<String> used_names = new HashSet<>();
+        // Relative input paths are flattened into one output directory. Keep a case-insensitive
+        // collision guard because distinct paths can still flatten to the same file name.
+        Set<String> used_names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         for (int i = 0; i < files.size(); i++) {
             File file = files.get(i);
             MsRunMeta meta = new MsRunMeta();
@@ -1609,7 +1669,8 @@ public class MsRunMeta {
                     + (meta.acquisition_type == AcquisitionType.DIA ? "/" + meta.isolation_scheme : ""));
             if (detail) {
                 try {
-                    write_detail_files(meta, out_dir, used_names);
+                    String detail_base = relative_detail_base(input.toPath(), file.toPath());
+                    write_detail_files(meta, out_dir, detail_base, used_names);
                 } catch (IOException | RuntimeException e) {
                     // a detail file that cannot be written must not cost us the summary row, nor
                     // the rows of every file already profiled
@@ -1626,11 +1687,27 @@ public class MsRunMeta {
     }
 
     /**
-     * Writes the per run detail files in folder mode, disambiguating runs that share a basename.
+     * Converts an input file path to a readable output basename relative to the folder being
+     * profiled. Path separators become double underscores so all detail files can share one output
+     * directory while retaining their source folder context.
      */
-    private static void write_detail_files(MsRunMeta meta, String out_dir, Set<String> used_names)
-            throws IOException {
-        String base = strip_extension(new File(meta.ms_file).getName());
+    private static String relative_detail_base(Path input_root, Path ms_file) {
+        Path root = input_root.toAbsolutePath().normalize();
+        Path file = ms_file.toAbsolutePath().normalize();
+        Path relative = root.relativize(file);
+        List<String> parts = new ArrayList<>(relative.getNameCount());
+        for (int i = 0; i < relative.getNameCount(); i++) {
+            String part = relative.getName(i).toString();
+            parts.add(i == relative.getNameCount() - 1 ? strip_extension(part) : part);
+        }
+        return String.join("__", parts);
+    }
+
+    /**
+     * Writes the per run detail files in folder mode, disambiguating any remaining name collision.
+     */
+    private static void write_detail_files(MsRunMeta meta, String out_dir, String base,
+                                           Set<String> used_names) throws IOException {
         String name = base;
         int suffix = 1;
         while (!used_names.add(name)) {

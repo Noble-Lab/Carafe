@@ -12,9 +12,13 @@ import org.testng.annotations.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Stream;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
@@ -593,6 +597,56 @@ public class MsRunMetaTest {
     }
 
     @Test
+    public void testAsRowUsesEffectiveScanReadMode() {
+        MsRunMeta meta = new MsRunMeta();
+        meta.full_scan = false;
+        meta.scan_read_mode = "full"; // an automatic fallback, not an explicit -full request
+        assertEquals(meta.as_row().get("scan_read_mode"), "full");
+
+        MsRunMeta unread = new MsRunMeta();
+        assertEquals(unread.as_row().get("scan_read_mode"), "not_read");
+    }
+
+    @Test
+    public void testProfileClearsPreviousResultButPreservesConfiguration() {
+        MsRunMeta meta = new MsRunMeta();
+        meta.ms_instrument = "Astral";
+        meta.acquisition_type = AcquisitionType.DIA;
+        meta.isolation_scheme = IsolationScheme.FIXED;
+        meta.is_fixed_width = true;
+        meta.isolation_windows.add(new IsolationWindow(400, 408));
+        meta.window_scan_counts = new int[]{10};
+        meta.evidence = evidence(100, 10, 1.0, 8, 1.0, 0.0);
+        meta.notes.add("note from the previous run");
+        meta.n_ms1 = 10;
+        meta.n_ms2 = 100;
+        meta.full_scan = true;
+        meta.probe_scans_per_slice = 123;
+        meta.window_merge_tol = 0.01;
+        meta.num_threads = 2;
+
+        meta.profile("second.raw");
+
+        assertEquals(meta.ms_file, "second.raw");
+        assertEquals(meta.ms_instrument, "");
+        assertEquals(meta.acquisition_type, AcquisitionType.UNKNOWN);
+        assertEquals(meta.isolation_scheme, IsolationScheme.UNKNOWN);
+        assertFalse(meta.is_fixed_width);
+        assertTrue(meta.isolation_windows.isEmpty());
+        assertEquals(meta.window_scan_counts.length, 0);
+        assertEquals(meta.evidence, null);
+        assertEquals(meta.n_ms1, 0);
+        assertEquals(meta.n_ms2, 0);
+        assertEquals(meta.notes.size(), 1);
+        assertTrue(meta.notes.get(0).startsWith("Not an mzML file"));
+        assertEquals(meta.scan_read_mode, "not_read");
+        assertTrue(meta.full_scan);
+        assertEquals(meta.probe_scans_per_slice, 123);
+        assertEquals(meta.window_merge_tol, 0.01, 1e-12);
+        assertEquals(meta.num_threads, 2);
+    }
+
+    @Test
     public void testBatchTsvRoundTrip() throws IOException {
         MsRunMeta meta = new MsRunMeta();
         meta.ms_file = "/tmp/example.mzML";
@@ -623,6 +677,106 @@ public class MsRunMetaTest {
         int columns = lines.get(0).split("\t", -1).length;
         for (String line : lines) {
             assertEquals(line.split("\t", -1).length, columns, "ragged row: " + line);
+        }
+    }
+
+    /**
+     * The smallest mzML msftbx will parse without complaint. Real content rather than an empty
+     * file, so profiling succeeds and the test does not log parse errors that read as failures.
+     */
+    private static final String MINIMAL_MZML = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <mzML xmlns="http://psi.hupo.org/ms/mzml" version="1.1.0">
+              <cvList count="1">
+                <cv id="MS" fullName="PSI-MS" URI="https://psidev.info/psi-ms.obo"/>
+              </cvList>
+              <fileDescription><fileContent/></fileDescription>
+              <instrumentConfigurationList count="1">
+                <instrumentConfiguration id="IC1">
+                  <cvParam cvRef="MS" accession="MS:1001911" name="Q Exactive" value=""/>
+                </instrumentConfiguration>
+              </instrumentConfigurationList>
+              <dataProcessingList count="1">
+                <dataProcessing id="dp1">
+                  <processingMethod order="0" softwareRef="sw1">
+                    <cvParam cvRef="MS" accession="MS:1000544" name="Conversion to mzML" value=""/>
+                  </processingMethod>
+                </dataProcessing>
+              </dataProcessingList>
+              <run id="r" defaultInstrumentConfigurationRef="IC1">
+                <spectrumList count="1" defaultDataProcessingRef="dp1">
+                  <spectrum index="0" id="scan=1" defaultArrayLength="0">
+                    <cvParam cvRef="MS" accession="MS:1000511" name="ms level" value="1"/>
+                    <binaryDataArrayList count="0"/>
+                  </spectrum>
+                </spectrumList>
+              </run>
+            </mzML>
+            """;
+
+    private static void write_minimal_mzml(Path path) throws IOException {
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, MINIMAL_MZML);
+    }
+
+    private static void delete_tree(Path root) throws IOException {
+        try (Stream<Path> paths = Files.walk(root)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private static List<String> detail_json_names(Path output) throws IOException {
+        try (Stream<Path> paths = Files.list(output)) {
+            return paths.map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith("_acquisition.json"))
+                    .sorted()
+                    .toList();
+        }
+    }
+
+    @Test
+    public void testFolderDetailNamesUseNormalizedRelativePaths() throws Exception {
+        Path root = Files.createTempDirectory("mzml_detail_names");
+        try {
+            Path input = Files.createDirectories(root.resolve("input"));
+            Path output = Files.createDirectories(root.resolve("output"));
+            write_minimal_mzml(input.resolve("a").resolve("Run.mzML"));
+            write_minimal_mzml(input.resolve("b").resolve("run.mzML"));
+            write_minimal_mzml(input.resolve("deep").resolve("x").resolve("y").resolve("run.mzML"));
+
+            MsRunMeta.main(new String[]{"-ms", input.toString(), "-o", output.toString(), "-detail"});
+
+            // the source folder survives in the name, so runs stay distinguishable once flattened
+            assertEquals(detail_json_names(output), List.of("a__Run_acquisition.json",
+                    "b__run_acquisition.json", "deep__x__y__run_acquisition.json"));
+        } finally {
+            delete_tree(root);
+        }
+    }
+
+    /**
+     * Two different folder layouts can flatten to the same name, because the separator used when
+     * flattening is itself a legal folder name. Both runs must still get their own files.
+     */
+    @Test
+    public void testFolderDetailNamesDisambiguateFlattenedCollision() throws Exception {
+        Path root = Files.createTempDirectory("mzml_flatten_collision");
+        try {
+            Path input = Files.createDirectories(root.resolve("input"));
+            Path output = Files.createDirectories(root.resolve("output"));
+            // "x/y/run.mzML" and "x__y/run.mzML" both flatten to "x__y__run"
+            write_minimal_mzml(input.resolve("x").resolve("y").resolve("run.mzML"));
+            write_minimal_mzml(input.resolve("x__y").resolve("run.mzML"));
+
+            MsRunMeta.main(new String[]{"-ms", input.toString(), "-o", output.toString(), "-detail"});
+
+            List<String> names = detail_json_names(output);
+            assertEquals(names.size(), 2, "each run needs its own file: " + names);
+            assertEquals(names, List.of("x__y__run_2_acquisition.json", "x__y__run_acquisition.json"));
+        } finally {
+            delete_tree(root);
         }
     }
 
