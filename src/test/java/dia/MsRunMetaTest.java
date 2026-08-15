@@ -5,6 +5,7 @@ import main.java.dia.MsRunMeta;
 import main.java.dia.MsRunMeta.AcquisitionEvidence;
 import main.java.dia.MsRunMeta.AcquisitionType;
 import main.java.dia.MsRunMeta.IsolationScheme;
+import main.java.dia.MsRunMeta.ScanReadMode;
 import main.java.dia.MsRunMeta.SchemeMetrics;
 
 import org.testng.SkipException;
@@ -600,11 +601,11 @@ public class MsRunMetaTest {
     public void testAsRowUsesEffectiveScanReadMode() {
         MsRunMeta meta = new MsRunMeta();
         meta.full_scan = false;
-        meta.scan_read_mode = "full"; // an automatic fallback, not an explicit -full request
-        assertEquals(meta.as_row().get("scan_read_mode"), "full");
+        meta.scan_read_mode = ScanReadMode.FULL; // an automatic fallback, not an explicit -full
+        assertEquals(meta.as_row().get("scan_read_mode"), "FULL");
 
         MsRunMeta unread = new MsRunMeta();
-        assertEquals(unread.as_row().get("scan_read_mode"), "not_read");
+        assertEquals(unread.as_row().get("scan_read_mode"), "NOT_READ");
     }
 
     @Test
@@ -639,7 +640,7 @@ public class MsRunMetaTest {
         assertEquals(meta.n_ms2, 0);
         assertEquals(meta.notes.size(), 1);
         assertTrue(meta.notes.get(0).startsWith("Not an mzML file"));
-        assertEquals(meta.scan_read_mode, "not_read");
+        assertEquals(meta.scan_read_mode, ScanReadMode.NOT_READ);
         assertTrue(meta.full_scan);
         assertEquals(meta.probe_scans_per_slice, 123);
         assertEquals(meta.window_merge_tol, 0.01, 1e-12);

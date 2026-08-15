@@ -137,10 +137,10 @@ public class MsRunMeta {
     public boolean full_scan = false;
 
     /**
-     * How the scan headers backing the current result were read: full, sampled or not_read.
-     * Unlike {@link #full_scan}, this records the effective mode after automatic fallbacks.
+     * How the scan headers backing the current result were read. Unlike {@link #full_scan}, which
+     * is what the caller asked for, this records the effective mode after automatic fallbacks.
      */
-    public String scan_read_mode = "not_read";
+    public ScanReadMode scan_read_mode = ScanReadMode.NOT_READ;
 
     /**
      * Two windows whose lower and upper edges both agree to within this many m/z are the same
@@ -206,6 +206,33 @@ public class MsRunMeta {
          * @param description the description
          */
         IsolationScheme(String description) {
+            this.description = description;
+        }
+    }
+
+    /**
+     * How much of the run's scan headers the reported result was measured from.
+     *
+     * <p>{@link #SAMPLED} means the counts and ratios on this object cover a bounded probe rather
+     * than the whole run, so they are a function of {@link MsRunMeta#probe_scans_per_slice} as
+     * well as of the data. The verdict itself does not depend on which mode was used.
+     */
+    public enum ScanReadMode {
+        NOT_READ("No scan headers were read"),
+        SAMPLED("A bounded sample of scan headers, taken from the start, middle and end"),
+        FULL("Every scan header in the run");
+
+        /**
+         * The description.
+         */
+        public final String description;
+
+        /**
+         * Constructor.
+         *
+         * @param description the description
+         */
+        ScanReadMode(String description) {
             this.description = description;
         }
     }
@@ -392,7 +419,7 @@ public class MsRunMeta {
         this.precursor_mz_max = -1;
         this.run_start_time = "";
         this.software = "";
-        this.scan_read_mode = "not_read";
+        this.scan_read_mode = ScanReadMode.NOT_READ;
     }
 
     /**
@@ -421,11 +448,11 @@ public class MsRunMeta {
     private List<IScan> sample_scan_headers(MZMLFile source, int lo, int hi) throws FileParsingException {
         int n_total = hi - lo + 1;
         if (this.full_scan || 3L * this.probe_scans_per_slice >= n_total) {
-            this.scan_read_mode = "full";
+            this.scan_read_mode = ScanReadMode.FULL;
             return source.parse(LCMSDataSubset.STRUCTURE_ONLY);
         }
 
-        this.scan_read_mode = "sampled";
+        this.scan_read_mode = ScanReadMode.SAMPLED;
         int mid = lo + (n_total - this.probe_scans_per_slice) / 2;
         int tail = hi - this.probe_scans_per_slice + 1;
         TreeMap<Integer, IScan> by_num = new TreeMap<>();
@@ -440,7 +467,7 @@ public class MsRunMeta {
         String reason = inconclusive_reason(sample);
         if (reason != null) {
             this.notes.add("The sampled scans " + reason + "; read all scan headers instead.");
-            this.scan_read_mode = "full";
+            this.scan_read_mode = ScanReadMode.FULL;
             return source.parse(LCMSDataSubset.STRUCTURE_ONLY);
         }
         return sample;
@@ -1411,7 +1438,7 @@ public class MsRunMeta {
         row.put("precursor_mz_max", fmt(this.precursor_mz_max));
         // these counts, and everything derived from them, cover the scan headers that were
         // actually read; automatic full-read fallbacks are reflected in scan_read_mode
-        row.put("scan_read_mode", this.scan_read_mode);
+        row.put("scan_read_mode", this.scan_read_mode.name());
         row.put("n_ms1_read", this.n_ms1);
         row.put("n_ms2_read", this.n_ms2);
         row.put("median_ms2_per_ms1", this.evidence == null ? "-" : fmt(this.evidence.median_ms2_per_ms1()));
