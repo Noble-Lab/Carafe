@@ -1375,6 +1375,10 @@ public class MsRunMeta {
                         this.scheme_metrics.coverage_fraction()));
             }
         }
+        // stated before the evidence because it qualifies those counts: under SAMPLED they cover
+        // the probe, not the whole run
+        sb.append("  Scan headers: ").append(this.scan_read_mode)
+                .append(" (").append(this.scan_read_mode.description).append(")\n");
         if (this.evidence != null) {
             sb.append(String.format(Locale.ROOT,
                     "  Evidence: n_ms1=%d  n_ms2=%d  n_windows=%d  periodicity=%.4f  "

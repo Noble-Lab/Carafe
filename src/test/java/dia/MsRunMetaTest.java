@@ -598,6 +598,22 @@ public class MsRunMetaTest {
     }
 
     @Test
+    public void testSummaryStatesScanReadMode() {
+        MsRunMeta unread = new MsRunMeta();
+        unread.ms_file = "/tmp/example.mzML";
+        assertTrue(unread.summary().contains("Scan headers: NOT_READ"), unread.summary());
+
+        MsRunMeta sampled = new MsRunMeta();
+        sampled.ms_file = "/tmp/example.mzML";
+        sampled.scan_read_mode = ScanReadMode.SAMPLED;
+        String summary = sampled.summary();
+        assertTrue(summary.contains("Scan headers: SAMPLED"), summary);
+        assertTrue(summary.contains(ScanReadMode.SAMPLED.description), summary);
+        // it qualifies the evidence counts, so it has to be stated before them
+        assertTrue(summary.indexOf("Scan headers:") < summary.indexOf("Run:"), summary);
+    }
+
+    @Test
     public void testAsRowUsesEffectiveScanReadMode() {
         MsRunMeta meta = new MsRunMeta();
         meta.full_scan = false;
