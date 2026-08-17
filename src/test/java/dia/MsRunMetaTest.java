@@ -703,16 +703,26 @@ public class MsRunMetaTest {
     }
 
     @Test
-    public void testDisplayInstrumentPrefersShortNameThenModel() {
+    public void testDisplayInstrumentUsesTheModelRecordedInTheMzml() {
         MsRunMeta known = new MsRunMeta();
         known.ms_instrument = "Eclipse";
         known.instrument_model = "Orbitrap Eclipse";
-        assertEquals(known.display_instrument(), "Eclipse");
+        assertEquals(known.display_instrument(), "Orbitrap Eclipse");
 
-        // an instrument Carafe has no short name for is still worth naming
-        MsRunMeta unknown_model = new MsRunMeta();
-        unknown_model.instrument_model = "Orbitrap Ascend";
-        assertEquals(unknown_model.display_instrument(), "Orbitrap Ascend");
+        // two models sharing one short name stay distinguishable
+        MsRunMeta exploris_240 = new MsRunMeta();
+        exploris_240.ms_instrument = "Exploris";
+        exploris_240.instrument_model = "Orbitrap Exploris 240";
+        assertEquals(exploris_240.display_instrument(), "Orbitrap Exploris 240");
+
+        // an instrument Carafe has no short name for is still named
+        MsRunMeta no_short_name = new MsRunMeta();
+        no_short_name.instrument_model = "Orbitrap Ascend";
+        assertEquals(no_short_name.display_instrument(), "Orbitrap Ascend");
+
+        MsRunMeta model_missing = new MsRunMeta();
+        model_missing.ms_instrument = "QE";
+        assertEquals(model_missing.display_instrument(), "QE");
 
         assertEquals(new MsRunMeta().display_instrument(), "-");
     }

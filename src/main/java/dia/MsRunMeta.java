@@ -431,17 +431,20 @@ public class MsRunMeta {
     }
 
     /**
-     * The instrument in as few characters as carry meaning: the Carafe short name when the model
-     * is one Carafe knows, otherwise the raw model string so an unrecognised instrument is still
-     * named rather than shown as a dash.
+     * The instrument as the mzML itself records it, e.g. "Orbitrap Eclipse".
      *
-     * @return the short name, the raw model, or "-"
+     * <p>The raw model rather than the Carafe short name, because it is what the file actually
+     * says: it distinguishes an Exploris 480 from an Exploris 240 where both map to "Exploris",
+     * and it names instruments Carafe has no short name for at all. Falls back to the short name
+     * only when no model string was found.
+     *
+     * @return the model recorded in the mzML, the Carafe short name, or "-"
      */
     public String display_instrument() {
-        if (!this.ms_instrument.isEmpty()) {
-            return this.ms_instrument;
+        if (!this.instrument_model.isEmpty()) {
+            return this.instrument_model;
         }
-        return blank_to_dash(this.instrument_model);
+        return blank_to_dash(this.ms_instrument);
     }
 
     /**
