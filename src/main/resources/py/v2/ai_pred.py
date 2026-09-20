@@ -595,8 +595,7 @@ if __name__ == "__main__":
                                     verbose=args.verbose,
                                     torch_compile=args.torch_compile, threads=args.threads)
             pretrained_model_out_dir = os.path.join(args.out_dir, "pretrained_models")
-            if not os.path.exists(pretrained_model_out_dir):
-                os.makedirs(pretrained_model_out_dir)
+            os.makedirs(pretrained_model_out_dir, exist_ok=True)
             model_mgr = predict_rt(model_dir="generic", 
                                    pred_file=args.in_file, 
                                    out_dir=pretrained_model_out_dir, 

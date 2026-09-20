@@ -190,8 +190,7 @@ def download_models(url: str = global_settings['model_url'], overwrite=True):
     model_zip_name = global_settings['local_model_zip_name']
     pretrain_dir = os.path.join(global_settings['PEPTDEEP_HOME'], "pretrained_models")
     
-    if not os.path.exists(pretrain_dir):
-        os.makedirs(pretrain_dir)
+    os.makedirs(pretrain_dir, exist_ok=True)
         
     model_zip = os.path.join(pretrain_dir, model_zip_name)
     
