@@ -1,0 +1,41 @@
+name: Unit tests
+
+# Runs the unit-test suite (mvn test). The installer workflow builds with -DskipTests,
+# so without this the tests never actually run in CI. Pure-JVM tests, so this runs on
+# Linux (no jpackage / Windows / Osprey needed) and is quick.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # This job only reads the repo to run tests; don't leave the GITHUB_TOKEN
+          # persisted in the local git config.
+          persist-credentials: false
+
+      # pom targets release 21; JDK 21 is the strict compile/runtime match. (The installer
+      # build needs JDK 25 only for jpackage, which the tests don't touch.)
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # STOP-GAP (mirrors build-installer.yml): com.compomics:utilities:5.0.39P2 is a patched
+      # build not published to any public Maven repo, so a clean checkout cannot resolve it.
+      # Install the vendored copy into the runner's local repo before building.
+      # TODO(Bo): publish this jar to a lab-controlled Maven repo and drop lib/ + this step.
+      - name: Install patched compomics-utilities into the local Maven repo
+        run: mvn -B install:install-file -Dfile=lib/utilities-5.0.39P2.jar -DgroupId=com.compomics -DartifactId=utilities -Dversion=5.0.39P2 -Dpackaging=jar
+
+      - name: Run unit tests
+        run: mvn -B test

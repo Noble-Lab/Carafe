@@ -123,7 +123,11 @@ public class DBGear {
             proteinSequence = proteinSequence.replaceAll("I", "L");
         }
         HashSet<String> peptides = enzyme.digest(proteinSequence, CParameter.maxMissedCleavages, CParameter.minPeptideLength, CParameter.maxPeptideLength);
-        if(CParameter.clip_nTerm_M && proteinSequence.startsWith("M")){
+        // Clip the protein N-terminal initiator methionine only for a genuine protein digest. In
+        // NoCut mode every record IS a single, already-digested peptide, so proteinSequence.startsWith(pep)
+        // is vacuously true for any M-starting peptide; clipping there would wrongly strip the leading M
+        // off every M-starting peptide (internal Mets included). NoCut must take peptides as-is.
+        if(CParameter.clip_nTerm_M && !isNoCutEnzyme(enzyme) && proteinSequence.startsWith("M")){
             List<String> n_term_peptides = peptides.stream().filter(proteinSequence::startsWith).filter(pep -> pep.length() >= (CParameter.minPeptideLength+1)).map(pep -> pep.substring(1)).toList();
             if(!n_term_peptides.isEmpty()){
                 peptides.addAll(n_term_peptides);
@@ -131,8 +135,17 @@ public class DBGear {
                 PeptideUtils.protein_n_term_peptides.addAll(n_term_peptides);
             }
         }
-        // add the original protein n-term peptides
-        PeptideUtils.protein_n_term_peptides.addAll(peptides.stream().filter(proteinSequence::startsWith).toList());
+        // Add the original protein n-term peptides. Skipped under NoCut for the same reason the
+        // clip above is: the filter asks "is this peptide a prefix of the protein?", which is
+        // vacuously true when the entry IS the protein, so every peptide in a peptide-level FASTA
+        // would be recorded as a protein N-terminus. That set gates modn_protein variable mods in
+        // PeptideUtils.calcPeptideIsoforms, so with e.g. "Acetyl of protein N-term" selected the
+        // whole library - targets, entrapment and decoys alike - would acquire an acetylated form
+        // that only a genuine protein N-terminus should have. NoCut carries no protein context, so
+        // it cannot know which of its entries were protein N-terminal, and must claim none.
+        if(!isNoCutEnzyme(enzyme)) {
+            PeptideUtils.protein_n_term_peptides.addAll(peptides.stream().filter(proteinSequence::startsWith).toList());
+        }
         return peptides;
     }
 
@@ -392,6 +405,20 @@ public class DBGear {
      */
     public static boolean isNonSpecificEnzyme(){
         return DBGear.getEnzymeByIndex(CParameter.enzyme).getName().equalsIgnoreCase("non-specific");
+    }
+
+    /**
+     * Check if an enzyme is the "NoCut" pseudo-enzyme (each input sequence is treated as a single,
+     * already-digested peptide). N-terminal methionine clipping is meaningless in this mode because
+     * the record carries no parent-protein context, so callers must not clip in NoCut mode.
+     * @param enzyme the enzyme to test
+     * @return true if the enzyme is NoCut, false otherwise
+     */
+    /** Name of the pass-through pseudo-enzyme registered by {@link #init_enzymes()}. */
+    public static final String NO_CUT_ENZYME_NAME = "NoCut";
+
+    public static boolean isNoCutEnzyme(Enzyme enzyme){
+        return enzyme != null && NO_CUT_ENZYME_NAME.equalsIgnoreCase(enzyme.getName());
     }
 
     public static int getEnzymeIndexByName(String enzyme_name){

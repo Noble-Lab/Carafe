@@ -1,0 +1,202 @@
+name: Build Windows Installer
+
+# Builds the unsigned Carafe Windows MSI with Osprey bundled inside, the same
+# way Bo's local installer does, but fully automated:
+#   mvn package  ->  publish Osprey (self-contained)  ->  jpackage MSI.
+#
+# Osprey lives in the ProteoWizard tree and is a self-contained managed .NET
+# solution (no native pwiz C++ build needed), so a runner only needs the .NET 8
+# SDK. We sparse-checkout just the Osprey subtree at a pinned ref.
+#
+# Triggers: manual (workflow_dispatch) and version tags (v*). MSI builds are heavy,
+# so it does NOT run on every push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      osprey_repo:
+        description: "Git repo containing pwiz_tools/Osprey (owner/name)"
+        required: true
+        # Osprey is public in ProteoWizard/pwiz; override only to test a fork.
+        default: "ProteoWizard/pwiz"
+      osprey_ref:
+        description: "Branch, tag, or commit SHA of the Osprey source to build"
+        required: true
+        default: "master"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  # write is required so the "Attach MSI to release" step (softprops/action-gh-release) can
+  # upload the MSI asset on v* tag builds; contents: read would block the upload.
+  contents: write
+
+jobs:
+  build-msi:
+    runs-on: windows-latest
+
+    env:
+      # Osprey lives in the public ProteoWizard/pwiz tree; releases track its master. Manual runs may
+      # override the ref (e.g. to test a fork/branch); tag builds default to master.
+      OSPREY_REPO: ${{ github.event.inputs.osprey_repo || 'ProteoWizard/pwiz' }}
+      OSPREY_REF: ${{ github.event.inputs.osprey_ref || 'master' }}
+      RID: win-x64
+
+    steps:
+      - name: Checkout Carafe
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # JDK with jpackage. Match the runtime version Bo ships (README requires
+      # 25.0.2+); the bundled JEP 472 native-access flag needs JDK 24+.
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up .NET 8 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      # jpackage's MSI backend is WiX 3.x (candle/light). windows-latest already
+      # ships WiX 3.14, so just locate it and put its bin on PATH; install only as
+      # a fallback if it is ever missing (do NOT pin a version - choco fails when a
+      # newer build is already installed).
+      - name: Ensure WiX 3 on PATH (jpackage MSI backend)
+        shell: pwsh
+        run: |
+          $light = Get-ChildItem 'C:\Program Files (x86)\WiX Toolset*\bin\light.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $light) {
+            choco install wixtoolset --no-progress -y
+            $light = Get-ChildItem 'C:\Program Files (x86)\WiX Toolset*\bin\light.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $light) { Write-Error 'WiX 3 (light.exe) not found'; exit 1 }
+          Add-Content -Path $env:GITHUB_PATH -Value $light.Directory.FullName
+          Write-Host "Using WiX at $($light.Directory.FullName)"
+
+      # STOP-GAP: com.compomics:utilities:5.0.39P2 is a patched build that is not
+      # published to any public Maven repo, so a clean checkout cannot resolve it.
+      # Install the vendored copy into the runner's local repo before building.
+      # TODO(Bo): replace by publishing this jar to a lab-controlled Maven repo and
+      # resolving it normally, then drop lib/ and this step.
+      # Use cmd (not the default pwsh): PowerShell mangles unquoted -D values that
+      # contain '.'/'/' (e.g. -Dfile=lib/utilities-5.0.39P2.jar -> lib/utilities-5).
+      - name: Install patched compomics-utilities into the local Maven repo
+        shell: cmd
+        run: mvn -B install:install-file -Dfile=lib/utilities-5.0.39P2.jar -DgroupId=com.compomics -DartifactId=utilities -Dversion=5.0.39P2 -Dpackaging=jar
+
+      - name: Build Carafe jar
+        run: mvn -B -DskipTests package
+
+      # Single source of truth for the version: the Maven project version. Used below for the
+      # Osprey publish path and passed to the MSI script as APP_VERSION, so a pom bump can't drift
+      # from a hard-coded 2.2.0 in two files.
+      - name: Resolve Carafe version
+        shell: bash
+        run: |
+          v=$(mvn -q -B help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "CARAFE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "Resolved Carafe version: $v"
+          # yyMMdd build stamp so the many test installers are distinguishable
+          # (e.g. Carafe-2.2.0-260701.msi, artifact Carafe-win-x64-msi-260701).
+          d=$(date +%y%m%d)
+          echo "BUILD_DATE=$d" >> "$GITHUB_ENV"
+          echo "Build date stamp: $d"
+
+      # Osprey is public (ProteoWizard/pwiz). Sparse-checkout only what the
+      # build touches: the Osprey subtree, the shared PortableUtil project,
+      # and two vendored DLLs the projects bind to outside that subtree:
+      #   * Shared/Lib/DotNetZip  - hard <Reference> in Osprey.IO (build fails without it)
+      #   * Shared/Lib/Parquet    - patched ParquetNet.dll that Osprey's
+      #                             Directory.Build.targets overlays post-build; the
+      #                             overlay is Exists()-guarded, so a missing file would
+      #                             SILENTLY ship a build that can't read osprey parquet.
+      - name: Checkout Osprey source (sparse)
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.OSPREY_REPO }}
+          ref: ${{ env.OSPREY_REF }}
+          path: pwiz
+          sparse-checkout: |
+            pwiz_tools/Osprey
+            pwiz_tools/Shared/PortableUtil
+            pwiz_tools/Shared/Lib/DotNetZip
+            pwiz_tools/Shared/Lib/Parquet
+          sparse-checkout-cone-mode: false
+
+      # Repoint the Osprey defaults this installer ships. Osprey reads its OSPREY_* knobs
+      # from the environment at process start, so a shipped MSI -- run by collaborators who
+      # never set those vars -- gets the compiled UNSET defaults. Upstream (pwiz#4446)
+      # landed the new pass-2 modes and the learned peak pick OFF by default, since
+      # flipping either is a coordinated re-baseline of pwiz's regression golden. Carafe
+      # wants both on, so the script rewrites exactly two defaults:
+      #   * OSPREY_PASS2_QVALUE unset -> protein-compact (frozen 1st-pass weights +
+      #     protein-stratum competition, no retrain) instead of percolator (retrain);
+      #   * OSPREY_PICK_LDA         -> default ON (learned resolution-keyed pick) instead
+      #     of opt-in; before pwiz#4446 that pick WAS the default, so this keeps the MSI
+      #     continuous with every installer shipped so far.
+      # It also tripwires OSPREY_PROTEIN_COMPACT_RETRAIN (must stay opt-in) so the 2nd
+      # pass cannot silently start retraining, and fails loudly if the Osprey source
+      # moved. See scripts/patch_osprey_installer_defaults.ps1.
+      # These OSPREY_* vars are deliberately left UNSET in this job: they are runtime
+      # vars, so the build env has no effect on the shipped exe.
+      - name: Set Osprey installer defaults (protein-compact q-value, LDA pick)
+        shell: pwsh
+        run: ./scripts/patch_osprey_installer_defaults.ps1 -OspreyEnvPath pwiz/pwiz_tools/Osprey/Osprey.Core/OspreyEnvironment.cs
+
+      # Publish a self-contained Osprey straight into the app directory so
+      # jpackage's --input sweeps it into the MSI. resolveOspreyBinary() then finds
+      # it at <appdir>/osprey/win-x64/Osprey.exe next to the jar.
+      #
+      # Do NOT use PublishSingleFile here. Osprey's blib writer uses
+      # System.Data.SQLite, whose native SQLite.Interop.dll is preloaded by resolving
+      # the managed assembly's own directory (Assembly.Location). In a single-file
+      # publish Assembly.Location is "", so Path.GetDirectoryName("") -> null and the
+      # SQLiteConnection ctor throws "ArgumentNullException (Parameter 'path1')" from
+      # Path.Combine the moment it opens the output .blib. A normal folder publish
+      # ships SQLite.Interop.dll as a real sibling file, so the resolution works.
+      - name: Publish Osprey (self-contained ${{ env.RID }})
+        run: >
+          dotnet publish
+          pwiz/pwiz_tools/Osprey/Osprey/Osprey.csproj
+          -c Release -f net8.0 -r ${{ env.RID }}
+          --self-contained true
+          -p:PublishSingleFile=false
+          -p:Platform=x64
+          -o target/carafe-${{ env.CARAFE_VERSION }}/osprey/${{ env.RID }}
+
+      - name: Build MSI (unsigned, Osprey bundled)
+        env:
+          APP_VERSION: ${{ env.CARAFE_VERSION }}
+        run: scripts\generate_installer_win.bat
+
+      # jpackage names the MSI <App>-<version>.msi (version must be numeric, so the
+      # date can't go through --app-version). Append the yyMMdd stamp here instead,
+      # e.g. Carafe-2.2.0.msi -> Carafe-2.2.0-260701.msi. The later steps glob
+      # target/installer/*.msi, so they pick up the renamed file.
+      - name: Date-stamp the MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem target/installer/*.msi | Select-Object -First 1
+          if (-not $msi) { Write-Error 'No MSI found to rename'; exit 1 }
+          $dated = "$($msi.BaseName)-$env:BUILD_DATE$($msi.Extension)"
+          Rename-Item -Path $msi.FullName -NewName $dated
+          Write-Host "Renamed MSI to $dated"
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: Carafe-${{ env.RID }}-msi-${{ env.BUILD_DATE }}
+          path: target/installer/*.msi
+          if-no-files-found: error
+
+      # On a version tag, attach the MSI to the GitHub Release.
+      - name: Attach MSI to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: target/installer/*.msi

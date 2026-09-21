@@ -1,0 +1,19 @@
+# Normalize all text to LF in the repo and in the working tree.
+* text=auto eol=lf
+
+# Windows-only scripts must stay CRLF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Binary assets: never touch line endings.
+*.jar    binary
+*.png    binary
+*.jpg    binary
+*.gif    binary
+*.ico    binary
+*.docx   binary
+*.xlsx   binary
+*.zip    binary
+*.gz     binary
+*.exe    binary
+*.dll    binary

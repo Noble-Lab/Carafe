@@ -1,6 +1,10 @@
 
 *.jar
+# Exception: the patched compomics-utilities jar is not in any public Maven repo,
+# so it is vendored here for CI/clean-machine builds (see lib/README.md).
+!lib/utilities-5.0.39P2.jar
 *.class
 
 target/*
+test-output/
 settings.json

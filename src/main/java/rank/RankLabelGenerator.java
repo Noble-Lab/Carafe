@@ -42,6 +42,7 @@ import net.sf.jfasta.FASTAFileReader;
 import net.sf.jfasta.impl.FASTAElementIterator;
 import net.sf.jfasta.impl.FASTAFileReaderImpl;
 import main.java.ai.FileIO;
+import main.java.db.DBGear;
 import tech.tablesaw.api.DoubleColumn;
 import tech.tablesaw.api.LongColumn;
 import tech.tablesaw.api.StringColumn;
@@ -1016,7 +1017,10 @@ class  RankLabelGenerator{
             proteinSequence = proteinSequence.replaceAll("I", "L");
         }
         HashSet<String> peptides = enzyme.digest(proteinSequence, RParameter.maxMissedCleavages, RParameter.minPeptideLength, RParameter.maxPeptideLength);
-        if(RParameter.clip_nTerm_M && proteinSequence.startsWith("M")){
+        // Never clip the N-terminal Met in NoCut mode: each record is an already-digested peptide with
+        // no parent-protein context, so clipping would strip the leading M off every M-starting peptide.
+        boolean isNoCut = DBGear.isNoCutEnzyme(enzyme);
+        if(RParameter.clip_nTerm_M && !isNoCut && proteinSequence.startsWith("M")){
             List<String> n_term_peptides = peptides.stream().filter(proteinSequence::startsWith).filter(pep -> pep.length() >= (RParameter.minPeptideLength+1)).map(pep -> pep.substring(1)).collect(toList());
             if(!n_term_peptides.isEmpty()){
                 peptides.addAll(n_term_peptides);

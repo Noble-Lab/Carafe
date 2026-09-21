@@ -65,6 +65,12 @@ public class DIAMeta {
                 e.printStackTrace();
             }
 
+            if (mzMLindex == null) {
+                Cloger.getInstance().logger.error("Failed to read an MS2 index from '" + ms_file
+                        + "'. It is not a readable mzML file (a directory or unreadable path does this).");
+                System.exit(1);
+            }
+
             if (mzMLindex.size() > 0) {
 
             } else {

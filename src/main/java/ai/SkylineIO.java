@@ -34,6 +34,7 @@ public class SkylineIO {
     public PreparedStatement pStatementModifications = null;
     public PreparedStatement pStatementRefSpectraPeaks = null;
     public PreparedStatement pStatementRetentionTimes = null;
+    public PreparedStatement pStatementDecoyPairs = null;
 
     private final String skyline_db_file;
     public int numSpectra = -1;
@@ -368,6 +369,33 @@ public class SkylineIO {
         }
     }
 
+    /**
+     * Additive, Skyline-neutral target/decoy pairing table (Carafe-authored provenance). Skyline never
+     * queries it, so library matching, RT, and peak picking are unchanged whether or not it is present;
+     * it only records which {@code RefSpectra} are decoys and links each target to its paired decoy so
+     * the {@code .blib} is self-describing without the side-car manifest. See
+     * {@code docs/blib-skyline-notation.md} and the {@code blib-decoy-pairing-spec}.
+     */
+    public void create_DecoyPairs() {
+        try {
+            statement.executeUpdate("drop table if exists DecoyPairs;");
+            String createTableSQL = "CREATE TABLE DecoyPairs ("
+                    + "RefSpectraID INTEGER NOT NULL PRIMARY KEY, " // FK -> RefSpectra.id
+                    + "IsDecoy INTEGER NOT NULL, "                  // 0 = target, 1 = decoy
+                    + "IsEntrapment INTEGER NOT NULL, "             // 1 = FDRBench entrapment peptide (p_target/p_decoy)
+                    + "PairID INTEGER NOT NULL, "                   // target and its paired decoy share this
+                    + "Method TEXT"                                 // how the decoy was built; NULL on target rows
+                    + ");";
+            statement.executeUpdate(createTableSQL);
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_DecoyPairs_PairID ON DecoyPairs(PairID);");
+            String insertSQL = "INSERT INTO DecoyPairs (RefSpectraID, IsDecoy, IsEntrapment, PairID, Method) "
+                    + "VALUES (?, ?, ?, ?, ?);";
+            pStatementDecoyPairs = connection.prepareStatement(insertSQL);
+        } catch (Exception e) {
+            System.out.println("Error creating DecoyPairs table: " + e.getMessage());
+        }
+    }
+
     public void close() {
         try {
             if (pStatementRefSpectra != null) {
@@ -381,6 +409,9 @@ public class SkylineIO {
             }
             if (pStatementRetentionTimes != null) {
                 pStatementRetentionTimes.close();
+            }
+            if (pStatementDecoyPairs != null) {
+                pStatementDecoyPairs.close();
             }
             if (statement != null) {
                 statement.close();

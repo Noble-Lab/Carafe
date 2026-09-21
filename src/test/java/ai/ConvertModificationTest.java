@@ -79,7 +79,7 @@ public class ConvertModificationTest {
 
         String result = (String) peptideMethod.invoke(aiGear, peptide, mods, modSites);
 
-        Assert.assertEquals(result, "A[42.0105646837]ANSGLDSK", "Skyline peptideModSeq should place protein N-term acetylation on the first residue.");
+        Assert.assertEquals(result, "A[+42.0105646837]ANSGLDSK", "Skyline peptideModSeq should place protein N-term acetylation on the first residue, with a signed delta mass.");
     }
 
     @Test
@@ -96,7 +96,19 @@ public class ConvertModificationTest {
         String result = (String) peptideMethod.invoke(aiGear, peptide, mods, modSites);
         System.out.println("Result: " + result);
 
-        Assert.assertEquals(result, "M[58.00547930326]AAAAAAAAAGAAGGR", "Skyline peptideModSeq should combine protein N-term acetylation with first-residue oxidation.");
+        Assert.assertEquals(result, "M[+58.00547930326]AAAAAAAAAGAAGGR", "Skyline peptideModSeq should combine protein N-term acetylation with first-residue oxidation, with a signed delta mass.");
+    }
+
+    @Test
+    public void testSkylineResidueDeltaMassIsSigned() throws Exception {
+        AIGear aiGear = new AIGear();
+        Method m = AIGear.class.getDeclaredMethod("format_skyline_residue", char.class, java.math.BigDecimal.class);
+        m.setAccessible(true);
+
+        Assert.assertEquals(m.invoke(aiGear, 'C', new java.math.BigDecimal("57.02146372057")),
+                "C[+57.02146372057]", "a positive delta mass gets a leading '+' (Skyline signed convention)");
+        Assert.assertEquals(m.invoke(aiGear, 'n', new java.math.BigDecimal("-17.026549")),
+                "n[-17.026549]", "a negative delta mass keeps its '-'");
     }
 
     @Test

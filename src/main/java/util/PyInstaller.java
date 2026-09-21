@@ -74,8 +74,10 @@ public class PyInstaller {
                 "pip"
         );
 
-        // Choose a reproducible ZIP (tag/commit) if you want.
-        final String ALPHAPEPTDEEP_DIA_ZIP = "https://github.com/wenbostar/alphapeptdeep_dia/archive/refs/heads/main.zip";
+        // Pinned to a commit, NOT refs/heads/main. This ZIP supplies the peptdeep predictor, so an
+        // unpinned branch tip lets two venvs built from the same Carafe release predict different
+        // spectra, and a spectral library is only reproducible if its prediction basis is.
+        final String ALPHAPEPTDEEP_DIA_ZIP = "https://github.com/wenbostar/alphapeptdeep_dia/archive/f549bb70316677d647c461f5b7264069dc915272.zip";
 
         // ---------------- Prep dirs ----------------
         Files.createDirectories(installRoot);
