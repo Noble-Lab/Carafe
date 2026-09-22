@@ -4,3 +4,11 @@
 
 target/*
 settings.json
+# Python bytecode left behind by running the bundled AI scripts in place.
+# (The build itself is protected by the resource-filtering excludes in pom.xml.)
+__pycache__/
+*.pyc
+
+# Pretrained models are shipped as release assets, not committed. The build copies
+# models/ms2tmt.pt into the distribution when it is present.
+models/

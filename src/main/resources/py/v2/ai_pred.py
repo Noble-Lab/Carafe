@@ -2,6 +2,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 import os
+import sys
 import argparse
 import importlib.util
 import re
@@ -43,6 +44,7 @@ def predict_ms2(model_dir:str,
                 instrument='Eclipse',
                 nce=27.0,
                 mode_type='general',
+                ms2_model=None,
                 log_transform=False,
                 fast_mode=False,
                 mod2mass=None,
@@ -61,9 +63,26 @@ def predict_ms2(model_dir:str,
         print(f"Warning: Unknown mode_type: {mode_type}, loading generic model")
         model_mgr = ModelManager(mask_modloss=True, device=device)
 
+    # A base model (--ms2_model) stands in for the installed generic model. It is what makes
+    # prediction with a labelled-chemistry model possible without fine-tuning: for TMT the
+    # installed generic model is a poor starting point (median spectral angle ~0.37 on TMT data),
+    # so falling back to it silently would hand back a bad library.
+    has_base_model = bool(ms2_model) and os.path.exists(ms2_model)
+    if ms2_model and not has_base_model:
+        print(f"Error: --ms2_model {ms2_model} not found")
+        sys.exit(1)
+
+    def load_base_or_installed():
+        if has_base_model:
+            print(f"Using base MS2 model: {ms2_model}")
+            model_mgr.load_external_models(ms2_model_file=ms2_model)
+        else:
+            load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
+
     if model_dir == "generic":
-        print("Load generic model!")
-        load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
+        if not has_base_model:
+            print("Load generic model!")
+        load_base_or_installed()
     else:
         metrics = load_model_evaluation_metrics(model_dir)
         ms2_metrics = metrics.get("ms2", {}) if isinstance(metrics, dict) else {}
@@ -73,14 +92,18 @@ def predict_ms2(model_dir:str,
             print("Using fine-tuned MS2 model based on evaluation metrics")
             model_mgr.load_external_models(ms2_model_file=ms2_model_path)
         elif os.path.exists(ms2_model_path) and not metrics:
-            print(f"Warning: {model_dir}/model_evaluation_metrics.json not found, loading generic MS2 model")
-            load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
+            print(f"Warning: {model_dir}/model_evaluation_metrics.json not found, loading base MS2 model")
+            load_base_or_installed()
         elif os.path.exists(ms2_model_path):
-            print("Using pretrained MS2 model because fine-tuned metrics did not improve across all tracked metrics")
-            load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
+            print("Using base MS2 model because fine-tuned metrics did not improve across all tracked metrics")
+            load_base_or_installed()
+        elif has_base_model:
+            # Predicting from a base model without fine-tuning is a supported workflow, so the
+            # absence of a fine-tuned model here is expected and not worth a warning.
+            load_base_or_installed()
         else:
             print(f"Warning: {model_dir}/ms2_model.pt not found, loading generic model")
-            load_installed_model_by_mode(model_mgr, mode_type, 'ms2')
+            load_base_or_installed()
 
     model_mgr.instrument = instrument
     model_mgr.nce = nce
@@ -417,6 +440,10 @@ if __name__ == "__main__":
     parser.add_argument('--ccs', action='store_true', help='Predict CCS')
     parser.add_argument('--user_mod', default=None, help='User defined modification')
     parser.add_argument("--mod2mass", type=str, default=None, help="Change the mass of modifications, e.g., Deamidated@N=0")
+    parser.add_argument("--ms2_model", type=str, default=None,
+                        help="Pretrained MS2 base model (.pt) to predict with instead of the "
+                             "installed generic model, e.g. the bundled TMT model. A fine-tuned "
+                             "model in --model_dir still takes precedence over it.")
     parser.add_argument("--torch_compile", action="store_true", help="Compile model with torch.compile for speed (CPU/GPU)")
     parser.add_argument("--threads", type=int, default=None, help="Number of CPU threads to use")
     parser.add_argument("--profile", action='store_true', help="Profile the script execution")
@@ -485,6 +512,7 @@ if __name__ == "__main__":
             print_thread_state(tag="Thread/BLAS summary (startup)")
         if args.tf_type == "all":
             model_mgr_rt = predict_ms2(model_dir=args.model_dir, 
+                                  ms2_model=args.ms2_model,
                                    pred_file=args.in_file, 
                                    out_dir=args.out_dir, 
                                    out_prefix=args.out_prefix, 
@@ -531,6 +559,7 @@ if __name__ == "__main__":
                                torch_compile=args.torch_compile,
                                threads=args.threads)
             model_mgr_rt = predict_ms2(model_dir="generic", 
+                                    ms2_model=args.ms2_model,
                                     pred_file=args.in_file, 
                                     out_dir=args.out_dir, 
                                     out_prefix=args.out_prefix, 
@@ -555,6 +584,7 @@ if __name__ == "__main__":
                                     torch_compile=args.torch_compile,
                                     threads=args.threads)
             model_mgr_rt = predict_ms2(model_dir=args.model_dir, 
+                                  ms2_model=args.ms2_model,
                                     pred_file=args.in_file, 
                                     out_dir=args.out_dir, 
                                     out_prefix=args.out_prefix, 
@@ -571,6 +601,7 @@ if __name__ == "__main__":
         elif args.tf_type == "test":
             print("Test mode ...")
             model_mgr_rt = predict_ms2(model_dir=args.model_dir, 
+                                  ms2_model=args.ms2_model,
                                    pred_file=args.in_file, 
                                    out_dir=args.out_dir, 
                                    out_prefix=args.out_prefix, 
@@ -607,6 +638,9 @@ if __name__ == "__main__":
                                    torch_compile=args.torch_compile,
                                    threads=args.threads)
             model_mgr_rt = predict_ms2(model_dir="generic", 
+                                  # Baseline control arm: must stay on the installed generic
+                                  # model, otherwise the pretrained-vs-fine-tuned comparison
+                                  # silently changes what it is comparing against.
                                     pred_file=args.in_file, 
                                     out_dir=pretrained_model_out_dir, 
                                     out_prefix=args.out_prefix, 
@@ -642,6 +676,7 @@ if __name__ == "__main__":
                                     torch_compile=args.torch_compile,
                                     threads=args.threads)
             model_mgr_rt = predict_ms2(model_dir="generic", 
+                                    ms2_model=args.ms2_model,
                                     pred_file=args.in_file, 
                                     out_dir=args.out_dir, 
                                     out_prefix=args.out_prefix, 

@@ -127,6 +127,17 @@ public class CarafeGUI extends JFrame {
     private JTextField nceField;
     private JComboBox<String> msInstrumentField;
     private JComboBox<String> deviceCombo;
+    private JComboBox<String> labelingCombo;
+    /**
+     * Set while settings are being applied from a file. The labelling control normally rewrites
+     * the fixed modifications and the MS2 base model, which would overwrite the values being
+     * restored; a saved run must come back exactly as it was saved, including any deliberate
+     * override of those two.
+     */
+    private boolean suppressLabelingPreset = false;
+    private JComboBox<String> ms2ModelCombo;
+    private JTextField ms2ModelField;
+    private java.util.List<JComponent> ms2ModelRowComponents;
 
     // Library Generation settings
     private JComboBox<String> enzymeCombo;
@@ -1024,7 +1035,8 @@ public class CarafeGUI extends JFrame {
         String[] workflows = {
                 "1. Spectral library generation: start with DIA-NN search",
                 "2. Spectral library generation: start with DIA-NN report",
-                "3. End-to-end DIA search"
+                "3. End-to-end DIA search",
+                "4. Spectral library generation: predict with a pretrained model (no fine-tuning)"
         };
         workflowCombo = new JComboBox<>(workflows);
         styleComboBox(workflowCombo);
@@ -1607,6 +1619,18 @@ public class CarafeGUI extends JFrame {
                 setVisible(diannAdditionalOptionsRowComponents, true);
                 updateMsConvertVisibility();
             }
+            case 3 -> { // Workflow 4: predict with a pretrained model, no fine-tuning.
+                // No experimental data is used, so every training input is hidden. Only the
+                // protein database and the model settings matter.
+                setVisible(diannReportRowComponents, false);
+                setVisible(trainMsRowComponents, false);
+                setVisible(trainDbRowComponents, false);
+                setVisible(projectMsRowComponents, false);
+                setVisible(libraryDbRowComponents, true);
+                setVisible(diannExeRowComponents, false);
+                setVisible(diannAdditionalOptionsRowComponents, false);
+                updateMsConvertVisibility();
+            }
         }
 
         // Show benchmark checkbox only for Workflow 3 (End-to-end)
@@ -1803,8 +1827,69 @@ public class CarafeGUI extends JFrame {
         gbc.weightx = 1;
         panel.add(modeCombo, gbc);
 
+        // ---- MS2 base model ----
         gbc.gridx = 0;
         gbc.gridy = 1;
+        gbc.weightx = 0;
+        panel.add(createLabel("MS2 Base Model:",
+                "Which pretrained MS2 model to predict with, or to start fine-tuning from.\n" +
+                        "Generic: the installed AlphaPeptDeep model (the default).\n" +
+                        "TMT base model: the TMT model bundled with Carafe.\n" +
+                        "Custom file: a .pt model you provide.\n" +
+                        "Choosing a TMT reagent under Isobaric Labelling on the Library Generation\n" +
+                        "tab switches this to the TMT base model; change it back here if that is\n" +
+                        "not what you want.\n" +
+                        "A fine-tuned model produced by a training run still takes precedence."),
+                gbc);
+
+        String[] ms2ModelSources = {
+                "Generic (AlphaPeptDeep)",
+                "TMT base model (bundled)",
+                "Custom file..." };
+        ms2ModelCombo = new JComboBox<>(ms2ModelSources);
+        styleComboBox(ms2ModelCombo);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(ms2ModelCombo, gbc);
+
+        ms2ModelField = createTextField("Path to a .pt MS2 model");
+        JButton ms2ModelBrowse = new JButton("Browse");
+        ms2ModelBrowse.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            String current = ms2ModelField.getText().trim();
+            if (!current.isEmpty()) {
+                File f = new File(current);
+                chooser.setCurrentDirectory(f.isDirectory() ? f : f.getParentFile());
+            }
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                ms2ModelField.setText(chooser.getSelectedFile().getAbsolutePath());
+            }
+        });
+        // Keep the field and its Browse button inside a single cell so this row occupies the
+        // same two columns as every other row on this tab. Adding the button as a third grid
+        // column would widen the layout and narrow every input above it.
+        JPanel ms2ModelRow = new JPanel(new BorderLayout(COL_SPACING, 0));
+        ms2ModelRow.setOpaque(false);
+        ms2ModelRow.add(ms2ModelField, BorderLayout.CENTER);
+        ms2ModelRow.add(ms2ModelBrowse, BorderLayout.EAST);
+
+        JLabel ms2ModelLabel = createLabel("Custom MS2 Model:",
+                "The .pt model file to predict with or fine-tune from.");
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.weightx = 0;
+        panel.add(ms2ModelLabel, gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(ms2ModelRow, gbc);
+        ms2ModelRowComponents = java.util.Arrays.asList((JComponent) ms2ModelLabel, ms2ModelRow);
+
+        ms2ModelCombo.addActionListener(e -> updateMs2ModelFieldState());
+        updateMs2ModelFieldState();
+
+        gbc.gridx = 0;
+        gbc.gridy = 3;
         gbc.weightx = 0;
         panel.add(createLabel("Normalized Collision Energy:",
                 "The normalized collision energy (NCE) to use for deep learning model training and inference.\n" +
@@ -1819,7 +1904,7 @@ public class CarafeGUI extends JFrame {
         panel.add(nceField, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridy = 4;
         gbc.weightx = 0;
         panel.add(createLabel("MS Instrument Type:",
                 "The MS instrument type to use for deep learning model training and inference.\n" +
@@ -1839,7 +1924,7 @@ public class CarafeGUI extends JFrame {
         panel.add(msInstrumentField, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 3;
+        gbc.gridy = 5;
         gbc.weightx = 0;
         panel.add(createLabel("Computational Device:",
                 "The computational device to use for deep learning model training and inference.\n" +
@@ -1858,7 +1943,7 @@ public class CarafeGUI extends JFrame {
         panel.add(deviceCombo, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridy = 6;
         gbc.gridwidth = 2;
         gbc.weightx = 1;
         gbc.insets = new Insets(20, 8, 8, 8);
@@ -1867,14 +1952,123 @@ public class CarafeGUI extends JFrame {
                 "- GPU mode is recommended for faster training (requires CUDA-compatible GPU)\n" +
                         "- If GPU is not available, the software will automatically fall back to CPU\n" +
                         "- NCE and MS Instrument are optional for fine-tuning (learned from data)\n" +
-                        "- Use 'phosphorylation' mode for phosphopeptide analysis"),
+                        "- Use 'phosphorylation' mode for phosphopeptide analysis\n" +
+                        "- For TMT data, set Isobaric Labelling on the Library Generation tab:\n" +
+                        "  the generic model predicts labelled peptides poorly, so starting\n" +
+                        "  from the TMT model matters"),
                 gbc);
 
-        gbc.gridy = 5;
+        gbc.gridy = 7;
         gbc.weighty = 1;
         panel.add(Box.createVerticalGlue(), gbc);
 
         return panel;
+    }
+
+    /** Labelling choices offered in the GUI. */
+    private static final String[] LABELING_CHOICES = {
+            "None",
+            "TMT 6-plex / 10-plex / 11-plex",
+            "TMT 2-plex",
+            "TMTpro (16/18/32/35-plex)"
+    };
+
+    /**
+     * Carafe modification names for a labelling choice: the label on lysine and on the peptide
+     * N-terminus. Resolved by name rather than by id, because the numeric modification ids depend
+     * on the contents of top_modifications.tsv and unimod.xml and must never be hard-coded.
+     *
+     * @param labeling one of {@link #LABELING_CHOICES}
+     * @return the modification names, empty when unlabelled
+     */
+    static String[] labelingModificationNames(String labeling) {
+        if (labeling == null) {
+            return new String[0];
+        }
+        if (labeling.startsWith("TMT 6-plex")) {
+            return new String[] { "TMT 6-plex of K", "TMT 6-plex of peptide N-term" };
+        }
+        if (labeling.startsWith("TMT 2-plex")) {
+            return new String[] { "TMT 2-plex of K", "TMT 2-plex of peptide N-term" };
+        }
+        if (labeling.startsWith("TMTpro")) {
+            return new String[] { "TMTpro of K", "TMTpro of peptide N-term" };
+        }
+        return new String[0];
+    }
+
+    /**
+     * Put the label's fixed modifications into the Library Generation tab. TMT labels both lysine
+     * and the peptide N-terminus, so both are added. Modifications the user picked themselves are
+     * kept; only the labels belonging to the other choices are cleared, so switching reagent
+     * replaces them rather than accumulating them.
+     */
+    private void applyLabelingPreset() {
+        if (suppressLabelingPreset) {
+            return;
+        }
+        Object selected = labelingCombo.getSelectedItem();
+        String[] names = labelingModificationNames(selected == null ? null : selected.toString());
+
+        java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+        String current = fixModSelectedField == null ? "" : fixModSelectedField.getText().trim();
+        for (String part : current.split(",")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty() && !trimmed.equals("0")) {
+                ids.add(trimmed);
+            }
+        }
+
+        java.util.Set<String> allLabelIds = new java.util.HashSet<>();
+        for (String choice : LABELING_CHOICES) {
+            for (String name : labelingModificationNames(choice)) {
+                Integer id = CModification.getInstance().ptm_name2id.get(name);
+                if (id != null) {
+                    allLabelIds.add(String.valueOf(id));
+                }
+            }
+        }
+        ids.removeAll(allLabelIds);
+
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        for (String name : names) {
+            Integer id = CModification.getInstance().ptm_name2id.get(name);
+            if (id == null) {
+                missing.add(name);
+            } else {
+                ids.add(String.valueOf(id));
+            }
+        }
+
+        if (fixModSelectedField != null) {
+            fixModSelectedField.setText(ids.isEmpty() ? "0" : String.join(",", ids));
+        }
+
+        // Keep the MS2 Base Model control showing what will actually be used. Picking a TMT
+        // reagent selects the TMT model; going back to unlabelled restores the generic one.
+        // Either can still be overridden afterwards, and a custom file is never overwritten.
+        if (ms2ModelCombo != null && !"Custom file...".equals(ms2ModelCombo.getSelectedItem())) {
+            ms2ModelCombo.setSelectedItem(names.length > 0
+                    ? "TMT base model (bundled)"
+                    : "Generic (AlphaPeptDeep)");
+        }
+
+        if (!missing.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "These modifications are not available in this build:\n  "
+                            + String.join("\n  ", missing)
+                            + "\n\nSelect them manually on the Library Generation tab.",
+                    "Modification not found", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /** The custom model path row is only shown when "Custom file..." is selected. */
+    private void updateMs2ModelFieldState() {
+        boolean custom = ms2ModelCombo != null
+                && "Custom file...".equals(ms2ModelCombo.getSelectedItem());
+        if (ms2ModelRowComponents != null) {
+            setVisible(ms2ModelRowComponents, custom);
+        }
     }
 
     private JPanel createLibraryGenerationPanel() {
@@ -1929,8 +2123,30 @@ public class CarafeGUI extends JFrame {
         gbc.weightx = 1;
         panel.add(missCleavageSpinner, gbc);
 
+        // ---- Isobaric labelling ----
         gbc.gridx = 0;
         gbc.gridy = 2;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        gbc.insets = DEFAULT_INSETS;
+        panel.add(createLabel("Isobaric Labelling:",
+                "The isobaric label used in the sample.\n" +
+                        "Selecting a TMT reagent makes Carafe use the bundled TMT MS2 base model:\n" +
+                        "directly for prediction, and as the starting point when fine-tuning.\n" +
+                        "It fills in the matching fixed modifications below (the label on K and\n" +
+                        "on the peptide N-term), and selects the TMT base model on the\n" +
+                        "Model Training tab."),
+                gbc);
+
+        labelingCombo = new JComboBox<>(LABELING_CHOICES);
+        styleComboBox(labelingCombo);
+        labelingCombo.addActionListener(e -> applyLabelingPreset());
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(labelingCombo, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 3;
         gbc.weightx = 0;
         panel.add(createLabel("Fixed Modification Available:",
                 "The available fixed modifications to consider for library generation.\n" +
@@ -1997,7 +2213,7 @@ public class CarafeGUI extends JFrame {
         panel.add(fixModAvailableCombo, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 3;
+        gbc.gridy = 4;
         gbc.weightx = 0;
         panel.add(createLabel("Fixed Modifications Selected:",
                 "The selected fixed modifications to consider for library generation.\n" +
@@ -2058,7 +2274,7 @@ public class CarafeGUI extends JFrame {
         panel.add(fixModSelectedField, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridy = 5;
         gbc.weightx = 0;
         panel.add(createLabel("Variable Modifications Available:",
                 "The available variable modifications to consider for library generation.\n"
@@ -2125,7 +2341,7 @@ public class CarafeGUI extends JFrame {
         panel.add(varModAvailableCombo, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 5;
+        gbc.gridy = 6;
         gbc.weightx = 0;
         panel.add(createLabel("Variable Modifications Selected:",
                 "The selected variable modifications to consider for library generation.\n" +
@@ -2187,7 +2403,7 @@ public class CarafeGUI extends JFrame {
         panel.add(varModSelectedField, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 6;
+        gbc.gridy = 7;
         gbc.weightx = 0;
         panel.add(createLabel("Maximum Variable Modifications:",
                 "The maximum number of variable modifications to consider for library generation."), gbc);
@@ -2198,7 +2414,7 @@ public class CarafeGUI extends JFrame {
         panel.add(maxVarSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 7;
+        gbc.gridy = 8;
         gbc.weightx = 0;
         panel.add(createLabel("Clip N-Terminal Methionine:", "When digesting a protein starting with amino acid M,\n" +
                 "two copies of the leading peptides (with and without the N-terminal M) are considered if checked."),
@@ -2210,7 +2426,7 @@ public class CarafeGUI extends JFrame {
         panel.add(clipNmCheckbox, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 8;
+        gbc.gridy = 9;
         gbc.weightx = 0;
         panel.add(createLabel("Minimum Peptide Length:",
                 "The minimum length of peptide to consider for library generation."), gbc);
@@ -2221,7 +2437,7 @@ public class CarafeGUI extends JFrame {
         panel.add(minLengthSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 9;
+        gbc.gridy = 10;
         gbc.weightx = 0;
         panel.add(createLabel("Maximum Peptide Length:",
                 "The maximum length of peptide to consider for library generation."), gbc);
@@ -2232,7 +2448,7 @@ public class CarafeGUI extends JFrame {
         panel.add(maxLengthSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 10;
+        gbc.gridy = 11;
         gbc.weightx = 0;
         panel.add(createLabel("Minimum Peptide m/z:", "The minimum m/z of peptide to consider for library generation.\n"
                 +
@@ -2245,7 +2461,7 @@ public class CarafeGUI extends JFrame {
         panel.add(minPepMzSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 11;
+        gbc.gridy = 12;
         gbc.weightx = 0;
         panel.add(createLabel("Maximum Peptide m/z:", "The maximum m/z of peptide to consider for library generation.\n"
                 +
@@ -2258,7 +2474,7 @@ public class CarafeGUI extends JFrame {
         panel.add(maxPepMzSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 12;
+        gbc.gridy = 13;
         gbc.weightx = 0;
         panel.add(createLabel("Minimum Peptide Charge:",
                 "The minimum charge of peptide to consider for library generation."), gbc);
@@ -2269,7 +2485,7 @@ public class CarafeGUI extends JFrame {
         panel.add(minPepChargeSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 13;
+        gbc.gridy = 14;
         gbc.weightx = 0;
         panel.add(createLabel("Maximum Peptide Charge:",
                 "The maximum charge of peptide to consider for library generation."), gbc);
@@ -2280,7 +2496,7 @@ public class CarafeGUI extends JFrame {
         panel.add(maxPepChargeSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 14;
+        gbc.gridy = 15;
         gbc.weightx = 0;
         panel.add(createLabel("Minimum Fragment m/z:", "The minimum mz of fragment to consider for library generation"),
                 gbc);
@@ -2292,7 +2508,7 @@ public class CarafeGUI extends JFrame {
         panel.add(libMinFragMzSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 15;
+        gbc.gridy = 16;
         gbc.weightx = 0;
         panel.add(createLabel("Maximum Fragment m/z:", "The maximum mz of fragment to consider for library generation"),
                 gbc);
@@ -2303,7 +2519,7 @@ public class CarafeGUI extends JFrame {
         panel.add(libMaxFragMzSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 16;
+        gbc.gridy = 17;
         gbc.weightx = 0;
         panel.add(createLabel("Maximum Number of Fragment Ions:",
                 "The maximum number of fragment ions to consider for library generation"), gbc);
@@ -2314,7 +2530,7 @@ public class CarafeGUI extends JFrame {
         panel.add(LibTopNFragIonsSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 17;
+        gbc.gridy = 18;
         gbc.weightx = 0;
         panel.add(createLabel("Minimum Number of Fragment Ions:",
                 "The minimum number of fragment ions to consider for library generation"), gbc);
@@ -2325,7 +2541,7 @@ public class CarafeGUI extends JFrame {
         panel.add(libMinNumFragSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 18;
+        gbc.gridy = 19;
         gbc.weightx = 0;
         panel.add(createLabel("Minimum Fragment Ion Number:",
                 "The minimum fragment ion number to consider for library generation"), gbc);
@@ -2336,7 +2552,7 @@ public class CarafeGUI extends JFrame {
         panel.add(libFragNumMinSpinner, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 19;
+        gbc.gridy = 20;
         gbc.weightx = 0;
         panel.add(createLabel("Spectral Library Format:", "Spectral library format"), gbc);
 
@@ -2348,7 +2564,7 @@ public class CarafeGUI extends JFrame {
         panel.add(libraryFormatCombo, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 20;
+        gbc.gridy = 21;
         gbc.weightx = 0;
         gbc.gridwidth = 1;
         benchmarkLabel = createLabel("Benchmark (DIA-NN library-free):",
@@ -2365,7 +2581,7 @@ public class CarafeGUI extends JFrame {
         panel.add(benchmarkCheckbox, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 21;
+        gbc.gridy = 22;
         gbc.gridwidth = 2;
         gbc.weighty = 1;
         panel.add(Box.createVerticalGlue(), gbc);
@@ -3377,6 +3593,13 @@ public class CarafeGUI extends JFrame {
         if (msConvertExeRowComponents == null)
             return;
 
+        // The predict-only workflow never converts anything. Without this the 300ms debounce
+        // re-shows the row from a .raw path left over from a previous workflow selection.
+        if (globalWorkflowIndex == 3) {
+            setVisible(msConvertExeRowComponents, false);
+            return;
+        }
+
         boolean show = false;
 
         // 1. Check Multi-Select List
@@ -3714,7 +3937,8 @@ public class CarafeGUI extends JFrame {
 
     private String buildCommand() {
         int wf = workflowCombo.getSelectedIndex();
-        if (wf == 1)
+        // Workflows 2 and 4 are a single Carafe command, so the preview can show it.
+        if (wf == 1 || wf == 3)
             return buildCarafeCommand().cmd;
         return "This workflow runs chained commands. Click Run Carafe to execute.";
     }
@@ -3789,8 +4013,12 @@ public class CarafeGUI extends JFrame {
             // commandArgs.add("\"" + libraryDb + "\"");
         }
 
+        // Workflow 4 predicts from a pretrained model and uses no experimental data, so the
+        // training inputs are skipped even if their (hidden) fields still hold text.
+        boolean predictOnly = workflowCombo.getSelectedIndex() == 3;
+
         String diannReport = diannReportFileField.getText().trim();
-        if (!diannReport.isEmpty()) {
+        if (!predictOnly && !diannReport.isEmpty()) {
             // cmd.append("-i \"").append(diannReport).append("\" ");
             commandArgs.add("-i");
             commandArgs.add(diannReport);
@@ -3812,7 +4040,7 @@ public class CarafeGUI extends JFrame {
             // Single file or folder path from text field
             trainMsFile = trainMsFileField.getText().trim();
         }
-        if (!trainMsFile.isEmpty()) {
+        if (!predictOnly && !trainMsFile.isEmpty()) {
             // cmd.append("-ms \"").append(trainMsFile).append("\" ");
             commandArgs.add("-ms");
             commandArgs.add(trainMsFile);
@@ -3879,6 +4107,24 @@ public class CarafeGUI extends JFrame {
         // cmd.append("-mode ").append(modeCombo.getSelectedItem()).append(" ");
         commandArgs.add("-mode");
         commandArgs.add(modeCombo.getSelectedItem().toString());
+
+        // The isobaric label itself is expressed through the fixed modifications; the only other
+        // thing it decides is which MS2 base model to use, which the control below states.
+        Object ms2ModelSource = ms2ModelCombo == null ? null : ms2ModelCombo.getSelectedItem();
+        if ("TMT base model (bundled)".equals(ms2ModelSource)) {
+            // Named rather than a path, so the GUI does not have to know where it was installed.
+            commandArgs.add("-ms2_model");
+            commandArgs.add("tmt");
+        } else if ("Generic (AlphaPeptDeep)".equals(ms2ModelSource)) {
+            // The default: add nothing, so an existing command line is unchanged.
+            ms2ModelSource = null;
+        } else if ("Custom file...".equals(ms2ModelSource)) {
+            String customModel = ms2ModelField == null ? "" : ms2ModelField.getText().trim();
+            if (!customModel.isEmpty()) {
+                commandArgs.add("-ms2_model");
+                commandArgs.add(customModel);
+            }
+        }
         String nce = nceField.getText().trim();
         if (!nce.isEmpty()) {
             if (!nce.equalsIgnoreCase("auto")) {
@@ -3998,7 +4244,10 @@ public class CarafeGUI extends JFrame {
         commandArgs.add("-se");
         commandArgs.add("DIA-NN");
 
-        if (!trainMsFile.isEmpty()) {
+        if (!predictOnly && !trainMsFile.isEmpty()) {
+            // Guarded like -i and -ms above: the field is only hidden when the workflow changes,
+            // never cleared, so a leftover path would otherwise put -tf all in a run that does
+            // no training at all.
             // cmd.append("-tf all ");
             commandArgs.add("-tf");
             commandArgs.add("all");
@@ -4764,6 +5013,16 @@ public class CarafeGUI extends JFrame {
                     }
                     return commands;
                 });
+            }
+
+            case 3 -> {
+                // Predict a library straight from a pretrained model. No DIA-NN search, no
+                // fine-tuning and no MS data, so this is a single Carafe command.
+                CmdTask carafeTask = buildCarafeCommand(null, false);
+                if (carafeTask != null) {
+                    carafeTask.task_description = "Run Carafe to predict a spectral library from a pretrained model";
+                }
+                executeCommand(carafeTask);
             }
 
             default -> JOptionPane.showMessageDialog(this, "Unsupported workflow selected!", "Error",
@@ -5892,6 +6151,82 @@ public class CarafeGUI extends JFrame {
         }
     }
 
+    /**
+     * Why a protein database file is unusable, or null when it looks fine.
+     * <p>
+     * Checking only that the file exists is not enough: pointing the database field at, say, a
+     * saved settings file passes that test and then produces zero peptides and a confusing failure
+     * much later in the run. Validation is by extension, mirroring what the backend actually
+     * dispatches on ({@code AIGear.generate_spectral_library} for the library database, DIA-NN's
+     * {@code --lib} for a .speclib training database), plus a content check for files that claim
+     * to be FASTA.
+     *
+     * @param file          the file to inspect
+     * @param allowSpeclib  true for the training database field, which also accepts a DIA-NN
+     *                      .speclib; the library database instead accepts a peptide-forms table
+     * @return a reason string, or null when the file is acceptable
+     */
+    private static String proteinDbProblem(File file, boolean allowSpeclib) {
+        String name = file.getName().toLowerCase(java.util.Locale.ROOT);
+        boolean fasta = name.endsWith(".fasta") || name.endsWith(".fa");
+        if (fasta) {
+            return firstNonBlankLineStartsWithChevron(file) ? null
+                    : "does not start with a FASTA header line (\">\")";
+        }
+        if (allowSpeclib && name.endsWith(".speclib")) {
+            return null;
+        }
+        // AIGear.generate_spectral_library also accepts a peptide-forms / Skyline precursor table.
+        if (!allowSpeclib && (name.endsWith(".tsv") || name.endsWith(".txt") || name.endsWith(".csv"))) {
+            return null;
+        }
+        return allowSpeclib
+                ? "is not a FASTA (.fasta, .fa) or DIA-NN spectral library (.speclib) file"
+                : "is not a FASTA (.fasta, .fa) or peptide table (.tsv, .txt, .csv) file";
+    }
+
+    /**
+     * True when the first non-blank line starts with ">", tolerating a UTF-8 byte order mark.
+     * Returns true when the file cannot be read, leaving the real problem to Carafe.
+     */
+    private static boolean firstNonBlankLineStartsWithChevron(File file) {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(new java.io.FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                // Strip a UTF-8 BOM, which would otherwise hide the ">".
+                if (!line.isEmpty() && line.charAt(0) == '﻿') {
+                    line = line.substring(1);
+                }
+                return line.startsWith(">");
+            }
+            return false; // empty file
+        } catch (IOException e) {
+            return true;
+        }
+    }
+
+    /**
+     * True when the NCE field holds a value that can be used with no MS data to learn it from.
+     * <p>
+     * "auto" means "read the collision energy from the training MS/MS data". The predict-only
+     * workflow has none, so auto silently falls through to Carafe's default of 27 -- outside the
+     * range the bundled TMT model was trained on, and not a value the user chose.
+     *
+     * @param nce the raw NCE field text
+     * @return true when it is an explicit value
+     */
+    static boolean nceIsUsableWithoutMsData(String nce) {
+        if (nce == null) {
+            return false;
+        }
+        String trimmed = nce.trim();
+        return !trimmed.isEmpty() && !trimmed.equalsIgnoreCase("auto");
+    }
+
     private boolean validateInputs(int workflowIndex) {
         java.util.List<String> errors = new java.util.ArrayList<>();
 
@@ -6090,6 +6425,11 @@ public class CarafeGUI extends JFrame {
                     errors.add("- Training protein database (FASTA) is not specified.");
                 else if (!new File(trainDb).exists())
                     errors.add("- Training protein database file not found.");
+                else {
+                    String problem = proteinDbProblem(new File(trainDb), true);
+                    if (problem != null)
+                        errors.add("- Training protein database " + problem + ": " + trainDb);
+                }
 
                 // 3. Library Protein DB
                 String libDb = libraryDbFileField.getText().trim();
@@ -6097,6 +6437,11 @@ public class CarafeGUI extends JFrame {
                     errors.add("- Library protein database (FASTA) is not specified.");
                 else if (!new File(libDb).exists())
                     errors.add("- Library protein database file not found.");
+                else {
+                    String problem = proteinDbProblem(new File(libDb), false);
+                    if (problem != null)
+                        errors.add("- Library protein database " + problem + ": " + libDb);
+                }
 
                 // 4. Output Directory
                 checkOutDir.accept(null);
@@ -6137,6 +6482,11 @@ public class CarafeGUI extends JFrame {
                     errors.add("- Library protein database (FASTA) is not specified.");
                 else if (!new File(libDbRef).exists())
                     errors.add("- Library protein database file not found.");
+                else {
+                    String problem = proteinDbProblem(new File(libDbRef), false);
+                    if (problem != null)
+                        errors.add("- Library protein database " + problem + ": " + libDbRef);
+                }
 
                 // 4. Output Directory
                 checkOutDir.accept(null);
@@ -6169,6 +6519,11 @@ public class CarafeGUI extends JFrame {
                     errors.add("- Training protein database (FASTA) is not specified.");
                 else if (!new File(trainDb2).exists())
                     errors.add("- Training protein database file not found.");
+                else {
+                    String problem = proteinDbProblem(new File(trainDb2), true);
+                    if (problem != null)
+                        errors.add("- Training protein database " + problem + ": " + trainDb2);
+                }
 
                 // 3. Project MS Files
                 if (effectiveProjectFiles.isEmpty())
@@ -6186,6 +6541,11 @@ public class CarafeGUI extends JFrame {
                     errors.add("- Library protein database (FASTA) is not specified.");
                 else if (!new File(libDb2).exists())
                     errors.add("- Library protein database file not found.");
+                else {
+                    String problem = proteinDbProblem(new File(libDb2), false);
+                    if (problem != null)
+                        errors.add("- Library protein database " + problem + ": " + libDb2);
+                }
 
                 // 5. Output Directory
                 checkOutDir.accept(null);
@@ -6200,6 +6560,42 @@ public class CarafeGUI extends JFrame {
                 if (hasRaw)
                     checkMsConvert.accept(null);
                 break;
+
+            case 3: // Predict with a pretrained model, no fine-tuning
+                // No MS data, no DIA-NN and no MSConvert: only the database, the output
+                // directory and Python are needed.
+                String libDbPredict = libraryDbFileField.getText().trim();
+                if (libDbPredict.isEmpty())
+                    errors.add("- Library protein database (FASTA) is not specified.");
+                else if (!new File(libDbPredict).exists())
+                    errors.add("- Library protein database file not found.");
+                else {
+                    String problem = proteinDbProblem(new File(libDbPredict), false);
+                    if (problem != null)
+                        errors.add("- Library protein database " + problem + ": " + libDbPredict);
+                }
+
+                checkOutDir.accept(null);
+                checkPython.accept(null);
+
+                if (!nceIsUsableWithoutMsData(nceField.getText())) {
+                    errors.add("- Normalized Collision Energy must be set for this workflow:"
+                            + " there is no MS data to determine it from. Use the collision energy"
+                            + " of the method the library is for.");
+                }
+
+                break;
+        }
+
+        // Workflow-independent: every workflow either predicts with or fine-tunes from this
+        // model, so a missing path silently falls back to the generic model (no -ms2_model is
+        // emitted) or fails part-way through the run when ai_pred.py cannot open it.
+        if (ms2ModelCombo != null && "Custom file...".equals(ms2ModelCombo.getSelectedItem())) {
+            String customModel = ms2ModelField == null ? "" : ms2ModelField.getText().trim();
+            if (customModel.isEmpty())
+                errors.add("- Custom MS2 model is selected but no file is specified.");
+            else if (!new File(customModel).exists())
+                errors.add("- Custom MS2 model file not found: " + customModel);
         }
 
         // Validate Fragment Ion Tolerance
@@ -6681,6 +7077,8 @@ public class CarafeGUI extends JFrame {
 
         // --- Model Training tab ---
         reg.add(comboSetting("mode", modeCombo));
+        reg.add(comboSetting("ms2_base_model", ms2ModelCombo));
+        reg.add(textSetting("ms2_model_file", ms2ModelField));
         reg.add(textSetting("nce", nceField));
         reg.add(comboSetting("ms_instrument", msInstrumentField));
         reg.add(comboSetting("device", deviceCombo));
@@ -6688,6 +7086,7 @@ public class CarafeGUI extends JFrame {
         // --- Library Generation tab ---
         reg.add(comboSetting("enzyme", enzymeCombo));
         reg.add(spinnerSetting("miss_cleavage", missCleavageSpinner));
+        reg.add(comboSetting("isobaric_labeling", labelingCombo));
         reg.add(textSetting("fix_mod_selected", fixModSelectedField));
         reg.add(textSetting("var_mod_selected", varModSelectedField));
         reg.add(spinnerSetting("max_var_mods", maxVarSpinner));
@@ -6746,17 +7145,27 @@ public class CarafeGUI extends JFrame {
         java.util.List<Setting> reg = settingsRegistry();
         java.util.Set<String> known = new java.util.HashSet<>();
         int applied = 0;
-        for (Setting s : reg) {
-            known.add(s.key());
-            if (obj.containsKey(s.key())) {
-                try {
-                    s.setter().accept(obj.get(s.key()));
-                    applied++;
-                } catch (Exception ex) {
-                    logToConsole("[WARN] Could not apply setting '" + s.key() + "': " + ex.getMessage() + "\n");
+        // The labelling control rewrites the fixed modifications and the MS2 base model when it
+        // changes. During a load that would overwrite the very values being restored, so a saved
+        // run would not come back as saved. Suppress it and apply the file verbatim instead.
+        suppressLabelingPreset = true;
+        try {
+            for (Setting s : reg) {
+                known.add(s.key());
+                if (obj.containsKey(s.key())) {
+                    try {
+                        s.setter().accept(obj.get(s.key()));
+                        applied++;
+                    } catch (Exception ex) {
+                        logToConsole("[WARN] Could not apply setting '" + s.key() + "': " + ex.getMessage() + "\n");
+                    }
                 }
             }
+        } finally {
+            suppressLabelingPreset = false;
         }
+        // The custom model path row is shown or hidden by the restored MS2 Base Model value.
+        updateMs2ModelFieldState();
         java.util.List<String> unknown = new java.util.ArrayList<>();
         for (String k : obj.keySet()) {
             if (!k.startsWith("_") && !known.contains(k)) {
@@ -6867,9 +7276,10 @@ public class CarafeGUI extends JFrame {
                 refineBoundaryCheckbox, rtPeakWindowField, xicCorSpinner,
                 minFragMzSpinner, nIonMinSpinner, cIonMinSpinner,
                 // Model Training
-                modeCombo, nceField, msInstrumentField, deviceCombo,
+                modeCombo, ms2ModelCombo, nceField, msInstrumentField, deviceCombo,
                 // Library Generation
-                enzymeCombo, missCleavageSpinner, fixModSelectedField, varModSelectedField, maxVarSpinner,
+                enzymeCombo, missCleavageSpinner, labelingCombo,
+                fixModSelectedField, varModSelectedField, maxVarSpinner,
                 clipNmCheckbox, minLengthSpinner, maxLengthSpinner, minPepMzSpinner, maxPepMzSpinner,
                 minPepChargeSpinner, maxPepChargeSpinner, libMinFragMzSpinner, libMaxFragMzSpinner,
                 LibTopNFragIonsSpinner, libMinNumFragSpinner, libFragNumMinSpinner, libraryFormatCombo,

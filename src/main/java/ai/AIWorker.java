@@ -34,6 +34,12 @@ public final  class AIWorker implements Runnable{
     public static boolean ccs_enabled = false;
     public static String mod2mass = "-";
     public static String user_mod = "";
+    /**
+     * Pretrained MS2 base model used for prediction in place of the installed generic model,
+     * e.g. the bundled TMT model. Empty means the installed generic model.
+     * Only available in v2; a fine-tuned model in model_dir still takes precedence.
+     */
+    public static String ms2_model = "";
 
     public AIWorker(String model_dir, String input_file, String out_dir, String out_prefix, String device, String ms_instrument, double nce, String ai_mode, String ai_version){
 
@@ -99,6 +105,18 @@ public final  class AIWorker implements Runnable{
             // cmd += " --user_mod \"" + user_mod + "\"";
             cmd_list.add("--user_mod");
             cmd_list.add("\"" + user_mod + "\"");
+        }
+        if(!ms2_model.isEmpty()){
+            if(this.ai_version.equalsIgnoreCase("v2")){
+                cmd_list.add("--ms2_model");
+                cmd_list.add(ms2_model);
+            }else{
+                // Only v2/ai_pred.py accepts --ms2_model. Say so, because AIGear has already
+                // logged the base model and would otherwise leave the user believing it was used.
+                Cloger.getInstance().logger.warn("A pretrained MS2 base model was requested ("
+                        + ms2_model + ") but -ai_version " + this.ai_version + " cannot use one. "
+                        + "The installed generic model will be used for prediction. Use -ai_version v2.");
+            }
         }
         System.out.println("cmd: "+ StringUtils.join(cmd_list));
         // convert cmd_list to String []

@@ -118,6 +118,12 @@ public class AIGear {
     public double nce = 27.0;
 
     /**
+     * Set by {@code -nce auto}: the collision energy is read from the MS data, exactly as when
+     * {@code -nce} is omitted. The GUI shows "auto" for this, so the same word has to work here.
+     */
+    public boolean nce_is_auto = false;
+
+    /**
      * This is used to indicate whether the user has provided a specific MS
      * instrument for spectral library generation.
      * If true, the user_provided_ms_instrument will be used. Otherwise, the
@@ -727,7 +733,8 @@ public class AIGear {
 
         // This is the fine-tuned model directory
         options.addOption("model_dir", true, "The directory of the model to use for spectral library generation");
-        options.addOption("ms2_model", true, "User-provided pretrained MS2 model path");
+        options.addOption("ms2_model", true, "Pretrained MS2 model: a .pt file path, 'tmt' for the " +
+                "bundled TMT model, or 'none' to force the installed generic model.");
 
         options.addOption("verbose", true, "The level of detail of the log: 1 (info, default), 2 (debug)");
         options.addOption("ai_version", true, "The version of AI scripts to use: v1, v2 (default)");
@@ -1031,8 +1038,25 @@ public class AIGear {
         }
 
         if (cmd.hasOption("nce")) {
-            aiGear.nce = Double.parseDouble(cmd.getOptionValue("nce"));
-            CParameter.NCE = aiGear.nce;
+            String nce_option = cmd.getOptionValue("nce").trim();
+            if (nce_option.equalsIgnoreCase("auto")) {
+                // "auto" is the GUI's word for "read it from the MS data", which is what happens
+                // when -nce is omitted. Without this the value reached Double.parseDouble and
+                // threw an uncaught NumberFormatException.
+                aiGear.nce_is_auto = true;
+            } else {
+                aiGear.nce = Double.parseDouble(nce_option);
+                CParameter.NCE = aiGear.nce;
+            }
+        }
+        if (aiGear.nce_is_auto && !cmd.hasOption("ms")) {
+            // Only -ms gives a collision energy to read (get_ms_run_meta_data). Silently falling
+            // back to the default would predict the whole library at an NCE the user did not
+            // choose. Omitting -nce altogether still uses the default, unchanged.
+            Cloger.getInstance().logger.error("-nce auto reads the collision energy from the MS/MS data, "
+                    + "but no MS data was given (-ms). Set -nce to the collision energy of the method "
+                    + "this library is for.");
+            System.exit(1);
         }
 
         if (cmd.hasOption("xic")) {
@@ -1133,6 +1157,21 @@ public class AIGear {
             aiGear.ms2_model = cmd.getOptionValue("ms2_model");
             Cloger.getInstance().logger.info("Use user-provided ms2 model: " + aiGear.ms2_model);
         }
+
+        String resolved_ms2_model = aiGear.resolve_ms2_model_path();
+        if (!resolved_ms2_model.isEmpty()) {
+            Cloger.getInstance().logger.info("MS2 base model: " + resolved_ms2_model);
+            // The NCE range check is not made here: the effective NCE is not known yet. It is
+            // still the field default on every run that reads it from the MS data or picks it
+            // with -tf nce, so warning now gave wrong advice. See
+            // warn_if_nce_outside_tmt_model_range, called at prediction time.
+        } else if (is_bundled_model_name(aiGear.ms2_model)) {
+            Cloger.getInstance().logger.warn("The bundled TMT MS2 base model was requested but not found at "
+                    + Paths.get(get_jar_path(), "models", TMT_MS2_MODEL_FILE)
+                    + ". The generic model will be used, which predicts labelled peptides poorly.");
+        }
+        // Prediction (ai_pred.py) reads this; training passes it separately in train_ms2_and_rt.
+        AIWorker.ms2_model = resolved_ms2_model;
 
         if (cmd.hasOption("ms") && !cmd.hasOption("model_dir")) {
             String ms_file = cmd.getOptionValue("ms");
@@ -1676,6 +1715,40 @@ public class AIGear {
             .comparingDouble(Peptide::getMass);
 
     /**
+     * Warn when the bundled TMT MS2 model is about to predict outside the NCE range it was
+     * trained on.
+     * <p>
+     * Checked at prediction time rather than when {@code -nce} is parsed, because the effective
+     * NCE is not known then: it may still be read from the MS data ({@code get_ms_run_meta_data})
+     * or chosen by {@code -tf nce}. A fine-tuned model in {@code model_dir} takes precedence over
+     * the base model in ai_pred.py and has adapted to the user's own collision energy, so that
+     * case is left alone.
+     */
+    static boolean nce_needs_tmt_range_warning(String ms2_model, String model_dir, double nce) {
+        if (!is_bundled_model_name(ms2_model)) {
+            return false;
+        }
+        if (model_dir != null && Files.exists(Paths.get(model_dir, "ms2_model.pt"))) {
+            return false;
+        }
+        return nce < TMT_MS2_MODEL_MIN_NCE || nce > TMT_MS2_MODEL_MAX_NCE;
+    }
+
+    private void warn_if_nce_outside_tmt_model_range(String model_dir) {
+        if (!nce_needs_tmt_range_warning(this.ms2_model, model_dir, this.nce)) {
+            return;
+        }
+        // The bundled TMT model only saw NCE 30-38, so predicting outside that range
+        // extrapolates. Measured on held-out data: NCE 27 gives a median spectral angle of 0.86
+        // against 0.89 at NCE 32, i.e. a smaller loss than using the generic model at all, but
+        // an avoidable one.
+        Cloger.getInstance().logger.warn("NCE " + this.nce + " is outside the range the bundled "
+                + "TMT MS2 model was trained on (" + TMT_MS2_MODEL_MIN_NCE + "-" + TMT_MS2_MODEL_MAX_NCE
+                + "). Predictions will be extrapolated. Set -nce to the collision energy of "
+                + "your method, within that range, for the best library.");
+    }
+
+    /**
      * Generate a spectral library based on the models stored in the provided model
      * directory.
      * 
@@ -1686,6 +1759,7 @@ public class AIGear {
      * @throws IOException
      */
     public Map<String, HashMap<String, String>> generate_spectral_library(String model_dir) throws IOException {
+        warn_if_nce_outside_tmt_model_range(model_dir);
         // digest proteins and generate peptide forms
         // need to consider for both small and large databases
         long startTime = System.currentTimeMillis();
@@ -1709,6 +1783,15 @@ public class AIGear {
             SkylineIO.load_skyline_precursor_table(this.db, sep, all_peptide_forms, precursor_charge_list);
         }
         Cloger.getInstance().logger.info("Generating peptide forms: " + all_peptide_forms.size());
+        if (all_peptide_forms.isEmpty()) {
+            // Without this the writer is never created and the close() below throws a
+            // NullPointerException, which says nothing about the real problem.
+            Cloger.getInstance().logger.error("No peptide forms were generated from " + this.db
+                    + ". Check that this file is a protein FASTA, and that the digestion settings"
+                    + " (enzyme, missed cleavages, peptide length, peptide m/z and charge ranges)"
+                    + " are not excluding every peptide.");
+            System.exit(1);
+        }
 
         // decide whether to add nce column
         boolean add_nce_column = false;
@@ -2841,14 +2924,85 @@ public class AIGear {
             // cmd = cmd + " --user_mod \""+CParameter.user_var_mods + "\"";
         }
 
-        if(!this.ms2_model.isEmpty()){
+        String ms2_model_path = resolve_ms2_model_path();
+        if(!ms2_model_path.isEmpty()){
             cmd_list.add("--ms2_model");
-            cmd_list.add(this.ms2_model);
+            cmd_list.add(ms2_model_path);
         }
         // convert cmd_list to String []
         String[] cmd = new String[cmd_list.size()];
         cmd = cmd_list.toArray(cmd);
         run_cmd(cmd,"Model training");
+    }
+
+    /**
+     * File name of the bundled TMT MS2 base model, looked up in the "models" folder next to the jar.
+     */
+    public static final String TMT_MS2_MODEL_FILE = "ms2tmt.pt";
+
+    /**
+     * Normalized collision energy range the bundled TMT MS2 model was trained on. The NIST CPTAC3
+     * TMT library it was built from covers NCE 30, 31, 32, 37 and 38 only, so a prediction outside
+     * this range is an extrapolation and is warned about.
+     */
+    public static final double TMT_MS2_MODEL_MIN_NCE = 30.0;
+    public static final double TMT_MS2_MODEL_MAX_NCE = 38.0;
+
+    /**
+     * Resolve a bundled model shipped in the "models" folder next to the jar.
+     *
+     * @param fileName the model file name
+     * @return the absolute path, or "" when the file is not present
+     */
+    static String resolve_bundled_model_path(String fileName) {
+        Path modelPath = Paths.get(get_jar_path(), "models", fileName);
+        if (Files.isRegularFile(modelPath)) {
+            return modelPath.toAbsolutePath().toString();
+        }
+        return "";
+    }
+
+    /**
+     * The MS2 base model to use. In order of precedence:
+     * <ul>
+     *   <li>{@code -ms2_model none} forces the installed generic model;</li>
+     *   <li>{@code -ms2_model tmt} selects the bundled TMT model by name;</li>
+     *   <li>any other {@code -ms2_model} value is taken as a path.</li>
+     * </ul>
+     * Returning "" means the installed generic model, which leaves the command unchanged.
+     *
+     * @return the model path, or "" for the installed generic model
+     */
+    String resolve_ms2_model_path() {
+        if ("none".equalsIgnoreCase(this.ms2_model)) {
+            return "";
+        }
+        if (is_bundled_model_name(this.ms2_model)) {
+            return resolve_bundled_model_path(TMT_MS2_MODEL_FILE);
+        }
+        if (this.ms2_model != null && !this.ms2_model.isEmpty()) {
+            return this.ms2_model;
+        }
+        return "";
+    }
+
+    /**
+     * Returns true when -ms2_model names a bundled model rather than a file path, so that the
+     * TMT model can be requested without knowing where it was installed.
+     *
+     * @param ms2_model the -ms2_model value
+     * @return true when it names the bundled TMT model
+     */
+    static boolean is_bundled_model_name(String ms2_model) {
+        if (ms2_model == null) {
+            return false;
+        }
+        // Exact names only. A prefix match would hijack real paths such as "tmt_finetuned.pt"
+        // or "TMT-run3.pt" and silently substitute the bundled model.
+        String normalized = ms2_model.trim().toLowerCase(Locale.ROOT).replace("-", "").replace("_", "");
+        return normalized.equals("tmt") || normalized.equals("tmt2plex") || normalized.equals("tmt6plex")
+                || normalized.equals("tmt10plex") || normalized.equals("tmt11plex")
+                || normalized.equals("tmtpro");
     }
 
     /**
@@ -9165,10 +9319,38 @@ public class AIGear {
             if (mod_name.contains("protein N-term")) {
                 psi_name = psi_name + "@Protein_N-term";
             } else {
-                psi_name = psi_name + "@" + ModificationUtils.getInstance().mod_name2JMod.get(mod_name).site;
+                psi_name = psi_name + "@"
+                        + CModification.to_alphabase_site(ModificationUtils.getInstance().mod_name2JMod.get(mod_name).site);
             }
             this.mod_map.put(mod_name, psi_name);
         }
+        load_isobaric_label_mod_map();
+    }
+
+    /**
+     * Add the isobaric label modification names used by the modification factory
+     * (e.g. "TMT 6-plex of K") to the modification map. These names are offered by
+     * -fixMod/-varMod through top_modifications.tsv, but they are not UniMod titles,
+     * so the UniMod-driven loop above cannot translate them to the AlphaBase names
+     * used by AlphaPeptDeep. TMTpro is handled here as well because the bundled
+     * unimod.xml predates UNIMOD:2016.
+     */
+    private void load_isobaric_label_mod_map() {
+        // TMT 6-plex, 10-plex and 11-plex all use the UNIMOD:737 (TMT6plex) mass.
+        for (String plex : new String[] { "6-plex", "10-plex", "11-plex" }) {
+            this.mod_map.put("TMT " + plex + " of K", "TMT6plex@K");
+            this.mod_map.put("TMT " + plex + " of peptide N-term", "TMT6plex@Any N-term");
+        }
+        this.mod_map.put("TMT 2-plex of K", "TMT2plex@K");
+        this.mod_map.put("TMT 2-plex of peptide N-term", "TMT2plex@Any N-term");
+        this.mod_map.put("TMTpro of K", "TMTpro@K");
+        this.mod_map.put("TMTpro of peptide N-term", "TMTpro@Any N-term");
+        this.mod_map.put("iTRAQ 4-plex of K", "iTRAQ4plex@K");
+        this.mod_map.put("iTRAQ 4-plex of Y", "iTRAQ4plex@Y");
+        this.mod_map.put("iTRAQ 4-plex of peptide N-term", "iTRAQ4plex@Any N-term");
+        this.mod_map.put("iTRAQ 8-plex of K", "iTRAQ8plex@K");
+        this.mod_map.put("iTRAQ 8-plex of Y", "iTRAQ8plex@Y");
+        this.mod_map.put("iTRAQ 8-plex of peptide N-term", "iTRAQ8plex@Any N-term");
     }
 
     /**
@@ -13314,6 +13496,12 @@ public class AIGear {
             String[] names = mods.split(";");
             String[] pos = mod_sites.split(";");
             String[] aa = peptide.split("");
+            // A peptide N-terminal modification and a modification on residue 1 both belong at
+            // the start of the sequence, and both used to write aa[0], so whichever was processed
+            // second silently discarded the other while the m/z column still counted both.
+            // Terminal modifications are collected here and prepended once at the end, which
+            // makes the result independent of the order the modifications are listed in.
+            String nTermPrefix = "";
             for (int i = 0; i < names.length; i++) {
                 String ptm_name = "";
                 int ptm_pos = Integer.parseInt(pos[i]) - 1;
@@ -13342,14 +13530,23 @@ public class AIGear {
                         String psi_name_site = names[i]; // "Phospho@S"
                         if (CModification.getInstance().psi_name_site2site_psi_name.containsKey(psi_name_site)) {
                             ptm_name = CModification.getInstance().psi_name_site2site_psi_name.get(psi_name_site);
-                            aa[ptm_pos] = ptm_name;
+                            if (ptm_pos < 0) {
+                                // Peptide N-terminal modification goes before the first residue.
+                                nTermPrefix = nTermPrefix + "[" + ptm_name + "]";
+                            } else {
+                                // Keep the residue and bracket the modification, matching the
+                                // hard-coded cases above ("M[Oxidation]"). Assigning the bare
+                                // modification name here would drop the amino acid from the
+                                // peptide, e.g. AACLDK with a K label became AACLDTMT6plex.
+                                aa[ptm_pos] = peptide.charAt(ptm_pos) + "[" + ptm_name + "]";
+                            }
                         } else {
                             System.out.println("Error: modification " + names[i] + " is not supported yet!");
                             System.exit(1);
                         }
                 }
             }
-            return "_" + StringUtils.join(aa, "") + "_";
+            return "_" + nTermPrefix + StringUtils.join(aa, "") + "_";
         }
 
     }
@@ -13371,6 +13568,12 @@ public class AIGear {
             String[] names = mods.split(";");
             String[] pos = mod_sites.split(";");
             String[] aa = peptide.split("");
+            // A peptide N-terminal modification and a modification on residue 1 both belong at
+            // the start of the sequence, and both used to write aa[0], so whichever was processed
+            // second silently discarded the other while the m/z column still counted both.
+            // Terminal modifications are collected here and prepended once at the end, which
+            // makes the result independent of the order the modifications are listed in.
+            String nTermPrefix = "";
             for (int i = 0; i < names.length; i++) {
                 String ptm_name = "";
                 int ptm_pos = Integer.parseInt(pos[i]) - 1;
@@ -13396,21 +13599,27 @@ public class AIGear {
                         aa[ptm_pos] = ptm_name;
                         break;
                     case "Acetyl@Protein_N-term":
-                        ptm_name = "[UniMod:1]";
-                        aa[0] = ptm_name + aa[0];
+                        nTermPrefix = nTermPrefix + "[UniMod:1]";
                         break;
                     default:
                         String psi_name_site = names[i]; // "Phospho@S"
                         if (CModification.getInstance().psi_name_site2site_unimod_acc.containsKey(psi_name_site)) {
                             ptm_name = CModification.getInstance().psi_name_site2site_unimod_acc.get(psi_name_site);
-                            aa[ptm_pos] = ptm_name;
+                            if (ptm_pos < 0) {
+                                // Peptide N-terminal modification (mod_sites 0), e.g. TMT6plex@Any N-term.
+                                // The stored value is site-qualified ("N-term(UniMod:737)"); DIA-NN writes a
+                                // terminal modification as a bare "(UniMod:737)" before the first residue.
+                                nTermPrefix = nTermPrefix + ptm_name.substring(ptm_name.indexOf('('));
+                            } else {
+                                aa[ptm_pos] = ptm_name;
+                            }
                         } else {
                             System.out.println("Error: modification " + names[i] + " is not supported yet!");
                             System.exit(1);
                         }
                 }
             }
-            return "_" + StringUtils.join(aa, "") + "_";
+            return "_" + nTermPrefix + StringUtils.join(aa, "") + "_";
         }
 
     }
@@ -13432,6 +13641,12 @@ public class AIGear {
             String[] names = mods.split(";");
             String[] pos = mod_sites.split(";");
             String[] aa = peptide.split("");
+            // A peptide N-terminal modification and a modification on residue 1 both belong at
+            // the start of the sequence, and both used to write aa[0], so whichever was processed
+            // second silently discarded the other while the m/z column still counted both.
+            // Terminal modifications are collected here and prepended once at the end, which
+            // makes the result independent of the order the modifications are listed in.
+            String nTermPrefix = "";
             for (int i = 0; i < names.length; i++) {
                 String ptm_name = "";
                 int ptm_pos = Integer.parseInt(pos[i]) - 1;
@@ -13460,30 +13675,40 @@ public class AIGear {
                         String psi_name_site = names[i]; // "Phospho@S"
                         if(CModification.getInstance().psi_name_site2encyclopedia_mod_name.containsKey(psi_name_site)){
                             ptm_name = CModification.getInstance().psi_name_site2encyclopedia_mod_name.get(psi_name_site);
-                            aa[ptm_pos] = ptm_name;
+                            if (ptm_pos < 0) {
+                                // Peptide N-terminal modification: the stored value is already the bare
+                                // bracketed form ("[TMT6plex]"), so it goes in front of the first residue.
+                                nTermPrefix = nTermPrefix + ptm_name;
+                            } else {
+                                aa[ptm_pos] = ptm_name;
+                            }
                         } else {
                             System.out.println("Error: modification " + names[i] + " is not supported yet!");
                             System.exit(1);
                         }
                 }
             }
-            return "_" + StringUtils.join(aa, "") + "_";
+            return "_" + nTermPrefix + StringUtils.join(aa, "") + "_";
         }
 
     }
 
     /**
      * Determines the position of a skyline modification based on its name and position.
-     * If the modification name is "Acetyl@Protein_N-term" and the provided position is 0,
-     * the method returns 1. Otherwise, it returns the provided position.
+     * Skyline records every modification against a residue, so a terminal modification
+     * (AlphaPeptDeep mod_sites 0) is carried by the first residue.
      *
-     * @param modName The name of the modification to evaluate.
-     * @param modPos The position of the modification to evaluate.
-     * @return The adjusted position of the modification. Returns 1 if the modification
-     * name is "Acetyl@Protein_N-term" and the position is 0; otherwise, returns the original position.
+     * @param modName the AlphaPeptDeep modification name; retained so call sites read clearly and
+     *                so a future format can special-case a particular modification again
+     * @param modPos  the AlphaPeptDeep modification site, 0 for a peptide or protein terminus
+     * @return the 1-based residue position Skyline should record
      */
     int get_skyline_modification_position(String modName, int modPos) {
-        if ("Acetyl@Protein_N-term".equals(modName) && modPos == 0) {
+        if (modPos == 0) {
+            // Skyline records modifications against a residue, so any terminal modification
+            // (AlphaPeptDeep mod_sites 0) is carried by the first residue. This covers
+            // Acetyl@Protein_N-term as before, and peptide N-terminal labels such as
+            // TMT6plex@Any N-term, which every TMT-labeled peptide has.
             return 1;
         }
         return modPos;

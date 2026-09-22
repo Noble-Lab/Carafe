@@ -6,7 +6,7 @@
 
     <groupId>Proteomics</groupId>
     <artifactId>carafe</artifactId>
-    <version>2.3.1</version>
+    <version>2.4.0-dev</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -302,6 +302,13 @@
         <resource>
             <directory>src/main/resources</directory>
             <filtering>true</filtering>
+            <excludes>
+                <!-- Running the bundled AI scripts in place leaves a __pycache__ next to them,
+                     and filtering a binary .pyc fails the build with
+                     "MalformedInputException: Input length = 1". -->
+                <exclude>**/__pycache__/**</exclude>
+                <exclude>**/*.pyc</exclude>
+            </excludes>
         </resource>
     </resources>
     <plugins>
@@ -314,6 +321,40 @@
                 <encoding>${project.build.sourceEncoding}</encoding>
                 <propertiesEncoding>${project.build.sourceEncoding}</propertiesEncoding>
             </configuration>
+            <executions>
+                <!-- Bundled pretrained models.
+
+                     AIGear.resolve_bundled_model_path() looks for these in a "models" folder next
+                     to the jar, so they have to sit in the distribution directory rather than
+                     inside the jar. The installer scripts pass that same directory to jpackage as
+                     its input, so copying here covers both `java -jar` and the packaged app.
+
+                     The .pt files are release assets and are not in the repository, so a fresh
+                     clone has no models folder. maven-resources-plugin skips a missing directory,
+                     and Carafe falls back to the installed generic model with a warning, so the
+                     build still succeeds. -->
+                <execution>
+                    <id>copy-bundled-models</id>
+                    <phase>package</phase>
+                    <goals>
+                        <goal>copy-resources</goal>
+                    </goals>
+                    <configuration>
+                        <outputDirectory>${project.build.directory}/${project.artifactId}-${project.version}/models
+                        </outputDirectory>
+                        <resources>
+                            <resource>
+                                <directory>${project.basedir}/models</directory>
+                                <includes>
+                                    <!-- Only the models Carafe resolves are shipped. -->
+                                    <include>ms2tmt.pt</include>
+                                </includes>
+                                <filtering>false</filtering>
+                            </resource>
+                        </resources>
+                    </configuration>
+                </execution>
+            </executions>
         </plugin>
 
 

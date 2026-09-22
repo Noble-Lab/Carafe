@@ -180,6 +180,23 @@ public final class CModification {
         return instance;
     }
 
+    /**
+     * Convert a UniMod specificity site to the site string used by AlphaBase/AlphaPeptDeep.
+     * AlphaBase names peptide terminal modifications "Any N-term"/"Any C-term"; UniMod reports
+     * the site of those modifications simply as "N-term"/"C-term".
+     *
+     * @param site A UniMod specificity site, e.g. "K", "N-term" or "Protein N-term".
+     * @return The site string used by AlphaBase, e.g. "K", "Any N-term" or "Protein N-term".
+     */
+    public static String to_alphabase_site(String site){
+        if("N-term".equals(site)){
+            return "Any N-term";
+        }else if("C-term".equals(site)){
+            return "Any C-term";
+        }
+        return site;
+    }
+
     public String get_mod_name_by_site_unimod_acc(String site_unimod_acc){
         return modification_code2modification.get(unimod2modification_code.get(site_unimod_acc));
     }
@@ -250,6 +267,11 @@ public final class CModification {
                 // TODO: need to check if this works
                 skyline_mod_name = "["+jMod.mod_mass+"]";
                 encyclopedia_mod_name = "["+jMod.psi_ms_name+"]";
+            }else if("N-term".equals(jMod.site) || "C-term".equals(jMod.site)){
+                // Peptide terminal modification, e.g. TMT6plex@Any N-term
+                psi_name_site = psi_name + "@" + to_alphabase_site(jMod.site);
+                skyline_mod_name = "["+jMod.mod_mass+"]";
+                encyclopedia_mod_name = "["+jMod.psi_ms_name+"]";
             }else{
                 psi_name_site = psi_name + "@" + jMod.site;
                 skyline_mod_name = jMod.site+"["+jMod.mod_mass+"]";
@@ -259,6 +281,77 @@ public final class CModification {
             psi_name_site2site_psi_name.put(psi_name_site,psi_name);
             psi_name_site2encyclopedia_mod_name.put(psi_name_site,encyclopedia_mod_name);
             psi_name_site2skyline_mod_name.put(psi_name_site,skyline_mod_name);
+        }
+        load_isobaric_label_sites();
+    }
+
+    /**
+     * Register the isobaric label residue sites that the loop above cannot reach.
+     * <p>
+     * The UniMod-derived name for a lysine label (e.g. "TMT6plex of K") is dropped from
+     * {@link #id2ptmname} by the duplicate-PTM check in the constructor, because its
+     * UNIMOD:737_K key collides with the modification factory name "TMT 6-plex of K" and the
+     * {@code startsWith("TMT ")} exemption does not match "TMT6plex...". Without an entry in
+     * {@link #ptm_name2id} the loop above skips it, so "TMT6plex@K" never reaches the
+     * psi_name_site maps and the library writers abort with
+     * "modification TMT6plex@K is not supported yet".
+     * <p>
+     * The factory names do have ids, so they are used here to register the AlphaBase names.
+     * Existing entries are never overwritten: the peptide N-terminal forms are already
+     * registered through UniMod and keep the values they got there.
+     */
+    private void load_isobaric_label_sites() {
+        // factory modification name, AlphaBase name, UniMod accession, UniMod specificity site
+        // One row per AlphaBase name. The 10-plex and 11-plex reagents share TMT6plex@K and
+        // TMT6plex@Any N-term with the 6-plex, so they need no rows of their own: the guard below
+        // would skip them anyway, and listing them only suggested otherwise.
+        String[][] labels = {
+                {"TMT 6-plex of K",              "TMT6plex@K",           "UniMod:737",  "K"},
+                {"TMT 6-plex of peptide N-term", "TMT6plex@Any N-term",  "UniMod:737",  "N-term"},
+                {"TMT 2-plex of K",              "TMT2plex@K",           "UniMod:738",  "K"},
+                {"TMT 2-plex of peptide N-term", "TMT2plex@Any N-term",  "UniMod:738",  "N-term"},
+                {"TMTpro of K",                  "TMTpro@K",             "UniMod:2016", "K"},
+                {"TMTpro of peptide N-term",     "TMTpro@Any N-term",    "UniMod:2016", "N-term"},
+                {"iTRAQ 4-plex of K",            "iTRAQ4plex@K",         "UniMod:214",  "K"},
+                {"iTRAQ 4-plex of Y",            "iTRAQ4plex@Y",         "UniMod:214",  "Y"},
+                {"iTRAQ 4-plex of peptide N-term", "iTRAQ4plex@Any N-term", "UniMod:214", "N-term"},
+                {"iTRAQ 8-plex of K",            "iTRAQ8plex@K",         "UniMod:730",  "K"},
+                {"iTRAQ 8-plex of Y",            "iTRAQ8plex@Y",         "UniMod:730",  "Y"},
+                {"iTRAQ 8-plex of peptide N-term", "iTRAQ8plex@Any N-term", "UniMod:730", "N-term"},
+        };
+
+        ModificationFactory ptmFactory = ModificationFactory.getInstance();
+        for (String[] label : labels) {
+            String factory_name = label[0];
+            String psi_name_site = label[1];
+            String site_unimod_acc = label[3] + "(" + label[2] + ")";
+
+            if (psi_name_site2site_unimod_acc.containsKey(psi_name_site)) {
+                // Already registered from UniMod; leave it alone.
+                continue;
+            }
+            Integer mod_id = ptm_name2id.get(factory_name);
+            if (mod_id == null) {
+                continue;
+            }
+
+            unimod2modification_code.putIfAbsent(site_unimod_acc, String.valueOf(mod_id));
+            modification_code2modification.putIfAbsent(String.valueOf(mod_id), factory_name);
+
+            BigDecimal mass = preferredMassByModName.get(factory_name);
+            if (mass == null) {
+                mass = BigDecimal.valueOf(ptmFactory.getModification(factory_name).getMass());
+            }
+            String psi_name = psi_name_site.split("@")[0];
+            String site = label[3];
+            boolean terminal = site.endsWith("-term");
+
+            psi_name_site2site_unimod_acc.put(psi_name_site, site_unimod_acc);
+            psi_name_site2site_psi_name.put(psi_name_site, psi_name);
+            psi_name_site2skyline_mod_name.put(psi_name_site,
+                    terminal ? "[" + mass + "]" : site + "[" + mass + "]");
+            psi_name_site2encyclopedia_mod_name.put(psi_name_site,
+                    terminal ? "[" + psi_name + "]" : site + "[" + psi_name + " (" + site + ")]");
         }
     }
 
