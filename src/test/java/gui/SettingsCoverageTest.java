@@ -258,6 +258,12 @@ public class SettingsCoverageTest {
                         if ("ms2ModelField".equals(name)) {
                             ((JComboBox<?>) field(gui, "ms2ModelCombo")).setSelectedItem("Custom file...");
                         }
+                        // Likewise the DDA report is only read by workflow 5; restore the default after.
+                        JComboBox<?> workflow = (JComboBox<?>) field(gui, "workflowCombo");
+                        int savedWorkflow = workflow.getSelectedIndex();
+                        if ("ddaReportFileField".equals(name)) {
+                            workflow.setSelectedIndex(4);
+                        }
                         String before = commandOf(build, gui);
                         if (!perturb(input)) {
                             unchangeable.add(name);
@@ -266,6 +272,7 @@ public class SettingsCoverageTest {
                         if (before.equals(commandOf(build, gui))) {
                             noEffect.add(name);
                         }
+                        workflow.setSelectedIndex(savedWorkflow);
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
@@ -306,7 +313,7 @@ public class SettingsCoverageTest {
         Set<String> noIndicator = new HashSet<>(NOT_SAVED);
         // Paths and file selections: the indicator is for analysis parameters only.
         noIndicator.addAll(Arrays.asList(
-                "workflowCombo", "diannReportFileField", "trainMsFileField", "trainDbFileField",
+                "workflowCombo", "diannReportFileField", "ddaReportFileField", "trainMsFileField", "trainDbFileField",
                 "projectMsFileField", "libraryDbFileField", "outputDirField", "ms2ModelField"));
 
         AtomicReference<CarafeGUI> ref = new AtomicReference<>();

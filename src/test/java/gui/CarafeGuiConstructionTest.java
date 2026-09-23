@@ -56,8 +56,8 @@ public class CarafeGuiConstructionTest {
         try {
             @SuppressWarnings("unchecked")
             JComboBox<String> workflow = (JComboBox<String>) field(gui, "workflowCombo");
-            Assert.assertEquals(workflow.getItemCount(), 4,
-                    "expected the fourth, prediction-only workflow to be offered");
+            Assert.assertEquals(workflow.getItemCount(), 5,
+                    "expected the prediction-only (4th) and DDA-report (5th) workflows to be offered");
             Assert.assertTrue(workflow.getItemAt(3).contains("pretrained"),
                     "the fourth workflow should be the pretrained-model one, got: " + workflow.getItemAt(3));
 

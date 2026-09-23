@@ -83,6 +83,7 @@ public class CarafeGUI extends JFrame {
     // Input fields
     private JComboBox<String> workflowCombo;
     private JTextField diannReportFileField;
+    private JTextField ddaReportFileField;
     private JTextField trainMsFileField;
     private JTextField trainDbFileField;
     private JTextField projectMsFileField;
@@ -100,6 +101,7 @@ public class CarafeGUI extends JFrame {
 
     // Input panel rows components for dynamic visibility
     private java.util.List<JComponent> diannReportRowComponents;
+    private java.util.List<JComponent> ddaReportRowComponents;
     private java.util.List<JComponent> trainMsRowComponents;
     private java.util.List<JComponent> trainDbRowComponents;
     private java.util.List<JComponent> projectMsRowComponents;
@@ -1036,7 +1038,9 @@ public class CarafeGUI extends JFrame {
                 "1. Spectral library generation: start with DIA-NN search",
                 "2. Spectral library generation: start with DIA-NN report",
                 "3. End-to-end DIA search",
-                "4. Spectral library generation: predict with a pretrained model (no fine-tuning)"
+                "4. Spectral library generation: predict with a pretrained model (no fine-tuning)",
+                // Appended, never inserted: saved settings store the workflow by index.
+                "5. Spectral library generation: start with DDA report"
         };
         workflowCombo = new JComboBox<>(workflows);
         styleComboBox(workflowCombo);
@@ -1061,7 +1065,9 @@ public class CarafeGUI extends JFrame {
                         +
                         "Thermo raw files are only supported when starting with DIA-NN search or performing end-to-end DIA search.\n"
                         +
-                        "When the format is Thermo raw, MSConvert (ProteoWizard) needs to be installed (convert raw to mzML for Carafe).",
+                        "When the format is Thermo raw, MSConvert (ProteoWizard) needs to be installed (convert raw to mzML for Carafe).\n"
+                        +
+                        "When starting with a DDA report, a single MGF file is also accepted.",
                 trainMsFileField = createTextField("Select one or more MS files (or a folder) for training"),
                 createMsButtonsPanel(trainMsFileField));
 
@@ -1095,6 +1101,20 @@ public class CarafeGUI extends JFrame {
                         "This file must be directly generated using the same input train MS file(s).",
                 diannReportFileField = createTextField("Path to DIA-NN report.tsv or report.parquet"),
                 createBrowseButton(diannReportFileField, "DIA-NN Report", new String[] { "tsv", "parquet" }));
+
+        ddaReportRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "DDA Report:",
+                "Peptide-spectrum matches from a DDA search, as a tab-separated table in Carafe's\n" +
+                        "generic PSM format, one row per PSM:\n" +
+                        "  peptide          stripped sequence\n" +
+                        "  modification     Name@position[mass];...  (position 0 = peptide N-term), or - if none\n" +
+                        "  charge           precursor charge\n" +
+                        "  spectrum_title   <mzML file name without extension>:<scan number>:<charge>\n" +
+                        "Optional: q_value (PSMs above the FDR threshold are dropped), decoy (Yes = dropped),\n" +
+                        "rt (minutes), nce, score. Without q_value every row is used, so filter first.\n" +
+                        "The scan numbers must refer to the train MS file(s): the mzML files that were\n" +
+                        "searched, or a single MGF whose TITLE lines are exactly these spectrum_title values.",
+                ddaReportFileField = createTextField("Path to a PSM table in Carafe's generic DDA format"),
+                createBrowseButton(ddaReportFileField, "DDA Report", new String[] { "tsv", "txt" }));
 
         trainDbRowComponents = addInputRowToPanel(inputFieldsPanel, gridy++, "Train Protein Database:",
                 "Protein database or a DIA-NN library used for peptide detection on the train MS file(s).\n" +
@@ -1325,11 +1345,16 @@ public class CarafeGUI extends JFrame {
             button.setToolTipText(toolTipText);
         }
         button.addActionListener(e -> {
-            chooseFiles("Select Files", extensions, description, files -> {
-                // Validation: Check for mixed types (mzML, raw, TIMSTOF .d folders)
+            // Workflow 5 (DDA report) also takes a single MGF; the DIA-NN workflows cannot use one.
+            boolean mgfAllowed = targetField == trainMsFileField && globalWorkflowIndex == 4;
+            String[] chooserExtensions = mgfAllowed ? new String[] { "mzML", "mgf" } : extensions;
+            String chooserDescription = mgfAllowed ? "mzML/MGF Files" : description;
+            chooseFiles("Select Files", chooserExtensions, chooserDescription, files -> {
+                // Validation: Check for mixed types (mzML, raw, TIMSTOF .d folders, MGF)
                 boolean hasMzML = false;
                 boolean hasRaw = false;
                 boolean hasTimsTof = false;
+                int nMgf = 0;
                 java.util.List<String> invalidDFolders = new java.util.ArrayList<>();
                 boolean hasNonDFolder = false;
 
@@ -1353,6 +1378,8 @@ public class CarafeGUI extends JFrame {
                             hasMzML = true;
                         if (name.endsWith(".raw"))
                             hasRaw = true;
+                        if (name.endsWith(".mgf"))
+                            nMgf++;
                     }
                 }
 
@@ -1384,10 +1411,20 @@ public class CarafeGUI extends JFrame {
                 }
 
                 // Prevent mixing different data types
-                int typeCount = (hasMzML ? 1 : 0) + (hasRaw ? 1 : 0) + (hasTimsTof ? 1 : 0);
+                int typeCount = (hasMzML ? 1 : 0) + (hasRaw ? 1 : 0) + (hasTimsTof ? 1 : 0) + (nMgf > 0 ? 1 : 0);
                 if (typeCount > 1) {
                     JOptionPane.showMessageDialog(this,
-                            "Please select only one type: mzML files, RAW files, or TIMSTOF .d folders.",
+                            nMgf > 0 ? "Please select either mzML files or a single MGF file."
+                                    : "Please select only one type: mzML files, RAW files, or TIMSTOF .d folders.",
+                            "Invalid Selection",
+                            JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                // Carafe reads one MGF file; several would be passed as their folder, where it looks
+                // for mzML files only.
+                if (nMgf > 1) {
+                    JOptionPane.showMessageDialog(this,
+                            "Only a single MGF file is supported. Select one MGF file, or use the mzML files.",
                             "Invalid Selection",
                             JOptionPane.WARNING_MESSAGE);
                     return;
@@ -1591,6 +1628,7 @@ public class CarafeGUI extends JFrame {
         switch (globalWorkflowIndex) {
             case 0 -> { // Workflow 1
                 setVisible(diannReportRowComponents, false);
+                setVisible(ddaReportRowComponents, false);
                 setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, true);
                 setVisible(projectMsRowComponents, false);
@@ -1601,6 +1639,7 @@ public class CarafeGUI extends JFrame {
             }
             case 1 -> { // Workflow 2
                 setVisible(diannReportRowComponents, true);
+                setVisible(ddaReportRowComponents, false);
                 setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, false);
                 setVisible(projectMsRowComponents, false);
@@ -1611,6 +1650,7 @@ public class CarafeGUI extends JFrame {
             }
             case 2 -> { // Workflow 3
                 setVisible(diannReportRowComponents, false);
+                setVisible(ddaReportRowComponents, false);
                 setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, true);
                 setVisible(projectMsRowComponents, true);
@@ -1623,7 +1663,19 @@ public class CarafeGUI extends JFrame {
                 // No experimental data is used, so every training input is hidden. Only the
                 // protein database and the model settings matter.
                 setVisible(diannReportRowComponents, false);
+                setVisible(ddaReportRowComponents, false);
                 setVisible(trainMsRowComponents, false);
+                setVisible(trainDbRowComponents, false);
+                setVisible(projectMsRowComponents, false);
+                setVisible(libraryDbRowComponents, true);
+                setVisible(diannExeRowComponents, false);
+                setVisible(diannAdditionalOptionsRowComponents, false);
+                updateMsConvertVisibility();
+            }
+            case 4 -> { // Workflow 5: start with a DDA PSM table in the generic format.
+                setVisible(diannReportRowComponents, false);
+                setVisible(ddaReportRowComponents, true);
+                setVisible(trainMsRowComponents, true);
                 setVisible(trainDbRowComponents, false);
                 setVisible(projectMsRowComponents, false);
                 setVisible(libraryDbRowComponents, true);
@@ -3593,9 +3645,10 @@ public class CarafeGUI extends JFrame {
         if (msConvertExeRowComponents == null)
             return;
 
-        // The predict-only workflow never converts anything. Without this the 300ms debounce
-        // re-shows the row from a .raw path left over from a previous workflow selection.
-        if (globalWorkflowIndex == 3) {
+        // The predict-only workflow never converts anything, and the DDA-report workflow takes the
+        // mzML files that were searched. Without this the 300ms debounce re-shows the row from a
+        // .raw path left over from a previous workflow selection.
+        if (globalWorkflowIndex == 3 || globalWorkflowIndex == 4) {
             setVisible(msConvertExeRowComponents, false);
             return;
         }
@@ -3937,8 +3990,8 @@ public class CarafeGUI extends JFrame {
 
     private String buildCommand() {
         int wf = workflowCombo.getSelectedIndex();
-        // Workflows 2 and 4 are a single Carafe command, so the preview can show it.
-        if (wf == 1 || wf == 3)
+        // Workflows 2, 4 and 5 are a single Carafe command, so the preview can show it.
+        if (wf == 1 || wf == 3 || wf == 4)
             return buildCarafeCommand().cmd;
         return "This workflow runs chained commands. Click Run Carafe to execute.";
     }
@@ -4016,9 +4069,20 @@ public class CarafeGUI extends JFrame {
         // Workflow 4 predicts from a pretrained model and uses no experimental data, so the
         // training inputs are skipped even if their (hidden) fields still hold text.
         boolean predictOnly = workflowCombo.getSelectedIndex() == 3;
+        // Workflow 5 trains from a DDA PSM table in the generic format instead of a DIA-NN report.
+        boolean ddaReport = workflowCombo.getSelectedIndex() == 4;
+
+        if (ddaReport) {
+            String ddaReportFile = ddaReportFileField.getText().trim();
+            if (!ddaReportFile.isEmpty()) {
+                commandArgs.add("-i");
+                commandArgs.add(ddaReportFile);
+            }
+        }
 
         String diannReport = diannReportFileField.getText().trim();
-        if (!predictOnly && !diannReport.isEmpty()) {
+        // The DIA-NN report field is only hidden, never cleared, when the workflow changes.
+        if (!predictOnly && !ddaReport && !diannReport.isEmpty()) {
             // cmd.append("-i \"").append(diannReport).append("\" ");
             commandArgs.add("-i");
             commandArgs.add(diannReport);
@@ -4242,7 +4306,13 @@ public class CarafeGUI extends JFrame {
         // cmd.append("-se DIA-NN ");
 
         commandArgs.add("-se");
-        commandArgs.add("DIA-NN");
+        if (ddaReport) {
+            commandArgs.add("generic");
+            commandArgs.add("-data_type");
+            commandArgs.add("DDA");
+        } else {
+            commandArgs.add("DIA-NN");
+        }
 
         if (!predictOnly && !trainMsFile.isEmpty()) {
             // Guarded like -i and -ms above: the field is only hidden when the workflow changes,
@@ -5021,6 +5091,15 @@ public class CarafeGUI extends JFrame {
                 CmdTask carafeTask = buildCarafeCommand(null, false);
                 if (carafeTask != null) {
                     carafeTask.task_description = "Run Carafe to predict a spectral library from a pretrained model";
+                }
+                executeCommand(carafeTask);
+            }
+            case 4 -> {
+                // Train from a DDA PSM table and the mzML files it was searched on, then generate the
+                // library. A single Carafe command; the inputs were checked in validateInputs.
+                CmdTask carafeTask = buildCarafeCommand(null, false);
+                if (carafeTask != null) {
+                    carafeTask.task_description = "Run Carafe to generate spectral library from a DDA report";
                 }
                 executeCommand(carafeTask);
             }
@@ -6227,6 +6306,161 @@ public class CarafeGUI extends JFrame {
         return !trimmed.isEmpty() && !trimmed.equalsIgnoreCase("auto");
     }
 
+    /** Columns Carafe's generic DDA reader cannot do without (AIGear.get_ms2_matches_generic_dda). */
+    static final String[] DDA_REPORT_REQUIRED_COLUMNS = { "peptide", "modification", "charge", "spectrum_title" };
+
+    /**
+     * Why a DDA report is unusable, or null when its header has every required column. Catches the
+     * likely mistakes early, e.g. a search engine's own output chosen instead of the converted table,
+     * which Carafe would otherwise reject part-way through the run.
+     */
+    static String ddaReportProblem(File file) {
+        if (!file.isFile()) {
+            return "file not found";
+        }
+        String header;
+        try (BufferedReader reader = new BufferedReader(new java.io.FileReader(file, java.nio.charset.StandardCharsets.UTF_8))) {
+            header = reader.readLine();
+        } catch (IOException e) {
+            return null; // leave the real error to Carafe
+        }
+        if (header == null) {
+            return "is empty";
+        }
+        java.util.Set<String> columns = new java.util.HashSet<>(
+                java.util.Arrays.asList(header.replace("﻿", "").trim().split("\t")));
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        for (String c : DDA_REPORT_REQUIRED_COLUMNS) {
+            if (!columns.contains(c)) {
+                missing.add(c);
+            }
+        }
+        return missing.isEmpty() ? null
+                : "is not in Carafe's generic PSM format (missing column" + (missing.size() > 1 ? "s " : " ")
+                        + String.join(", ", missing) + ")";
+    }
+
+    // Attribute order differs between converters (ThermoRawFileParser writes value before name,
+    // msconvert name before value), so the caller checks the filter-string accession and this
+    // matches the value on its own.
+    private static final java.util.regex.Pattern MGF_TITLE = java.util.regex.Pattern.compile("^(.+):(\\d+):(\\d+)$");
+
+    /**
+     * Why an MGF cannot be used with a DDA report, or null when its titles look right.
+     * <p>
+     * Carafe pairs PSMs with spectra by exact title, so each MGF TITLE has to be the report's
+     * spectrum_title, {@code <file>:<scan>:<charge>}. MGFs written by converters or search engines
+     * use other schemes (e.g. {@code run.1234.1234.2 File:"..."}); with those no PSM matches and the run
+     * ends with nothing to train on. Checks the first titles for that format, and that they name a
+     * file the report refers to. Reads only the first few hundred titles of the MGF.
+     */
+    static String mgfTitleProblem(File mgf, File report) {
+        java.util.Set<String> reportFiles = new java.util.HashSet<>();
+        String reportExample = null;
+        try (BufferedReader reader = new BufferedReader(new java.io.FileReader(report, java.nio.charset.StandardCharsets.UTF_8))) {
+            String header = reader.readLine();
+            if (header == null) {
+                return null; // reported by ddaReportProblem
+            }
+            int col = java.util.Arrays.asList(header.replace("﻿", "").trim().split("\t")).indexOf("spectrum_title");
+            if (col < 0) {
+                return null; // reported by ddaReportProblem
+            }
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] d = line.split("\t");
+                if (d.length <= col) {
+                    continue;
+                }
+                if (reportExample == null) {
+                    reportExample = d[col];
+                }
+                int i = d[col].indexOf(':');
+                if (i > 0) {
+                    reportFiles.add(d[col].substring(0, i));
+                }
+            }
+        } catch (IOException e) {
+            return null; // leave the real error to Carafe
+        }
+
+        String firstTitle = null;
+        int titles = 0;
+        boolean fileMatches = false;
+        try (BufferedReader reader = new BufferedReader(new java.io.FileReader(mgf, java.nio.charset.StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null && titles < 200) {
+                if (!line.startsWith("TITLE=")) {
+                    continue;
+                }
+                String title = line.substring(6).trim();
+                titles++;
+                if (firstTitle == null) {
+                    firstTitle = title;
+                }
+                java.util.regex.Matcher m = MGF_TITLE.matcher(title);
+                if (!m.matches()) {
+                    return "MGF titles must be <file>:<scan>:<charge>, as in the DDA report's spectrum_title "
+                            + "(e.g. " + reportExample + "), but the MGF has: " + title;
+                }
+                if (reportFiles.contains(m.group(1))) {
+                    fileMatches = true;
+                }
+            }
+        } catch (IOException e) {
+            return null;
+        }
+        if (titles == 0) {
+            return "The MGF file has no TITLE lines: " + mgf.getName();
+        }
+        if (!fileMatches) {
+            return "The MGF titles name a different file than the DDA report (MGF: " + firstTitle
+                    + ", report: " + reportExample + ")";
+        }
+        return null;
+    }
+
+    private static final java.util.regex.Pattern MS2_FILTER_ANALYZER =
+            java.util.regex.Pattern.compile("value=\"(ITMS|FTMS|ASTMS)[^\"]*\\sms2\\s");
+
+    /**
+     * The mass analyzer of the first MS2 scan in an mzML file (or in the first mzML inside a folder),
+     * read from its Thermo filter string: "ITMS" (ion trap), "FTMS" (Orbitrap) or "ASTMS" (Astral).
+     * Returns null when it cannot tell, e.g. a non-Thermo file, so callers only act on a positive
+     * answer.
+     */
+    static String ms2Analyzer(File msFile) {
+        File mzml = msFile;
+        if (msFile.isDirectory()) {
+            File[] files = msFile.listFiles((d, n) -> n.toLowerCase().endsWith(".mzml"));
+            if (files == null || files.length == 0) {
+                return null;
+            }
+            java.util.Arrays.sort(files);
+            mzml = files[0];
+        }
+        if (!mzml.isFile() || !mzml.getName().toLowerCase().endsWith(".mzml")) {
+            return null;
+        }
+        try (BufferedReader reader = new BufferedReader(new java.io.FileReader(mzml, java.nio.charset.StandardCharsets.UTF_8))) {
+            String line;
+            int n = 0;
+            // The first MS2 scan is near the top; don't read a multi-GB file to find out.
+            while ((line = reader.readLine()) != null && n++ < 200000) {
+                if (!line.contains("MS:1000512")) { // filter string
+                    continue;
+                }
+                java.util.regex.Matcher m = MS2_FILTER_ANALYZER.matcher(line);
+                if (m.find()) {
+                    return m.group(1);
+                }
+            }
+        } catch (IOException e) {
+            return null;
+        }
+        return null;
+    }
+
     private boolean validateInputs(int workflowIndex) {
         java.util.List<String> errors = new java.util.ArrayList<>();
 
@@ -6584,6 +6818,69 @@ public class CarafeGUI extends JFrame {
                             + " of the method the library is for.");
                 }
 
+                break;
+
+            case 4: // Start with a DDA report (generic PSM table)
+                // 1. Train MS files: the mzML files that were searched, or one MGF whose titles match
+                // the report. The PSM table names spectra by file name and scan number, so they
+                // cannot be swapped for raw or converted here.
+                boolean mgfInput = effectiveTrainFiles.size() == 1
+                        && effectiveTrainFiles.get(0).toLowerCase().endsWith(".mgf");
+                if (effectiveTrainFiles.isEmpty())
+                    errors.add("- No Training MS data files selected.");
+                else {
+                    boolean found = true;
+                    for (String p : effectiveTrainFiles)
+                        if (!new File(p).exists()) {
+                            errors.add("- Train MS File(s) not found: " + p);
+                            found = false;
+                            break;
+                        }
+                    boolean anyMgf = effectiveTrainFiles.stream().anyMatch(p -> p.toLowerCase().endsWith(".mgf"));
+                    if (found && anyMgf && !mgfInput)
+                        errors.add("- Only a single MGF file is supported. Select one MGF file, or use the mzML files.");
+                    else if (found && !mgfInput && !"mzml".equals(trainDataType))
+                        errors.add("- This workflow needs the mzML files the DDA report was searched on, "
+                                + "or a single MGF file (found " + trainDataType + ").");
+                }
+
+                // 2. DDA report
+                String ddaReportPath = ddaReportFileField.getText().trim();
+                if (ddaReportPath.isEmpty())
+                    errors.add("- DDA report file is not specified.");
+                else {
+                    String problem = ddaReportProblem(new File(ddaReportPath));
+                    if (problem != null)
+                        errors.add("- DDA report " + problem + ": " + ddaReportPath);
+                    else if (mgfInput && new File(effectiveTrainFiles.get(0)).isFile()) {
+                        String mgfProblem = mgfTitleProblem(new File(effectiveTrainFiles.get(0)), new File(ddaReportPath));
+                        if (mgfProblem != null)
+                            errors.add("- " + mgfProblem);
+                    }
+                }
+
+                // 3. Library protein database
+                String libDbDda = libraryDbFileField.getText().trim();
+                if (libDbDda.isEmpty())
+                    errors.add("- Library protein database (FASTA) is not specified.");
+                else if (!new File(libDbDda).exists())
+                    errors.add("- Library protein database file not found.");
+                else {
+                    String problem = proteinDbProblem(new File(libDbDda), false);
+                    if (problem != null)
+                        errors.add("- Library protein database " + problem + ": " + libDbDda);
+                }
+
+                // 4. Ion-trap MS2 needs a Dalton fragment tolerance; ppm matches almost nothing.
+                if (!effectiveTrainFiles.isEmpty() && "ppm".equals(fragTolUnitCombo.getSelectedItem())) {
+                    String analyzer = ms2Analyzer(new File(effectiveTrainFiles.get(0)));
+                    if ("ITMS".equals(analyzer))
+                        errors.add("- The train MS/MS scans are ion trap (ITMS) but the fragment ion "
+                                + "tolerance is in ppm. Use Da, e.g. 0.35-0.5 Da.");
+                }
+
+                checkOutDir.accept(null);
+                checkPython.accept(null);
                 break;
         }
 
@@ -7050,6 +7347,7 @@ public class CarafeGUI extends JFrame {
         reg.add(new Setting("workflow", workflowCombo::getSelectedIndex,
                 v -> workflowCombo.setSelectedIndex(((Number) v).intValue())));
         reg.add(textSetting("diann_report_file", diannReportFileField));
+        reg.add(textSetting("dda_report_file", ddaReportFileField));
         reg.add(textSetting("train_ms_file", trainMsFileField));
         reg.add(textSetting("train_db_file", trainDbFileField));
         reg.add(textSetting("project_ms_file", projectMsFileField));

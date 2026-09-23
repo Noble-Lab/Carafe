@@ -292,7 +292,8 @@ public class FileIO {
         BufferedReader psmReader = new BufferedReader(new FileReader(psm_file));
         psmReader.readLine();
         String line;
-        HashMap<String, HashSet<Integer>> ms_file2scan = new HashMap<>();
+        // ms file -> native scan number -> the charges the PSM table assigns to that scan
+        HashMap<String, HashMap<Integer, TreeSet<Integer>>> ms_file2scan = new HashMap<>();
         while((line=psmReader.readLine())!=null) {
             line = line.trim();
             String[] d = line.split("\t");
@@ -301,10 +302,9 @@ public class FileIO {
             String[] a = spectrum_title.split(":");
             String ms_file_name = a[0];
             int scan = Integer.parseInt(a[1]);
-            if(!ms_file2scan.containsKey(ms_file_name)){
-                ms_file2scan.put(ms_file_name, new HashSet<>());
-            }
-            ms_file2scan.get(ms_file_name).add(scan);
+            int charge = Integer.parseInt(a[2]);
+            ms_file2scan.computeIfAbsent(ms_file_name, k -> new HashMap<>())
+                    .computeIfAbsent(scan, k -> new TreeSet<>()).add(charge);
         }
         psmReader.close();
         Cloger.getInstance().logger.info("The total number of MS2 files in "+psm_file + ": " +ms_file2scan.size());
@@ -318,9 +318,9 @@ public class FileIO {
                 if(f.getName().endsWith(".mzML")){
                     String ms_file_name = f.getName().replaceAll(".mzML","");
                     if(ms_file2scan.containsKey(ms_file_name)){
-                        HashSet<Integer> scans = ms_file2scan.get(ms_file_name);
+                        HashMap<Integer, TreeSet<Integer>> scans = ms_file2scan.get(ms_file_name);
                         Cloger.getInstance().logger.info("Generating mgf for "+ms_file_name+" with "+scans.size()+" scans ...");
-                        generate_mgf_from_mzML(f.getAbsolutePath(),new HashSet<>(scans),bWriter);
+                        generate_mgf_from_mzML(f.getAbsolutePath(), scans, bWriter);
                     }
                 }
             }
@@ -328,16 +328,46 @@ public class FileIO {
             if(F.getName().endsWith(".mzML")){
                 String ms_file_name = F.getName().replaceAll(".mzML","");
                 if(ms_file2scan.containsKey(ms_file_name)){
-                    HashSet<Integer> scans = ms_file2scan.get(ms_file_name);
+                    HashMap<Integer, TreeSet<Integer>> scans = ms_file2scan.get(ms_file_name);
                     Cloger.getInstance().logger.info("Generating mgf for "+ms_file_name+" with "+scans.size()+" scans ...");
-                    generate_mgf_from_mzML(F.getAbsolutePath(), scans,bWriter);
+                    generate_mgf_from_mzML(F.getAbsolutePath(), scans, bWriter);
                 }
             }
         }
         bWriter.close();
     }
 
-    public static void generate_mgf_from_mzML(String ms_file, HashSet<Integer> scan_list, BufferedWriter bWriter) throws IOException {
+    private static final java.util.regex.Pattern NATIVE_SCAN_NUMBER = java.util.regex.Pattern.compile("(?:^|\\s)scan=(\\d+)");
+
+    /**
+     * The scan number a search engine reports for this spectrum: the "scan=" field of its native id.
+     * <p>
+     * IScan.getNum() is MSFTBX's own running number, i.e. the spectrum's position in the file. The
+     * two only agree when the mzML holds every scan; after an MS-level filter (e.g. MS3 dropped from
+     * an SPS-MS3 TMT run) every spectrum past the first gap was paired with the wrong PSM. Falls back
+     * to getNum() for ids without a scan field (e.g. non-Thermo files).
+     */
+    static int native_scan_number(MZMLIndex index, IScan scan) {
+        if (index != null) {
+            umich.ms.fileio.filetypes.mzml.MZMLIndexElement element = index.getByNum(scan.getNum());
+            if (element != null && element.getId() != null) {
+                java.util.regex.Matcher m = NATIVE_SCAN_NUMBER.matcher(element.getId());
+                if (m.find()) {
+                    return Integer.parseInt(m.group(1));
+                }
+            }
+        }
+        return scan.getNum();
+    }
+
+    /**
+     * Write the MS2 spectra named in {@code scan2charges} (native scan number -> charges) to MGF, one
+     * record per charge. The title carries the charge from the PSM table rather than the precursor
+     * charge in the mzML: a PSM whose charge disagreed with the mzML used to be dropped without a
+     * word, and a scan with no precursor charge ended the run.
+     */
+    public static void generate_mgf_from_mzML(String ms_file, Map<Integer, ? extends Set<Integer>> scan2charges,
+                                              BufferedWriter bWriter) throws IOException {
         MZMLFile source = null;
         if (ms_file.endsWith("mzML") || ms_file.endsWith("mzml")) {
             source = new MZMLFile(ms_file);
@@ -386,38 +416,30 @@ public class FileIO {
         int num = 0;
         for (Map.Entry<Integer, IScan> next : num2scanEntries) {
             IScan scan = next.getValue();
-            int scan_num = scan.getNum();
             if (scan.getSpectrum() != null) {
                 if (scan.getMsLevel() == 2) {
-                    if(scan_list.contains(scan_num)) {
-                        // System.out.println(scan.getNum()+":"+scan.getPrecursor().getCharge()+":"+scan.getPrecursor().getMzTarget());
-                        if (scan.getPrecursor().getCharge() != null) {
-                            int charge = scan.getPrecursor().getCharge();
-                            // scan number is original scan number
-                            //double mz = scan.getPrecursor().getMzTarget();
-                            double mz = scan.getPrecursor().getMzTargetMono();
+                    int scan_num = native_scan_number(mzMLindex, scan);
+                    Set<Integer> charges = scan2charges.get(scan_num);
+                    if (charges != null) {
+                        for (int charge : charges) {
                             try {
-                                asMgf(scan, ms_file, charge);
-                                bWriter.write(asMgf(scan, ms_file_name, charge) + "\n");
-                                num++;
+                                bWriter.write(asMgf(scan, ms_file_name, charge, scan_num) + "\n");
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
-                        } else {
-                            Cloger.getInstance().logger.error("The charge of the precursor is null for scan " + scan.getNum());
-                            System.exit(1);
                         }
+                        num++;
                     }
                 }
             }
         }
-        if(num != scan_list.size()){
-            Cloger.getInstance().logger.warn("The number of MS2 spectra not found in the mzML file: "+(scan_list.size()-num));
+        if(num != scan2charges.size()){
+            Cloger.getInstance().logger.warn("The number of MS2 spectra not found in the mzML file: "+(scan2charges.size()-num));
         }
     }
 
 
-    private static String asMgf(IScan scan, String filename, int charge){
+    private static String asMgf(IScan scan, String filename, int charge, int scan_number){
         // minute
         double rt = scan.getRt();
         double intensity = 0;
@@ -435,7 +457,6 @@ public class FileIO {
         // System.out.println(scan.getPrecursor().getMzTarget()+"\t"+scan.getPrecursor().getMzTargetMono());
         double[] intArray = scan.getSpectrum().getIntensities();
         double[] mzArray = scan.getSpectrum().getMZs();
-        int scan_number = scan.getNum();
 
         StringBuilder stringBuilder = new StringBuilder();
 

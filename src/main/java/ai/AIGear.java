@@ -123,6 +123,9 @@ public class AIGear {
      */
     public boolean nce_is_auto = false;
 
+    /** True when -nce gave an explicit value, which then takes precedence over any NCE in the input. */
+    public boolean nce_from_command_line = false;
+
     /**
      * This is used to indicate whether the user has provided a specific MS
      * instrument for spectral library generation.
@@ -1047,6 +1050,7 @@ public class AIGear {
             } else {
                 aiGear.nce = Double.parseDouble(nce_option);
                 CParameter.NCE = aiGear.nce;
+                aiGear.nce_from_command_line = true;
             }
         }
         if (aiGear.nce_is_auto && !cmd.hasOption("ms")) {
@@ -3326,7 +3330,7 @@ public class AIGear {
             System.out.println("Process MS file:" + ms_file);
             // For store raw data
             DIAMeta meta = new DIAMeta();
-            if (CParameter.itol > 0.2 && CParameter.itolu.startsWith("da")) {
+            if (CParameter.itol > 0.2 && CParameter.itolu.toLowerCase(Locale.ROOT).startsWith("da")) {
                 meta.fragment_ion_mz_bin_size = 0.5;
                 System.out.println("Fragment ion bin size:" + meta.fragment_ion_mz_bin_size);
             }
@@ -3832,7 +3836,7 @@ public class AIGear {
             ms_file2meta.get(ms_file).ms_file = ms_file;
             // For store raw data
             DIAMeta meta = new DIAMeta();
-            if (CParameter.itol > 0.2 && CParameter.itolu.startsWith("da")) {
+            if (CParameter.itol > 0.2 && CParameter.itolu.toLowerCase(Locale.ROOT).startsWith("da")) {
                 meta.fragment_ion_mz_bin_size = 0.5;
                 System.out.println("Fragment ion bin size:" + meta.fragment_ion_mz_bin_size);
             }
@@ -4719,7 +4723,7 @@ public class AIGear {
             ms_file2meta.get(ms_file).ms_file = ms_file;
             // For store raw data
             DIAMeta meta = new DIAMeta();
-            if (CParameter.itol > 0.2 && CParameter.itolu.startsWith("da")) {
+            if (CParameter.itol > 0.2 && CParameter.itolu.toLowerCase(Locale.ROOT).startsWith("da")) {
                 meta.fragment_ion_mz_bin_size = 0.5;
                 System.out.println("Fragment ion bin size:" + meta.fragment_ion_mz_bin_size);
             }
@@ -5254,6 +5258,68 @@ public class AIGear {
      * 
      * @throws IOException
      */
+    /**
+     * The most common collision energy in a PSM table column, or null when no row has a usable value.
+     * Ties go to the lower value so the result does not depend on row order.
+     *
+     * @param psm_lines  tab-separated PSM rows
+     * @param nce_column index of the NCE/CE column
+     */
+    static Double most_common_nce(List<String> psm_lines, int nce_column) {
+        if (psm_lines == null || nce_column < 0) {
+            return null;
+        }
+        TreeMap<Double, Integer> counts = new TreeMap<>();
+        for (String line : psm_lines) {
+            String[] d = line.split("\t", -1);
+            if (d.length <= nce_column || d[nce_column].trim().isEmpty()) {
+                continue;
+            }
+            try {
+                counts.merge(Double.parseDouble(d[nce_column].trim()), 1, Integer::sum);
+            } catch (NumberFormatException e) {
+                // not a number: ignore the cell
+            }
+        }
+        Double best = null;
+        int best_count = 0;
+        for (Map.Entry<Double, Integer> e : counts.entrySet()) {
+            if (e.getValue() > best_count) {
+                best = e.getKey();
+                best_count = e.getValue();
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The largest numeric value in a PSM table column, or null when no row has one.
+     *
+     * @param psm_lines tab-separated PSM rows
+     * @param column    column index
+     */
+    static Double max_column_value(List<String> psm_lines, int column) {
+        if (psm_lines == null || column < 0) {
+            return null;
+        }
+        Double max = null;
+        for (String line : psm_lines) {
+            String[] d = line.split("\t", -1);
+            if (d.length <= column || d[column].trim().isEmpty()) {
+                continue;
+            }
+            try {
+                double v = Double.parseDouble(d[column].trim());
+                if (!Double.isNaN(v) && (max == null || v > max)) {
+                    max = v;
+                }
+            } catch (NumberFormatException e) {
+                // not a number: ignore the cell
+            }
+        }
+        return max;
+    }
+
     public void get_ms2_matches_generic_dda() throws IOException {
         this.ion_type2column_index.clear();
         double original_fragment_ion_intensity_cutoff = CParameter.fragment_ion_intensity_cutoff;
@@ -5340,7 +5406,7 @@ public class AIGear {
             ms_file2meta.get(ms_file).ms_file = ms_file;
             // For store raw data
             DIAMeta meta = new DIAMeta();
-            if (CParameter.itol > 0.2 && CParameter.itolu.startsWith("da")) {
+            if (CParameter.itol > 0.2 && CParameter.itolu.toLowerCase(Locale.ROOT).startsWith("da")) {
                 meta.fragment_ion_mz_bin_size = 0.5;
                 System.out.println("Fragment ion bin size:" + meta.fragment_ion_mz_bin_size);
             }
@@ -5360,6 +5426,28 @@ public class AIGear {
                 meta.fragment_ion_mz_max = CParameter.max_fragment_ion_mz;
                 meta.precursor_ion_mz_min = CParameter.minPeptideMz;
                 meta.precursor_ion_mz_max = CParameter.maxPeptideMz;
+                // An MGF carries no collision energy, and mzML input reaches this point as an MGF too
+                // (converted above), so without -nce the NCE stayed at the default of 27: training used
+                // the per-PSM NCE from the table while the library was predicted at 27. Use the table's
+                // most common NCE instead, so prediction matches what the model was trained on.
+                if (!this.nce_from_command_line && ce_present) {
+                    Double table_nce = most_common_nce(this.ms_file2psm.get(ms_file), ce_column_index);
+                    if (table_nce != null) {
+                        CParameter.NCE = table_nce;
+                        this.nce = table_nce;
+                        Cloger.getInstance().logger.info("NCE from the PSM table (most common value): " + table_nce);
+                    }
+                }
+                // Likewise nothing set the RT maximum for an MGF, so it stayed 0 and every RT training
+                // target became rt / 0 = Infinity (train_loss=inf; the RT model learned nothing). The
+                // RTs used for training come from the table's rt column, so normalise by its maximum.
+                if (meta.rt_max <= 0 && hIndex.containsKey("rt")) {
+                    Double table_rt_max = max_column_value(this.ms_file2psm.get(ms_file), hIndex.get("rt"));
+                    if (table_rt_max != null && table_rt_max > 0) {
+                        meta.rt_max = table_rt_max;
+                        Cloger.getInstance().logger.info("RT max from the PSM table: " + table_rt_max);
+                    }
+                }
             } else {
                 System.err.println("Error: unrecognized MS file format:" + ms_file);
                 System.exit(1);
@@ -5859,7 +5947,7 @@ public class AIGear {
             ms_file2meta.get(ms_file).ms_file = ms_file;
             // For store raw data
             CCSDIAMeta meta = new CCSDIAMeta();
-            if (CParameter.itol > 0.2 && CParameter.itolu.startsWith("da")) {
+            if (CParameter.itol > 0.2 && CParameter.itolu.toLowerCase(Locale.ROOT).startsWith("da")) {
                 meta.fragment_ion_mz_bin_size = 0.5;
                 System.out.println("Fragment ion bin size:" + meta.fragment_ion_mz_bin_size);
             }
@@ -6748,7 +6836,7 @@ public class AIGear {
             ms_file2meta.get(ms_file).ms_file = ms_file;
             // For store raw data
             CCSDIAMeta meta = new CCSDIAMeta();
-            if (CParameter.itol > 0.2 && CParameter.itolu.startsWith("da")) {
+            if (CParameter.itol > 0.2 && CParameter.itolu.toLowerCase(Locale.ROOT).startsWith("da")) {
                 meta.fragment_ion_mz_bin_size = 0.5;
                 Cloger.getInstance().logger.info("Fragment ion bin size:" + meta.fragment_ion_mz_bin_size);
             }
@@ -8995,44 +9083,70 @@ public class AIGear {
      * @param peptide Peptide sequence
      * @return A string containing the modification information
      */
+    /** A residue, or a DIA-NN modification token such as (UniMod:737), in a Modified.Sequence. */
+    private static final java.util.regex.Pattern DIANN_MOD_TOKEN =
+            java.util.regex.Pattern.compile("([^(])|(\\([^)]*\\))");
+
     public String get_modification_diann(String mod_seq, String peptide) {
         // AAAAC(UniMod:4)LDK2
         // AGEVLNQPM(UniMod:35)MMAAR2
         // AAAAAAAATMALAAPS(UniMod:21)SPTPESPTMLTK
         // AAAGPLDMSLPST(UniMod:21)PDLK
         // (UniMod:1)AAVTLHLR
+        // (UniMod:737)AAK(UniMod:737): peptide N-terminal TMT label and TMT on K
+        //
+        // Parsed token by token. The previous version substituted each modification's code into the
+        // sequence and then read it back one character at a time, which only works when every code is
+        // a single character: codes are modification ids, so any modification with an id of 10 or more
+        // (TMT on K is 15) lengthened the sequence and ended in "Unrecognized modification" and exit.
+        // A modification before the first residue also had no route other than protein N-term acetyl.
         if (mod_seq.equalsIgnoreCase(peptide)) {
             return "-";
         } else {
-            for (String unimod : CModification.getInstance().unimod2modification_code.keySet()) {
-                if (mod_seq.contains(unimod)) {
-                    mod_seq = mod_seq.replace(unimod, CModification.getInstance().unimod2modification_code.get(unimod));
-                }
-            }
+            CModification cmod = CModification.getInstance();
             ArrayList<String> mods = new ArrayList<>();
-            int n_term_mods = 0;
-            if (mod_seq.length() != peptide.length()) {
-                // TODO: improve this part
-                if (mod_seq.startsWith("(UniMod:1)") && CParameter.varMods.contains("5")) {
-                    // Protein N-term Acetylation
-                    String unimod = "Protein N-term(UniMod:1)";
-                    mod_seq = mod_seq.replace("(UniMod:1)",CModification.getInstance().unimod2modification_code.get(unimod));
-                    n_term_mods = n_term_mods + 1;
-                } else {
+            java.util.regex.Matcher token = DIANN_MOD_TOKEN.matcher(mod_seq);
+            int n_residues = 0;
+            char last_residue = 0;
+            int i = 0;
+            while (i < mod_seq.length()) {
+                if (!token.find(i) || token.start() != i) {
                     Cloger.getInstance().logger.error("Unrecognized modification:" + mod_seq + "," + peptide);
                     System.exit(1);
                 }
-            }
-            String[] aas = mod_seq.split("");
-            int pos;
-            String mod_name;
-            for (int i = 0; i < aas.length; i++) {
-                if (CModification.getInstance().modification_code2modification.containsKey(aas[i])) {
+                if (token.group(1) != null) {
+                    n_residues++;
+                    last_residue = token.group(1).charAt(0);
+                } else {
+                    String unimod = token.group(2);
+                    String site_unimod;
+                    if (n_residues == 0) {
+                        // Before the first residue: a terminal modification, at position 0.
+                        if (unimod.equals("(UniMod:1)")) {
+                            // Protein N-term acetylation, accepted only when it is a variable
+                            // modification, as before.
+                            if (!CParameter.varMods.contains("5")) {
+                                Cloger.getInstance().logger.error("Unrecognized modification:" + mod_seq + "," + peptide);
+                                System.exit(1);
+                            }
+                            site_unimod = "Protein N-term(UniMod:1)";
+                        } else {
+                            // Peptide N-terminal modification, e.g. a TMT label.
+                            site_unimod = "N-term" + unimod;
+                        }
+                    } else {
+                        site_unimod = last_residue + unimod;
+                    }
+                    String code = cmod.unimod2modification_code.get(site_unimod);
+                    if (code == null) {
+                        Cloger.getInstance().logger.error("Unrecognized modification:" + mod_seq + "," + peptide);
+                        System.exit(1);
+                    }
                     // Oxidation of M@12[15.9949]
-                    pos = i + 1 - n_term_mods;
-                    mod_name = CModification.getInstance().modification_code2modification.get(aas[i]);
-                    mods.add(mod_name+"@"+pos+"["+ CModification.getInstance().getPTMbyName(mod_name).getMass()+"]");
+                    String mod_name = cmod.modification_code2modification.get(code);
+                    mods.add(mod_name + "@" + n_residues + "[" + cmod.getPTMbyName(mod_name).getMass() + "]");
                 }
+                i = token.end();
             }
             return StringUtils.join(mods, ";");
         }
@@ -9282,7 +9396,15 @@ public class AIGear {
                     n_term_char = "5";
                 }else{
                     if(CModification.getInstance().ptm_name2id.containsKey(mod_name)) {
-                        aa[Integer.parseInt(pos) - 1] = String.valueOf(CModification.getInstance().ptm_name2id.get(mod_name));
+                        String mod_id = String.valueOf(CModification.getInstance().ptm_name2id.get(mod_name));
+                        if (Integer.parseInt(pos) == 0) {
+                            // A peptide N-terminal modification (e.g. a TMT label) has no residue, so it
+                            // takes the terminal slot as protein N-term acetyl does above. Indexing
+                            // aa[pos - 1] here threw ArrayIndexOutOfBoundsException for every TMT peptide.
+                            n_term_char = mod_id;
+                        } else {
+                            aa[Integer.parseInt(pos) - 1] = mod_id;
+                        }
                     }else {
                         System.out.println("Unrecognized modification found:" + peptide + " -> " + modification);
                         unrecognized_mod_found = true;
