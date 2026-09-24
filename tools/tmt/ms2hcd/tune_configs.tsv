@@ -1,0 +1,7 @@
+name	epochs	lr	batch_size	warmup_epochs	scope	purpose
+A	30	0.0001	512	5	all	baseline: the settings the first model was trained with
+B	60	0.0001	512	5	all	longer schedule
+C	30	0.0003	512	5	all	higher learning rate
+D	60	0.0002	512	5	all	longer schedule and higher learning rate
+E	30	0.0001	256	5	all	smaller batch, twice the update steps
+D0	60	0.0002	512	5	default	control: D's settings on default-range spectra only (length 7-35, charge 2-4)

@@ -1,0 +1,16 @@
+OS                    Windows 11 (build 26200)
+CPU                   Intel(R) Core(TM) Ultra 7 265K, 20 logical cores
+RAM                   127 GiB
+GPU                   NVIDIA RTX 5000 Ada Generation, 30 GiB
+NVIDIA driver         595.95
+CUDA (PyTorch build)  12.1
+cuDNN                 9.1.0
+Python                3.9.18
+torch                 2.5.1+cu121
+peptdeep              1.1.0
+alphabase             1.2.1
+numpy                 1.26.4
+pandas                2.2.3
+scipy                 1.13.1
+pyarrow               21.0.0
+transformers          4.47.0
