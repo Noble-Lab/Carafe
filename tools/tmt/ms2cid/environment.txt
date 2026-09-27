@@ -1,0 +1,16 @@
+OS                    Linux 5.15.0-191-generic
+CPU                   Intel(R) Core(TM) i9-10980XE CPU @ 3.00GHz, 36 logical cores
+RAM                   126 GiB
+GPU                   NVIDIA RTX A4000, 16 GiB
+NVIDIA driver         560.35.05
+CUDA (PyTorch build)  12.1
+cuDNN                 9.1.0
+Python                3.9.18
+torch                 2.5.1+cu121
+peptdeep              1.1.0
+alphabase             1.2.1
+numpy                 1.26.4
+pandas                2.2.3
+scipy                 1.13.1
+pyarrow               21.0.0
+transformers          4.47.0

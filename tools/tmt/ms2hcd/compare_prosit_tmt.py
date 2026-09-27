@@ -8,7 +8,8 @@ Carafe's calc_ms2_similarity_mask. Prosit's fragment-charge-3 outputs are droppe
 evaluate_heldout.py; its PCC and SPC also count the (all-zero) neutral-loss columns, so they differ
 slightly from the values here.
 
-Prosit is scored twice: at each spectrum's recorded NCE, and at a calibrated NCE (recorded NCE plus
+--fragmentation CID asks Prosit for CID spectra (default HCD). Prosit is scored twice: at each
+spectrum's recorded NCE, and at a calibrated NCE (recorded NCE plus
 one offset per instrument, -6 to +6). The offsets are chosen on a sample of training spectra (median
 SA), never on the held-out set. Carafe models use the recorded NCE, the NCE they were trained on.
 
@@ -18,7 +19,8 @@ Writes to --out-dir:
     prosit_pred_<offsets>.tsv      Prosit predictions for the held-out set (reused on later runs for
                                    the held-out set recorded in prosit_pred_heldout.json)
     comparison.json                the scores
-    mirror_spectra.json            every peak of the plotted spectra, read from --msp
+    mirror_spectra.json            every peak of the plotted spectra, read from --msp (or, with
+                                   --prospect-dir, every annotated peak)
     mirror_light.png, _dark.png    every peak of a few held-out spectra (top) and the predictions
                                    (bottom), picked at random with a fixed seed, one per precursor
                                    charge 2-5; the last --model beside calibrated Prosit
@@ -76,14 +78,14 @@ def proforma(sequence: str, mods: str, sites: str) -> str:
     return nterm + "".join(residues)
 
 
-def koina_predict(peptides, charges, nces, url=KOINA_URL, attempts=3):
+def koina_predict(peptides, charges, nces, fragmentation="HCD", url=KOINA_URL, attempts=3):
     """Prosit intensities and annotations (each n x 174) for one request."""
     n = len(peptides)
     body = json.dumps({"id": "0", "inputs": [
         {"name": "peptide_sequences", "shape": [n, 1], "datatype": "BYTES", "data": list(peptides)},
         {"name": "precursor_charges", "shape": [n, 1], "datatype": "INT32", "data": [int(c) for c in charges]},
         {"name": "collision_energies", "shape": [n, 1], "datatype": "FP32", "data": [float(e) for e in nces]},
-        {"name": "fragmentation_types", "shape": [n, 1], "datatype": "BYTES", "data": ["HCD"] * n},
+        {"name": "fragmentation_types", "shape": [n, 1], "datatype": "BYTES", "data": [fragmentation] * n},
     ], "outputs": [{"name": "intensities"}, {"name": "annotation"}]}).encode()
     for attempt in range(1, attempts + 1):
         try:
@@ -123,7 +125,7 @@ def to_fragment_rows(length: int, intensities, annotation) -> np.ndarray:
     return matrix
 
 
-def prosit_predict(requests, n_fragment_rows, batch_size, workers):
+def prosit_predict(requests, n_fragment_rows, batch_size, workers, fragmentation="HCD"):
     """Prosit predictions for several (psm, nces) sets at once, as fragment tables in their layouts.
 
     Batches from all sets go to Koina together, `workers` requests at a time."""
@@ -136,7 +138,7 @@ def prosit_predict(requests, n_fragment_rows, batch_size, workers):
     tables = [np.zeros((n, len(FRAG_COLUMNS)), dtype=np.float32) for n in n_fragment_rows]
     start, done = time.time(), 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for (k, i, *_), (intensities, annotation) in zip(jobs, pool.map(lambda j: koina_predict(*j[2:]), jobs)):
+        for (k, i, *_), (intensities, annotation) in zip(jobs, pool.map(lambda j: koina_predict(*j[2:], fragmentation), jobs)):
             batch = requests[k][0].iloc[i:i + batch_size]
             for row, (length, a, b) in enumerate(zip(batch["sequence"].str.len(), batch["frag_start_idx"],
                                                      batch["frag_stop_idx"])):
@@ -198,12 +200,14 @@ def data_signature(directory):
             for name in ("psm_pdv.txt", "fragment_intensity_df.tsv")}
 
 
-def calibrate(train_dir, per_instrument, batch_size, workers, gpu, out_path):
+def calibrate(train_dir, per_instrument, batch_size, workers, gpu, out_path, fragmentation="HCD"):
     """Per-instrument NCE offset for Prosit with the highest median SA on sampled training spectra.
 
     Reused from out_path when it was made from the same training data, sample size, seed and offsets."""
     inputs = {"train_data": data_signature(train_dir), "spectra_per_instrument_requested": per_instrument,
               "seed": SEED, "offsets": list(OFFSETS)}
+    if fragmentation != "HCD":
+        inputs["fragmentation"] = fragmentation
     if os.path.exists(out_path):
         with open(out_path) as fh:
             saved = json.load(fh)
@@ -217,7 +221,7 @@ def calibrate(train_dir, per_instrument, batch_size, workers, gpu, out_path):
                         for _, g in psm.groupby("instrument")])
     sample, sample_obs = reindex(sample, observed)
     predictions = prosit_predict([(sample, sample["nce"] + o) for o in OFFSETS], [len(sample_obs)] * len(OFFSETS),
-                                 batch_size, workers)
+                                 batch_size, workers, fragmentation)
     table = {}
     for offset, predicted in zip(OFFSETS, predictions):
         result = similarity(sample, predicted, sample_obs, gpu)
@@ -355,9 +359,60 @@ def read_msp(path, sequences):
         yield name, comment, peaks
 
 
-def mirror_plots(psm, originals, predictions, scores, picks, out_prefix):
-    """originals: {index: (mz, intensity, label)} from original_spectra; predictions/scores:
-    {panel title: fragment table / per-spectrum result} in psm's layout."""
+def prospect_spectra(prospect_dir, psm, picks, cache_path):
+    """Every annotated peak of each picked held-out spectrum, from PROSPECT's annotation files.
+
+    Spectra are found by the raw_file and scan_number columns that prospect_to_carafe_training.py
+    writes. PROSPECT keeps only annotated peaks. Each peak takes its highest-scoring annotation, as
+    the converter does; the peaks that became the spectrum's b/y ions (the strongest peak per ion at
+    fragment charge 1-2) are labelled, every other peak gets "". Same return value and cache as
+    original_spectra."""
+    import io
+    import zipfile
+
+    keys = {i: f"{psm.loc[i, 'raw_file']}/{int(psm.loc[i, 'scan_number'])}" for i in picks}
+    found = {}
+    if os.path.exists(cache_path):
+        with open(cache_path) as fh:
+            found = json.load(fh)
+    todo = {k: i for i, k in keys.items() if k not in found}
+    if todo:
+        member_of = {}
+        for name in sorted(os.listdir(prospect_dir)):
+            if name.endswith(".zip"):
+                with zipfile.ZipFile(os.path.join(prospect_dir, name)) as archive:
+                    for member in archive.namelist():
+                        if member.endswith("_annotation.parquet"):
+                            member_of[os.path.basename(member)[:-len("_annotation.parquet")]] = (name, member)
+        for key, i in todo.items():
+            raw_file, scan = key.rsplit("/", 1)
+            name, member = member_of[raw_file]
+            with zipfile.ZipFile(os.path.join(prospect_dir, name)) as archive:
+                ann = pd.read_parquet(io.BytesIO(archive.read(member)))
+            ann = ann[ann["scan_number"] == int(scan)].reset_index(drop=True)
+            ann["listed"] = np.arange(len(ann))
+            peaks = (ann.sort_values(["experimental_mass", "fragment_score", "listed"], ascending=[True, False, True])
+                     .drop_duplicates("experimental_mass").reset_index(drop=True))
+            n_rows = len(psm.loc[i, "sequence"]) - 1
+            clean = (peaks["ion_type"].isin(["b", "y"]) & (peaks["neutral_loss"].fillna("") == "")
+                     & peaks["charge"].between(1, 2) & peaks["no"].between(1, n_rows))
+            labels = [""] * len(peaks)
+            winners = peaks[clean].sort_values("intensity", ascending=False).drop_duplicates(["ion_type", "no", "charge"])
+            for k, a in winners.iterrows():
+                labels[k] = f"{a['ion_type']}{int(a['no'])}" + ("++" if a["charge"] == 2 else "")
+            found[key] = {"mz": peaks["experimental_mass"].tolist(), "intensity": peaks["intensity"].tolist(),
+                          "label": labels}
+        print(f"read {len(todo)} spectra from {prospect_dir}", flush=True)
+        with open(cache_path, "w") as fh:
+            json.dump(found, fh)
+    return {i: (np.array(found[k]["mz"]), np.array(found[k]["intensity"]), found[k]["label"]) for i, k in keys.items()}
+
+
+def mirror_plots(psm, originals, predictions, scores, picks, out_prefix, annotated_only=False):
+    """originals: {index: (mz, intensity, label)} from original_spectra or prospect_spectra;
+    predictions/scores: {panel title: fragment table / per-spectrum result} in psm's layout.
+    annotated_only: the source holds annotated peaks only (PROSPECT), not the whole spectrum."""
+    peaks_word = "annotated peaks" if annotated_only else "peaks"
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -415,7 +470,7 @@ def mirror_plots(psm, originals, predictions, scores, picks, out_prefix):
                 if c == 0:
                     # the spectrum, as a row header above both panels
                     ax.annotate(f"{proforma(p['sequence'], p['mods'], p['mod_sites'])}   {int(p['charge'])}+   "
-                                f"NCE {p['nce']:g}   {p['instrument']}   {len(peak_mz)} peaks", (0, 1.22),
+                                f"NCE {p['nce']:g}   {p['instrument']}   {len(peak_mz)} {peaks_word}", (0, 1.22),
                                 xycoords="axes fraction", fontsize=8.5, color=theme["ink"], annotation_clip=False)
                     ax.set_ylabel("observed  |  predicted", fontsize=7, color=theme["ink2"])
                 if r == len(picks) - 1:
@@ -425,12 +480,25 @@ def mirror_plots(psm, originals, predictions, scores, picks, out_prefix):
         legend = fig.legend(handles=handles, loc="upper right", ncol=3, fontsize=8, frameon=False)
         for text in legend.get_texts():
             text.set_color(theme["ink2"])
-        fig.suptitle("Held-out spectra: every peak of the observed spectrum (top) and the prediction (bottom)",
-                     fontsize=10, color=theme["ink"], x=0.07, ha="left")
-        fig.text(0.07, 0.955, "Observed peaks are scaled to the base peak; each prediction is scaled so its "
-                 "strongest ion is as high as the strongest observed b/y ion.\nColored: the b/y ions (fragment "
-                 "charge 1-2) the models are trained and scored on. Gray: every other peak (isotopes, other ion "
-                 "types, reporter ions, unassigned).", fontsize=7, color=theme["ink2"], ha="left", va="top")
+        if annotated_only:
+            # title and a three-line caption in a fixed band (in inches) above the first row
+            height = fig.get_figheight()
+            fig.subplots_adjust(top=1 - 1.15 / height)
+            legend.set_bbox_to_anchor((0.98, 1 - 0.36 / height), transform=fig.transFigure)
+            fig.suptitle("Held-out spectra: every annotated peak of the observed spectrum (top) and the prediction "
+                         "(bottom)", fontsize=10, color=theme["ink"], x=0.07, y=1 - 0.1 / height, ha="left", va="top")
+            fig.text(0.07, 1 - 0.38 / height, "Observed peaks are scaled to the base peak; each prediction is scaled "
+                     "so its strongest ion is as high as the strongest observed b/y ion.\nColored: the b/y ions "
+                     "(fragment charge 1-2) the models are trained and scored on.\nGray: every other annotated peak "
+                     "(neutral losses, fragment charge 3 and above, precursor); unannotated peaks are not in the "
+                     "source data.", fontsize=7, color=theme["ink2"], ha="left", va="top")
+        else:
+            fig.suptitle("Held-out spectra: every peak of the observed spectrum (top) and the prediction (bottom)",
+                         fontsize=10, color=theme["ink"], x=0.07, ha="left")
+            fig.text(0.07, 0.955, "Observed peaks are scaled to the base peak; each prediction is scaled so its "
+                     "strongest ion is as high as the strongest observed b/y ion.\nColored: the b/y ions (fragment "
+                     "charge 1-2) the models are trained and scored on. Gray: every other peak (isotopes, other ion "
+                     "types, reporter ions, unassigned).", fontsize=7, color=theme["ink2"], ha="left", va="top")
         path = f"{out_prefix}_{mode}.png"
         fig.savefig(path, dpi=150, bbox_inches="tight", facecolor=theme["surface"])
         plt.close(fig)
@@ -444,18 +512,23 @@ def main(argv=None):
     ap.add_argument("--heldout", required=True, help="held-out directory from split_heldout.py")
     ap.add_argument("--train", required=True, help="training directory from split_heldout.py (NCE calibration)")
     ap.add_argument("--model", action="append", default=[], help="Carafe model: 'generic', a .pt path, or name=path")
-    ap.add_argument("--msp", required=True, help="the NIST MSP library (full observed spectra for the mirror plots)")
+    ap.add_argument("--msp", help="the NIST MSP library (full observed spectra for the mirror plots)")
+    ap.add_argument("--prospect-dir", help="PROSPECT TMT files (annotated observed spectra for the mirror plots), "
+                                           "instead of --msp")
+    ap.add_argument("--fragmentation", default="HCD", choices=["HCD", "CID"], help="fragmentation type sent to Prosit")
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--calibration-spectra", type=int, default=1000, help="training spectra per instrument")
     ap.add_argument("--batch-size", type=int, default=1000, help="spectra per Koina request (the server maximum)")
     ap.add_argument("--workers", type=int, default=4, help="Koina requests in flight at once")
     ap.add_argument("--device", default="gpu", choices=["gpu", "cpu"])
     args = ap.parse_args(argv)
+    if args.model and bool(args.msp) == bool(args.prospect_dir):
+        ap.error("give one of --msp or --prospect-dir for the mirror plots")
     gpu = args.device == "gpu"
     os.makedirs(args.out_dir, exist_ok=True)
 
     offsets = calibrate(args.train, args.calibration_spectra, args.batch_size, args.workers, gpu,
-                        os.path.join(args.out_dir, "calibration.json"))
+                        os.path.join(args.out_dir, "calibration.json"), args.fragmentation)
 
     psm, observed = load_heldout(args.heldout)
     in_range = in_prosit_range(psm)
@@ -471,7 +544,8 @@ def main(argv=None):
     settings = {"Prosit (recorded NCE)": {i: 0 for i in instruments},
                 "Prosit (calibrated NCE: " + ", ".join(f"{i} {offsets[i]:+d}" for i in instruments) + ")":
                     {i: offsets[i] for i in instruments}}
-    paths = {t: os.path.join(args.out_dir, "prosit_pred_" + "_".join(f"{i}{o:+d}" for i, o in s.items()) + ".tsv")
+    prefix = "prosit_pred_" + ("" if args.fragmentation == "HCD" else f"{args.fragmentation}_")
+    paths = {t: os.path.join(args.out_dir, prefix + "_".join(f"{i}{o:+d}" for i, o in s.items()) + ".tsv")
              for t, s in settings.items()}
     # cached predictions are only reused for the held-out set they were made for
     signature_path = os.path.join(args.out_dir, "prosit_pred_heldout.json")
@@ -484,7 +558,7 @@ def main(argv=None):
         if not (same_heldout and os.path.exists(paths[t])) and paths[t] not in [paths[u] for u in todo]:
             todo.append(t)
     fresh = prosit_predict([(sub_psm, sub_psm["nce"] + sub_psm["instrument"].map(settings[t])) for t in todo],
-                           [len(sub_obs)] * len(todo), args.batch_size, args.workers) if todo else []
+                           [len(sub_obs)] * len(todo), args.batch_size, args.workers, args.fragmentation) if todo else []
     predictions = {}
     for t in settings:
         if t in todo:
@@ -515,6 +589,7 @@ def main(argv=None):
               + " | by charge " + ", ".join(f"{k}+={v:.4f} ({n})" for k, (v, n) in r["SA_by_charge"].items()))
     with open(os.path.join(args.out_dir, "comparison.json"), "w") as fh:
         json.dump({"heldout_spectra": int(len(psm)), "scored_spectra": int(in_range.sum()),
+                   **({"fragmentation": args.fragmentation} if args.fragmentation != "HCD" else {}),
                    "nce_offsets": offsets, "results": results}, fh, indent=2)
 
     if args.model:
@@ -523,8 +598,13 @@ def main(argv=None):
         panels = {f"Carafe {carafe}": predictions[carafe], "Prosit, calibrated NCE": predictions[calibrated]}
         scores = {f"Carafe {carafe}": per_spectrum[carafe], "Prosit, calibrated NCE": per_spectrum[calibrated]}
         picks = pick_spectra(sub_psm)
-        originals = original_spectra(args.msp, sub_psm, sub_obs, picks, os.path.join(args.out_dir, "mirror_spectra.json"))
-        mirror_plots(sub_psm, originals, panels, scores, picks, os.path.join(args.out_dir, "mirror"))
+        cache = os.path.join(args.out_dir, "mirror_spectra.json")
+        if args.msp:
+            originals = original_spectra(args.msp, sub_psm, sub_obs, picks, cache)
+        else:
+            originals = prospect_spectra(args.prospect_dir, sub_psm, picks, cache)
+        mirror_plots(sub_psm, originals, panels, scores, picks, os.path.join(args.out_dir, "mirror"),
+                     annotated_only=bool(args.prospect_dir))
 
 
 if __name__ == "__main__":

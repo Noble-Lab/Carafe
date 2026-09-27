@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 """Train one MS2 model per row of tune_configs.tsv and score each on the held-out test set.
 
-Every run starts from the generic AlphaPeptDeep model and trains on the training part written by
-split_heldout.py. Early stopping is off, so each run completes its learning-rate schedule (warmup,
-then decay to 0) and schedules are compared like for like; the saved weights are those of the best
-epoch on ai.py's internal validation split, never chosen on the held-out set.
+Every run starts from the generic AlphaPeptDeep model, unless the configs' optional 'start' column
+names another start ('scratch' for random initialization, or a checkpoint given with
+--start-model), and trains on the training part written by split_heldout.py. Early stopping is
+off, so each run completes its learning-rate schedule (warmup, then decay to 0) and schedules are
+compared like for like; the saved weights are those of the best epoch on ai.py's internal
+validation split, or on the --valid set when given, never chosen on the held-out set.
 
     python run_sweep.py --split split --out-dir sweep [--only A,C]
 
@@ -82,7 +84,13 @@ def main(argv=None):
     ap.add_argument("--only", help="comma-separated run names")
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--device", default="gpu", choices=["gpu", "cpu"])
+    ap.add_argument("--valid", help="optional validation set passed to training (train_tmt_ms2.py --valid-dir)")
+    ap.add_argument("--start-model", action="append", default=[], metavar="NAME=PATH",
+                    help="a starting checkpoint that the configs' optional 'start' column can name "
+                         "('generic', the default, is the installed AlphaPeptDeep model; 'scratch' is "
+                         "random initialization)")
     args = ap.parse_args(argv)
+    start_models = dict(spec.split("=", 1) for spec in args.start_model)
 
     with open(args.configs, newline="") as fh:
         all_configs = list(csv.DictReader(fh, delimiter="\t"))
@@ -105,7 +113,17 @@ def main(argv=None):
                      "--epochs", c["epochs"], "--lr", c["lr"], "--batch-size", c["batch_size"],
                      "--warmup-epochs", c["warmup_epochs"], "--max-test-samples", "5000",
                      "--no-early-stop", "--device", args.device, "--python", args.python]
-            print(f"[{c['name']}] training: epochs={c['epochs']} lr={c['lr']} batch={c['batch_size']}", flush=True)
+            start_from = c.get("start") or "generic"
+            if start_from == "scratch":
+                train += ["--from-scratch"]
+            elif start_from != "generic":
+                if start_from not in start_models:
+                    sys.exit(f"[{c['name']}] start model {start_from!r} is not defined (use --start-model)")
+                train += ["--ms2-model", start_models[start_from]]
+            if args.valid:
+                train += ["--valid-dir", args.valid]
+            print(f"[{c['name']}] training: epochs={c['epochs']} lr={c['lr']} batch={c['batch_size']}"
+                  + (f" from {start_from}" if "start" in c else ""), flush=True)
             start = time.time()
             code = run(train, os.path.join(model_dir, "train.log"))
             seconds = time.time() - start
@@ -136,6 +154,7 @@ def main(argv=None):
         default = result.get("default_range", {})
         row = {**{k: c[k] for k in ("name", "epochs", "lr", "batch_size", "warmup_epochs")},
                "scope": c.get("scope", "all"),
+               **({"start": c.get("start") or "generic"} if "start" in c else {}),
                "epochs_run": epochs_run(model_dir), "train_minutes": round(seconds / 60, 1),
                **{k: round(result[k], 4) for k in ("PCC", "COS", "SA", "SPC", "SA_gt_0.9")},
                # held-out spectra inside Carafe's default library range (length 7-35, charge 2-4)

@@ -253,8 +253,14 @@ def train_ms2(in_dir: str,
               torch_compile=False,
               pretrained_model: str = None,
               adjust_batch_size_for_steps=True,
-              from_scratch=False):
-    """Train MS2 prediction model - replicates peptdeep exactly"""
+              from_scratch=False,
+              valid_dir: str = None):
+    """Train MS2 prediction model - replicates peptdeep exactly
+
+    valid_dir (optional): a directory with its own psm_pdv.txt and fragment_intensity_df.tsv.
+    When given, every PSM in in_dir is used for training and valid_dir is the validation set,
+    instead of the default split of in_dir by sequence.
+    """
     import torch
     from models import (ModelManager, psm_sampling_with_important_mods, 
                         normalize_fragment_intensities, calc_ms2_similarity_mask,
@@ -317,7 +323,9 @@ def train_ms2(in_dir: str,
     n_test_ms2 = max(1, np.min([ms2_max_test_samples, int(math.ceil(a.shape[0] * 0.1) - 10)]))
     psm_num_to_test_ms2 = n_test_ms2
     psm_num_to_train_ms2 = a.shape[0] - n_test_ms2
-    
+    if valid_dir:
+        psm_num_to_train_ms2 = a.shape[0]  # every PSM in in_dir is trained on
+
     # Training parameters
     if auto_tune:
         epoch_to_train_ms2, lr_to_train_ms2 = get_auto_tune_params(psm_num_to_train_ms2, mode='ms2')
@@ -329,21 +337,32 @@ def train_ms2(in_dir: str,
     psm_num_per_mod_to_train_ms2 = 50
     top_n_mods_to_train = 10
     
-    # EXACT PARITY: PeptDeep v1 Sequence-Unique splitting
-    # 1. Sample training data with important modifications (uses library default seed 1337)
-    tr_df = psm_sampling_with_important_mods(
-        a, psm_num_to_train_ms2, top_n_mods_to_train, psm_num_per_mod_to_train_ms2
-    ).copy()
-    
-    # 2. Split test set by excluding training sequences (peptdeep default)
-    test_psm_df = a[~a.sequence.isin(set(tr_df.sequence))].copy()
-    
-    # 3. Sample test set to requested size using hardcoded seed 1337
-    if len(test_psm_df) > psm_num_to_test_ms2:
-        test_psm_df = test_psm_df.sample(psm_num_to_test_ms2, random_state=1337).copy()
-    elif len(test_psm_df) == 0:
-        test_psm_df = a.copy()
-    
+    if valid_dir:
+        # Opt-in: train on every PSM in in_dir and validate on the separate valid_dir. Its fragment
+        # rows are appended to the training fragment table once that is read, below.
+        tr_df = a.copy()
+        test_psm_df = pd.read_csv(valid_dir + "/psm_pdv.txt", sep="\t", dtype={'mod_sites': str, 'mods': str})
+        if "peptide" in test_psm_df.columns:
+            test_psm_df["sequence"] = test_psm_df["peptide"]
+        test_psm_df["nAA"] = test_psm_df["sequence"].str.len()
+        test_psm_df['mod_sites'] = test_psm_df['mod_sites'].fillna("").astype(str)
+        test_psm_df['mods'] = test_psm_df['mods'].fillna("").astype(str)
+    else:
+        # EXACT PARITY: PeptDeep v1 Sequence-Unique splitting
+        # 1. Sample training data with important modifications (uses library default seed 1337)
+        tr_df = psm_sampling_with_important_mods(
+            a, psm_num_to_train_ms2, top_n_mods_to_train, psm_num_per_mod_to_train_ms2
+        ).copy()
+
+        # 2. Split test set by excluding training sequences (peptdeep default)
+        test_psm_df = a[~a.sequence.isin(set(tr_df.sequence))].copy()
+
+        # 3. Sample test set to requested size using hardcoded seed 1337
+        if len(test_psm_df) > psm_num_to_test_ms2:
+            test_psm_df = test_psm_df.sample(psm_num_to_test_ms2, random_state=1337).copy()
+        elif len(test_psm_df) == 0:
+            test_psm_df = a.copy()
+
     print(f"The number of PSMs to train MS2 model: {len(tr_df)}")
     print(f"The number of PSMs to test MS2 model: {len(test_psm_df)}")
     steps = get_steps_per_epoch(len(tr_df), batch_size_to_train_ms2)
@@ -357,7 +376,14 @@ def train_ms2(in_dir: str,
         print(a.dtypes)
     
     b = pd.read_csv(in_dir + "/fragment_intensity_df.tsv", sep="\t", engine="pyarrow")
-    
+    if valid_dir:
+        if use_valid and os.path.exists(in_dir + "/fragment_intensity_valid.tsv"):
+            raise ValueError("valid_dir cannot be combined with fragment_intensity_valid.tsv (masking)")
+        valid_b = pd.read_csv(valid_dir + "/fragment_intensity_df.tsv", sep="\t", engine="pyarrow")
+        test_psm_df['frag_start_idx'] += len(b)
+        test_psm_df['frag_stop_idx'] += len(b)
+        b = pd.concat([b, valid_b[b.columns]], ignore_index=True)
+
     if log_transform:
         print("log transform intensity data ...")
         b = b.apply(lambda x: np.log10(x + 1) / np.log10(2))
@@ -386,9 +412,15 @@ def train_ms2(in_dir: str,
             else:
                 tr_inten_valid_df[frag_type] = 0.0
     
+    # Consolidate the column-by-column frame into one block first: assigning a row range of a
+    # multi-block frame costs time proportional to the whole frame, which makes the per-PSM loop
+    # below take hours on millions of PSMs. The values are unchanged.
+    tr_inten_df = tr_inten_df.copy()
     # Normalize intensities (like peptdeep)
     normalize_fragment_intensities(tr_df, tr_inten_df)
-    
+    if valid_dir:
+        normalize_fragment_intensities(test_psm_df, tr_inten_df)
+
     # Advanced DIA Enhancements: Auto-Tune Scaling
     if auto_tune:
         logging.info("[Auto-Tune] Enhanced DIA optimization enabled (Auto-Scaling).")
@@ -1660,6 +1692,10 @@ if __name__ == "__main__":
     parser.add_argument("--ms2_warmup_epoch", type=int, default=10, help="Number of warmup epochs for MS2 model training (default: 10)")
     # the max number of samples to use for testing ms2
     parser.add_argument("--ms2_max_test_samples", type=int, default=1000, help="Number of samples to use for testing MS2 model (default: 1000)")
+    parser.add_argument("--valid_dir", type=str, default=None,
+                        help="Optional MS2 validation set (psm_pdv.txt + fragment_intensity_df.tsv); when given, "
+                             "all of --in_dir is used for training and all of this set for validation "
+                             "(--ms2_max_test_samples is not applied)")
     args = parser.parse_args()
 
     # Early stopping requires best model checkpointing
@@ -1774,7 +1810,8 @@ if __name__ == "__main__":
                                 batch_size_to_train_ms2=args.ms2_batch_size,
                                 lr_to_train_ms2=args.ms2_lr,
                                 ms2_max_test_samples=args.ms2_max_test_samples,
-                                warmup_epoch_to_train_ms2=args.ms2_warmup_epoch)
+                                warmup_epoch_to_train_ms2=args.ms2_warmup_epoch,
+                                valid_dir=args.valid_dir)
         elif tf_type == "rt":
             train_rt(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 device=args.device, threads=args.threads, use_best_model=args.use_best_model, 
@@ -1796,7 +1833,8 @@ if __name__ == "__main__":
                                 batch_size_to_train_ms2=args.ms2_batch_size,
                                 lr_to_train_ms2=args.ms2_lr,
                                 ms2_max_test_samples=args.ms2_max_test_samples,
-                                warmup_epoch_to_train_ms2=args.ms2_warmup_epoch)
+                                warmup_epoch_to_train_ms2=args.ms2_warmup_epoch,
+                                valid_dir=args.valid_dir)
         elif tf_type == "ccs":
             train_ccs(in_dir=in_dir, out_dir=out_dir, mode_type=args.mode,
                                 device=args.device, threads=args.threads, use_best_model=args.use_best_model,

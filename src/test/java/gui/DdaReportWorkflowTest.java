@@ -168,6 +168,21 @@ public class DdaReportWorkflowTest {
                     Assert.assertTrue(dia.contains("-se DIA-NN"), dia);
                     Assert.assertFalse(dia.contains("psms.tsv"), dia);
                     Assert.assertFalse(dia.contains("-data_type"), dia);
+                    Assert.assertFalse(dia.contains("-ms2_model"), "the generic default adds no flag: " + dia);
+
+                    // Each bundled MS2 base model is passed by name.
+                    JComboBox<?> ms2Model = (JComboBox<?>) field(gui, "ms2ModelCombo");
+                    String[][] byChoice = {{"TMT HCD base model (bundled)", "tmt"},
+                            {"TMT CID base model (bundled)", "tmtcid"}};
+                    for (String[] choice : byChoice) {
+                        ms2Model.setSelectedItem(choice[0]);
+                        task = build.invoke(gui);
+                        java.util.List<String> args = java.util.Arrays.asList(
+                                ((String) task.getClass().getField("cmd").get(task)).split("\\s+"));
+                        int at = args.indexOf("-ms2_model");
+                        Assert.assertTrue(at >= 0 && at + 1 < args.size(), choice[0] + ": " + args);
+                        Assert.assertEquals(args.get(at + 1), choice[1], choice[0]);
+                    }
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }

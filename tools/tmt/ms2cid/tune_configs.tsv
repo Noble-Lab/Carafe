@@ -1,0 +1,9 @@
+name	epochs	lr	batch_size	warmup_epochs	start	purpose
+A	5	0.0001	512	1	generic	baseline from the generic AlphaPeptDeep model
+B	10	0.0002	512	1	generic	longer schedule and higher learning rate
+C	5	0.0001	512	1	hcd	baseline from the HCD TMT model (models/ms2tmt.pt)
+D	10	0.0002	512	1	hcd	longer schedule and higher learning rate, from the HCD TMT model
+E	20	0.0002	512	2	generic	20-epoch schedule, from the generic model
+F	20	0.0002	512	2	hcd	20-epoch schedule, from the HCD TMT model
+G	60	0.0002	512	5	hcd	60-epoch schedule, from the HCD TMT model
+H	60	0.0002	512	5	scratch	60-epoch schedule, from random initialization

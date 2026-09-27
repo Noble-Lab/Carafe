@@ -158,6 +158,56 @@ public class Ms2BaseModelResolutionTest {
         Assert.assertFalse((Boolean) m.invoke(null, "/some/custom/model.pt", null, 27.0));
     }
 
+    @Test
+    public void testTmtCidKeywordSelectsTheBundledCidModel() throws Exception {
+        AIGear aiGear = new AIGear();
+        aiGear.ms2_model = "tmtcid";
+        Path bundled = Paths.get(AIGear.get_jar_path(), "models", AIGear.TMT_CID_MS2_MODEL_FILE);
+        String resolved = resolve(aiGear);
+        if (Files.isRegularFile(bundled)) {
+            Assert.assertEquals(resolved, bundled.toAbsolutePath().toString());
+        } else {
+            Assert.assertEquals(resolved, "", "must fall back to the generic model when absent");
+        }
+    }
+
+    @Test
+    public void testBundledCidModelNameRecognition() throws Exception {
+        Method cid = AIGear.class.getDeclaredMethod("is_bundled_cid_model_name", String.class);
+        cid.setAccessible(true);
+        Method hcd = AIGear.class.getDeclaredMethod("is_bundled_model_name", String.class);
+        hcd.setAccessible(true);
+        for (String name : new String[]{"tmtcid", "TMTCID", "tmt_cid", "TMT-CID"}) {
+            Assert.assertTrue((boolean) cid.invoke(null, name), name + " should name the bundled CID model");
+            Assert.assertFalse((boolean) hcd.invoke(null, name), name + " must not name the HCD model");
+        }
+        for (String name : new String[]{null, "", "tmt", "tmtpro", "none", "cid", "tmtcid.pt", "C:/models/tmtcid.pt"}) {
+            Assert.assertFalse((boolean) cid.invoke(null, name),
+                    String.valueOf(name) + " must not name the bundled CID model");
+        }
+    }
+
+    /** The bundled TMT CID model saw collision energy 35 only, so every other energy warns. */
+    @Test
+    public void testTmtCidNceWarning() throws Exception {
+        java.lang.reflect.Method m = AIGear.class.getDeclaredMethod(
+                "nce_needs_tmt_range_warning", String.class, String.class, double.class);
+        m.setAccessible(true);
+        Assert.assertEquals(AIGear.TMT_CID_MS2_MODEL_NCE, 35.0);
+        Assert.assertFalse((Boolean) m.invoke(null, "tmtcid", null, 35.0), "35 is the trained energy");
+        for (double nce : new double[]{27.0, 30.0, 34.0, 36.0}) {
+            Assert.assertTrue((Boolean) m.invoke(null, "tmtcid", null, nce), "NCE " + nce + " must warn");
+        }
+
+        java.io.File dir = java.nio.file.Files.createTempDirectory("carafe_model").toFile();
+        dir.deleteOnExit();
+        java.io.File finetuned = new java.io.File(dir, "ms2_model.pt");
+        java.nio.file.Files.write(finetuned.toPath(), new byte[]{1});
+        finetuned.deleteOnExit();
+        Assert.assertFalse((Boolean) m.invoke(null, "tmtcid", dir.getAbsolutePath(), 27.0),
+                "a fine-tuned model takes precedence in ai_pred.py and learned this NCE");
+    }
+
     /** A fine-tuned model has adapted to the user's own collision energy, so it is not warned about. */
     @Test
     public void testFineTunedModelSuppressesTheWarning() throws Exception {

@@ -737,7 +737,8 @@ public class AIGear {
         // This is the fine-tuned model directory
         options.addOption("model_dir", true, "The directory of the model to use for spectral library generation");
         options.addOption("ms2_model", true, "Pretrained MS2 model: a .pt file path, 'tmt' for the " +
-                "bundled TMT model, or 'none' to force the installed generic model.");
+                "bundled TMT model, 'tmtcid' for the bundled TMT CID (ion trap) model, or 'none' to " +
+                "force the installed generic model.");
 
         options.addOption("verbose", true, "The level of detail of the log: 1 (info, default), 2 (debug)");
         options.addOption("ai_version", true, "The version of AI scripts to use: v1, v2 (default)");
@@ -1172,6 +1173,10 @@ public class AIGear {
         } else if (is_bundled_model_name(aiGear.ms2_model)) {
             Cloger.getInstance().logger.warn("The bundled TMT MS2 base model was requested but not found at "
                     + Paths.get(get_jar_path(), "models", TMT_MS2_MODEL_FILE)
+                    + ". The generic model will be used, which predicts labelled peptides poorly.");
+        } else if (is_bundled_cid_model_name(aiGear.ms2_model)) {
+            Cloger.getInstance().logger.warn("The bundled TMT CID MS2 base model was requested but not found at "
+                    + Paths.get(get_jar_path(), "models", TMT_CID_MS2_MODEL_FILE)
                     + ". The generic model will be used, which predicts labelled peptides poorly.");
         }
         // Prediction (ai_pred.py) reads this; training passes it separately in train_ms2_and_rt.
@@ -1726,20 +1731,32 @@ public class AIGear {
      * NCE is not known then: it may still be read from the MS data ({@code get_ms_run_meta_data})
      * or chosen by {@code -tf nce}. A fine-tuned model in {@code model_dir} takes precedence over
      * the base model in ai_pred.py and has adapted to the user's own collision energy, so that
-     * case is left alone.
+     * case is left alone. The bundled TMT CID model was trained at one collision energy only, so
+     * for it any other energy is warned about.
      */
     static boolean nce_needs_tmt_range_warning(String ms2_model, String model_dir, double nce) {
-        if (!is_bundled_model_name(ms2_model)) {
+        boolean cid = is_bundled_cid_model_name(ms2_model);
+        if (!is_bundled_model_name(ms2_model) && !cid) {
             return false;
         }
         if (model_dir != null && Files.exists(Paths.get(model_dir, "ms2_model.pt"))) {
             return false;
+        }
+        if (cid) {
+            return nce != TMT_CID_MS2_MODEL_NCE;
         }
         return nce < TMT_MS2_MODEL_MIN_NCE || nce > TMT_MS2_MODEL_MAX_NCE;
     }
 
     private void warn_if_nce_outside_tmt_model_range(String model_dir) {
         if (!nce_needs_tmt_range_warning(this.ms2_model, model_dir, this.nce)) {
+            return;
+        }
+        if (is_bundled_cid_model_name(this.ms2_model)) {
+            Cloger.getInstance().logger.warn("NCE " + this.nce + " differs from the collision energy the "
+                    + "bundled TMT CID MS2 model was trained on (" + (int) TMT_CID_MS2_MODEL_NCE + " only). "
+                    + "Predictions will be extrapolated. Set -nce " + (int) TMT_CID_MS2_MODEL_NCE
+                    + " to predict at the energy it was trained on.");
             return;
         }
         // The bundled TMT model only saw NCE 30-38, so predicting outside that range
@@ -2953,6 +2970,19 @@ public class AIGear {
     public static final double TMT_MS2_MODEL_MAX_NCE = 38.0;
 
     /**
+     * File name of the bundled TMT CID MS2 base model (CID fragmentation, ion-trap read-out),
+     * looked up in the "models" folder next to the jar.
+     */
+    public static final String TMT_CID_MS2_MODEL_FILE = "ms2tmtcid.pt";
+
+    /**
+     * Collision energy the bundled TMT CID MS2 model was trained on. Every CID spectrum in its
+     * training data (PROSPECT PTMs: TMT) was recorded at collision energy 35, so a prediction at
+     * any other energy is warned about.
+     */
+    public static final double TMT_CID_MS2_MODEL_NCE = 35.0;
+
+    /**
      * Resolve a bundled model shipped in the "models" folder next to the jar.
      *
      * @param fileName the model file name
@@ -2971,6 +3001,7 @@ public class AIGear {
      * <ul>
      *   <li>{@code -ms2_model none} forces the installed generic model;</li>
      *   <li>{@code -ms2_model tmt} selects the bundled TMT model by name;</li>
+     *   <li>{@code -ms2_model tmtcid} selects the bundled TMT CID model by name;</li>
      *   <li>any other {@code -ms2_model} value is taken as a path.</li>
      * </ul>
      * Returning "" means the installed generic model, which leaves the command unchanged.
@@ -2984,6 +3015,9 @@ public class AIGear {
         if (is_bundled_model_name(this.ms2_model)) {
             return resolve_bundled_model_path(TMT_MS2_MODEL_FILE);
         }
+        if (is_bundled_cid_model_name(this.ms2_model)) {
+            return resolve_bundled_model_path(TMT_CID_MS2_MODEL_FILE);
+        }
         if (this.ms2_model != null && !this.ms2_model.isEmpty()) {
             return this.ms2_model;
         }
@@ -2991,11 +3025,12 @@ public class AIGear {
     }
 
     /**
-     * Returns true when -ms2_model names a bundled model rather than a file path, so that the
-     * TMT model can be requested without knowing where it was installed.
+     * Returns true when -ms2_model names the bundled TMT (HCD) model rather than a file path, so
+     * that it can be requested without knowing where it was installed. The bundled TMT CID model
+     * is named separately, see {@link #is_bundled_cid_model_name(String)}.
      *
      * @param ms2_model the -ms2_model value
-     * @return true when it names the bundled TMT model
+     * @return true when it names the bundled TMT (HCD) model
      */
     static boolean is_bundled_model_name(String ms2_model) {
         if (ms2_model == null) {
@@ -3007,6 +3042,22 @@ public class AIGear {
         return normalized.equals("tmt") || normalized.equals("tmt2plex") || normalized.equals("tmt6plex")
                 || normalized.equals("tmt10plex") || normalized.equals("tmt11plex")
                 || normalized.equals("tmtpro");
+    }
+
+    /**
+     * Returns true when -ms2_model names the bundled TMT CID model ({@code tmtcid}, ignoring case,
+     * "-" and "_") rather than a file path.
+     *
+     * @param ms2_model the -ms2_model value
+     * @return true when it names the bundled TMT CID model
+     */
+    static boolean is_bundled_cid_model_name(String ms2_model) {
+        if (ms2_model == null) {
+            return false;
+        }
+        // Exact name only, for the same reason as is_bundled_model_name.
+        String normalized = ms2_model.trim().toLowerCase(Locale.ROOT).replace("-", "").replace("_", "");
+        return normalized.equals("tmtcid");
     }
 
     /**

@@ -70,7 +70,7 @@ public class SettingsRoundTripTest {
 
                     // Wipe the state, then restore it.
                     labeling.setSelectedItem("None");
-                    ms2Model.setSelectedItem("TMT base model (bundled)");
+                    ms2Model.setSelectedItem("TMT HCD base model (bundled)");
                     fixMod.setText("1");
 
                     invoke(gui, "loadSettingsFromFile", tmp);
@@ -120,6 +120,48 @@ public class SettingsRoundTripTest {
                     Assert.assertEquals(ms2Model.getSelectedItem(), "Custom file...");
                     Assert.assertEquals(ms2Field.getText(), "C:/models/my_tmt_model.pt",
                             "the custom model path was not restored");
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } finally {
+            SwingUtilities.invokeAndWait(gui::dispose);
+        }
+    }
+
+    /** A TMT CID model choice survives with a TMT labelling, which on its own would pick the HCD model. */
+    @Test
+    public void testTmtCidChoiceSurvivesSaveAndLoad() throws Exception {
+        if (GraphicsEnvironment.isHeadless()) {
+            throw new SkipException("no display available");
+        }
+        CParameter.init();
+        File tmp = Files.createTempFile("carafe_settings_cid_", ".json").toFile();
+        tmp.deleteOnExit();
+
+        AtomicReference<CarafeGUI> ref = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> ref.set(new CarafeGUI()));
+        CarafeGUI gui = ref.get();
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                try {
+                    @SuppressWarnings("unchecked")
+                    JComboBox<String> labeling = (JComboBox<String>) field(gui, "labelingCombo");
+                    @SuppressWarnings("unchecked")
+                    JComboBox<String> ms2Model = (JComboBox<String>) field(gui, "ms2ModelCombo");
+
+                    labeling.setSelectedItem("TMT 6-plex / 10-plex / 11-plex");
+                    ms2Model.setSelectedItem("TMT CID base model (bundled)");
+                    invoke(gui, "saveSettingsToFile", tmp);
+
+                    labeling.setSelectedItem("None");
+                    Assert.assertEquals(ms2Model.getSelectedItem(), "Generic (AlphaPeptDeep)");
+                    invoke(gui, "loadSettingsFromFile", tmp);
+
+                    Assert.assertEquals(labeling.getSelectedItem(), "TMT 6-plex / 10-plex / 11-plex",
+                            "the labelling was not restored");
+                    Assert.assertEquals(ms2Model.getSelectedItem(), "TMT CID base model (bundled)",
+                            "the TMT CID model choice was not restored");
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }

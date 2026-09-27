@@ -348,6 +348,7 @@
                                 <includes>
                                     <!-- Only the models Carafe resolves are shipped. -->
                                     <include>ms2tmt.pt</include>
+                                    <include>ms2tmtcid.pt</include>
                                 </includes>
                                 <filtering>false</filtering>
                             </resource>

@@ -10,5 +10,5 @@ __pycache__/
 *.pyc
 
 # Pretrained models are shipped as release assets, not committed. The build copies
-# models/ms2tmt.pt into the distribution when it is present.
+# models/ms2tmt.pt and models/ms2tmtcid.pt into the distribution when they are present.
 models/

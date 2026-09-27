@@ -1886,17 +1886,21 @@ public class CarafeGUI extends JFrame {
         panel.add(createLabel("MS2 Base Model:",
                 "Which pretrained MS2 model to predict with, or to start fine-tuning from.\n" +
                         "Generic: the installed AlphaPeptDeep model (the default).\n" +
-                        "TMT base model: the TMT model bundled with Carafe.\n" +
+                        "TMT HCD base model: the TMT model bundled with Carafe for HCD with\n" +
+                        "Orbitrap MS/MS.\n" +
+                        "TMT CID base model: the TMT model bundled with Carafe for CID with\n" +
+                        "ion-trap MS/MS, trained at collision energy 35.\n" +
                         "Custom file: a .pt model you provide.\n" +
                         "Choosing a TMT reagent under Isobaric Labelling on the Library Generation\n" +
-                        "tab switches this to the TMT base model; change it back here if that is\n" +
-                        "not what you want.\n" +
+                        "tab switches the generic model to the TMT HCD base model (a TMT CID choice\n" +
+                        "is kept); change it back here if that is not what you want.\n" +
                         "A fine-tuned model produced by a training run still takes precedence."),
                 gbc);
 
         String[] ms2ModelSources = {
                 "Generic (AlphaPeptDeep)",
-                "TMT base model (bundled)",
+                "TMT HCD base model (bundled)",
+                "TMT CID base model (bundled)",
                 "Custom file..." };
         ms2ModelCombo = new JComboBox<>(ms2ModelSources);
         styleComboBox(ms2ModelCombo);
@@ -2097,12 +2101,16 @@ public class CarafeGUI extends JFrame {
         }
 
         // Keep the MS2 Base Model control showing what will actually be used. Picking a TMT
-        // reagent selects the TMT model; going back to unlabelled restores the generic one.
-        // Either can still be overridden afterwards, and a custom file is never overwritten.
+        // reagent selects the TMT model unless a TMT model (HCD or CID) is already chosen; going
+        // back to unlabelled restores the generic one. Either can still be overridden afterwards,
+        // and a custom file is never overwritten.
         if (ms2ModelCombo != null && !"Custom file...".equals(ms2ModelCombo.getSelectedItem())) {
-            ms2ModelCombo.setSelectedItem(names.length > 0
-                    ? "TMT base model (bundled)"
-                    : "Generic (AlphaPeptDeep)");
+            boolean tmtCid = "TMT CID base model (bundled)".equals(ms2ModelCombo.getSelectedItem());
+            if (names.length == 0) {
+                ms2ModelCombo.setSelectedItem("Generic (AlphaPeptDeep)");
+            } else if (!tmtCid) {
+                ms2ModelCombo.setSelectedItem("TMT HCD base model (bundled)");
+            }
         }
 
         if (!missing.isEmpty()) {
@@ -2186,8 +2194,8 @@ public class CarafeGUI extends JFrame {
                         "Selecting a TMT reagent makes Carafe use the bundled TMT MS2 base model:\n" +
                         "directly for prediction, and as the starting point when fine-tuning.\n" +
                         "It fills in the matching fixed modifications below (the label on K and\n" +
-                        "on the peptide N-term), and selects the TMT base model on the\n" +
-                        "Model Training tab."),
+                        "on the peptide N-term), and selects the TMT HCD base model on the\n" +
+                        "Model Training tab (a TMT CID base model chosen there is kept)."),
                 gbc);
 
         labelingCombo = new JComboBox<>(LABELING_CHOICES);
@@ -4175,10 +4183,13 @@ public class CarafeGUI extends JFrame {
         // The isobaric label itself is expressed through the fixed modifications; the only other
         // thing it decides is which MS2 base model to use, which the control below states.
         Object ms2ModelSource = ms2ModelCombo == null ? null : ms2ModelCombo.getSelectedItem();
-        if ("TMT base model (bundled)".equals(ms2ModelSource)) {
+        if ("TMT HCD base model (bundled)".equals(ms2ModelSource)) {
             // Named rather than a path, so the GUI does not have to know where it was installed.
             commandArgs.add("-ms2_model");
             commandArgs.add("tmt");
+        } else if ("TMT CID base model (bundled)".equals(ms2ModelSource)) {
+            commandArgs.add("-ms2_model");
+            commandArgs.add("tmtcid");
         } else if ("Generic (AlphaPeptDeep)".equals(ms2ModelSource)) {
             // The default: add nothing, so an existing command line is unchanged.
             ms2ModelSource = null;

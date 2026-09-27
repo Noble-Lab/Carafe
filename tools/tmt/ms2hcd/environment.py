@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import platform
 import subprocess
 import sys
@@ -48,6 +49,11 @@ def cpu_name():
             return winreg.QueryValueEx(key, "ProcessorNameString")[0].strip()
         except OSError:
             pass
+    elif os.path.exists("/proc/cpuinfo"):  # Linux: platform.processor() gives only the architecture
+        with open("/proc/cpuinfo") as fh:
+            for line in fh:
+                if line.startswith("model name"):
+                    return line.split(":", 1)[1].strip()
     return platform.processor() or "unknown"
 
 

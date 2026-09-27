@@ -72,11 +72,14 @@ public class CarafeGuiConstructionTest {
             @SuppressWarnings("unchecked")
             JComboBox<String> ms2Model = (JComboBox<String>) field(gui, "ms2ModelCombo");
             Assert.assertNotNull(ms2Model, "the MS2 base model control is missing");
-            Assert.assertEquals(ms2Model.getItemCount(), 3, "expected three explicit choices");
+            Assert.assertEquals(ms2Model.getItemCount(), 4, "expected four explicit choices");
             Assert.assertEquals(ms2Model.getSelectedItem(), "Generic (AlphaPeptDeep)",
                     "the default must be the generic model, i.e. existing behaviour");
-            Assert.assertEquals(ms2Model.getItemAt(1), "TMT base model (bundled)",
+            Assert.assertEquals(ms2Model.getItemAt(1), "TMT HCD base model (bundled)",
                     "the bundled TMT model must be offered explicitly");
+            Assert.assertEquals(ms2Model.getItemAt(2), "TMT CID base model (bundled)",
+                    "the bundled TMT CID model must be offered explicitly");
+            Assert.assertEquals(ms2Model.getItemAt(3), "Custom file...");
         } finally {
             SwingUtilities.invokeAndWait(gui::dispose);
         }
@@ -166,9 +169,17 @@ public class CarafeGuiConstructionTest {
                     JComboBox<String> ms2Model = (JComboBox<String>) field(gui, "ms2ModelCombo");
 
                     labeling.setSelectedItem("TMTpro (16/18/32/35-plex)");
-                    Assert.assertEquals(ms2Model.getSelectedItem(), "TMT base model (bundled)",
-                            "selecting a TMT reagent should select the TMT base model");
+                    Assert.assertEquals(ms2Model.getSelectedItem(), "TMT HCD base model (bundled)",
+                            "selecting a TMT reagent should select the TMT HCD base model");
 
+                    labeling.setSelectedItem("None");
+                    Assert.assertEquals(ms2Model.getSelectedItem(), "Generic (AlphaPeptDeep)",
+                            "going back to unlabelled should restore the generic model");
+
+                    ms2Model.setSelectedItem("TMT CID base model (bundled)");
+                    labeling.setSelectedItem("TMT 6-plex / 10-plex / 11-plex");
+                    Assert.assertEquals(ms2Model.getSelectedItem(), "TMT CID base model (bundled)",
+                            "a TMT CID model chosen by the user must be kept when a reagent is picked");
                     labeling.setSelectedItem("None");
                     Assert.assertEquals(ms2Model.getSelectedItem(), "Generic (AlphaPeptDeep)",
                             "going back to unlabelled should restore the generic model");

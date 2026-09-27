@@ -34,7 +34,10 @@ THEMES = {
 }
 
 
-def plot(history: pd.DataFrame, title: str, theme: dict, out_path: str):
+def plot(history: pd.DataFrame, title: str, theme: dict, out_path: str, lr_used=False, fine_ticks=False):
+    """lr_used: plot the learning rate each epoch trained at (0 in the first, then the value recorded
+    after the previous epoch) rather than the recorded one, and mark epoch 1 as the starting model.
+    fine_ticks: more loss ticks. Both are off by default, which keeps earlier figures unchanged."""
     best = history.loc[history["test_loss"].idxmin()]
     lw = 2 * 72 / 100  # 2 px at 100 px per inch figure units -> points
 
@@ -57,7 +60,10 @@ def plot(history: pd.DataFrame, title: str, theme: dict, out_path: str):
     ax.set_yscale("log")
     # plain decimal ticks on the log axis, a few only
     lo, hi = history[["train_loss", "test_loss"]].min().min(), history[["train_loss", "test_loss"]].max().max()
-    ticks = [t for t in (0.005, 0.007, 0.01, 0.02, 0.03, 0.05, 0.1) if lo * 0.9 <= t <= hi * 1.1]
+    candidates = ((0.005, 0.007, 0.01, 0.015, 0.0175, 0.02, 0.0225, 0.025, 0.03, 0.04, 0.05, 0.07, 0.1)
+                  if fine_ticks
+                  else (0.005, 0.007, 0.01, 0.02, 0.03, 0.05, 0.1))
+    ticks = [t for t in candidates if lo * 0.9 <= t <= hi * 1.1]
     ax.yaxis.set_major_locator(FixedLocator(ticks))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
     ax.yaxis.set_minor_formatter(NullFormatter())
@@ -91,8 +97,16 @@ def plot(history: pd.DataFrame, title: str, theme: dict, out_path: str):
     for text in legend.get_texts():
         text.set_color(theme["ink2"])
 
-    ax_lr.plot(history["epoch"], history["lr"], color=theme["ink2"], linewidth=lw, solid_capstyle="round")
-    ax_lr.set_ylabel("learning rate", fontsize=8, color=theme["ink2"])
+    lr = history["lr"]
+    if lr_used:
+        # ai.py steps the schedule after each epoch and records the new value; with a warmup the
+        # schedule starts at 0, so epoch 1 trains at 0 and epoch k at the value recorded after k-1
+        lr = pd.Series([0.0] + history["lr"].tolist()[:-1], index=history.index)
+        first = history.iloc[0]
+        ax.annotate("epoch 1: learning rate 0, the starting model", (first["epoch"], first["test_loss"]),
+                    xytext=(10, -2), textcoords="offset points", va="center", fontsize=8, color=theme["ink2"])
+    ax_lr.plot(history["epoch"], lr, color=theme["ink2"], linewidth=lw, solid_capstyle="round")
+    ax_lr.set_ylabel("learning rate used" if lr_used else "learning rate", fontsize=8, color=theme["ink2"])
     ax_lr.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax_lr.yaxis.get_offset_text().set_color(theme["muted"])
     ax_lr.yaxis.get_offset_text().set_fontsize(8)
@@ -109,13 +123,17 @@ def main(argv=None):
     ap.add_argument("--run", required=True, help="run directory holding ms2_history.tsv")
     ap.add_argument("--out", required=True, help="output prefix; writes <prefix>_light.png and <prefix>_dark.png")
     ap.add_argument("--title", help="figure title (default: from the run directory name)")
+    ap.add_argument("--lr-used-per-epoch", action="store_true",
+                    help="plot the learning rate each epoch trained at (0 in the first epoch of a schedule "
+                         "with warmup) instead of the value recorded after it, and mark epoch 1")
+    ap.add_argument("--fine-ticks", action="store_true", help="label more loss values on the loss axis")
     args = ap.parse_args(argv)
 
     history = pd.read_csv(os.path.join(args.run, "ms2_history.tsv"), sep="\t")
     title = args.title or f"MS2 training history, run {os.path.basename(os.path.normpath(args.run))}"
     for mode, theme in THEMES.items():
         path = f"{args.out}_{mode}.png"
-        plot(history, title, theme, path)
+        plot(history, title, theme, path, lr_used=args.lr_used_per_epoch, fine_ticks=args.fine_ticks)
         print(f"wrote {path}")
 
 

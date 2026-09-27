@@ -2,9 +2,10 @@
 
 This folder builds Carafe's TMT MS2 base model (`models/ms2tmt.pt`, selected with `-ms2_model tmt`)
 from a public spectral library, and holds everything needed to reproduce it: data download,
-conversion, checks, training, tuning, evaluation and a comparison with Prosit's TMT model. Every
-number below was produced by `run_ms2hcd.sh` in one working directory that started empty (the
-script resumes where it stopped, and this run was completed in two invocations).
+conversion, checks, training, tuning, evaluation and a comparison with the Prosit_2020_intensity_TMT
+model served by Koina. Every number below comes from `run_ms2hcd.sh`'s output in one working directory
+that started empty (the script resumes where it stopped, and this run was completed in two
+invocations).
 
 ## Data source
 
@@ -17,9 +18,12 @@ script resumes where it stopped, and this run was completed in two invocations).
 | URL | <https://chemdata.nist.gov/download/peptide_library/libraries/human/HCD/2022_03_16/cptac3_tmt_selected_passed_best.msp.tar.gz> |
 | SHA-256 | `063ac05e057ef5b5745049d7ccba97d69b9d4de6806e96890e98f277b9d02bd3` (`nist_checksum.txt`; the driver refuses a mismatch) |
 
-Compiled by NIST from CPTAC3 data: one spectrum per peptide ion (sequence, modifications, charge),
-TMT-labelled human peptides, HCD fragmentation, Orbitrap MS/MS. Please cite the library as the
-NIST documentation page asks.
+The documentation page says the library "was created entirely from raw data stored on the
+Clinical Proteomic Tumor Analysis Consortium (CPTAC) data portal" and "contains a single spectrum
+for each peptide ion, selected based on score and its number of a, b, and y ion assignments". In
+the file, every spectrum is of a different peptide ion (sequence, modifications, charge), carries
+TMT6plex on the peptide N-terminus, and has a filter string recording HCD fragmentation with
+Orbitrap read-out (`FTMS ... @hcd`).
 
 ## What the library contains
 
@@ -32,7 +36,7 @@ From `library_stats.py` (full pass, before any filtering):
 | modifications | TMT6plex 972,879; CAM (carbamidomethyl C) 160,374; Oxidation 38,392 (no others) |
 | precursor charge | 1: 188; 2: 242,805; 3: 255,634; 4: 81,527; 5: 15,014; 6: 2,301; 7: 76; 8: 3 |
 | NCE | 38: 242,409; 32: 198,676; 30: 62,686; 37: 49,429; 31: 44,348 |
-| instrument | Orbitrap Fusion Lumos 354,524; Q Exactive 243,024 (rule below) |
+| instrument (by the rule below) | Lumos 354,524; Q Exactive 243,024 |
 | peptide length | 6-50 |
 | clean b/y ions at charge 1-2 per spectrum | median 20 (46% of the b/y matrix); 99.996% of spectra have at least 6, 97.8% at least 10 |
 | ambiguous peaks (several annotations) | 2.0% |
@@ -51,9 +55,9 @@ partial read is not representative.
   spectra, of which K+TMT6plex 20,323, C+CAM 12,218, M+Oxidation 3,195. The converter takes a TMT
   label at position 0 as the N-terminus wherever it is listed, and any other position-0 entry as
   residue 1 (in this library the label is always listed first).
-- **Instrument is not stated per spectrum.** `FTResolution >= 50000` means Lumos, otherwise
-  Q Exactive. 93,777 spectra name their instrument in the original file name, and the rule agrees
-  on 93,777 of them.
+- **Instrument is not stated per spectrum.** The converter labels a spectrum Lumos when
+  `FTResolution >= 50000` and Q Exactive otherwise. 93,777 spectra name their instrument in the
+  original file name, and the rule agrees on all 93,777; the others are labelled by the rule alone.
 - **NCE** is read from the `@hcd<value>` field of the Thermo filter string.
 
 ## Conversion to training data
@@ -103,7 +107,8 @@ choosing the best epoch. Scores are medians over the held-out spectra of Pearson
 cosine (COS), spectral angle score (SA), Spearman correlation (SPC), plus the share of spectra with
 SA > 0.9, computed with Carafe's own `models.py`, each spectrum predicted at its own NCE and
 instrument. They are also given for the 28,453 held-out spectra inside Carafe's default library
-range (length 7-35, precursor charge 2-4), the peptides a library built with default settings holds.
+range (length 7-35, precursor charge 2-4), the length and charge range of a library built with
+Carafe's default settings.
 
 Reference, the installed generic AlphaPeptDeep model: PCC 0.5628, COS 0.6027, **SA 0.4118**,
 SPC 0.7499, SA > 0.9 for 0.0% of spectra (default range: SA 0.4129).
@@ -114,11 +119,12 @@ SPC 0.7499, SA > 0.9 for 0.0% of spectra (default range: SA 0.4129).
 line cannot pass the epoch, learning-rate and early-stopping options). Training is transfer learning:
 it starts from the generic AlphaPeptDeep MS2 model and trains all of it on the TMT spectra, with a
 linear warmup followed by cosine decay of the learning rate to 0, and keeps the weights of the epoch
-with the lowest validation loss. Early stopping is off, so every run completes its schedule. Within
-the 567,606 training spectra, `ai.py` trains on 562,806 and validates on 2,619 whose sequences it
-did not train on; the remaining 2,181 share a sequence with a training spectrum and are used for
-neither (ai.py samples the training spectra first and validates on sequences left out). At batch
-size 512 that is 1,100 steps per epoch.
+with the lowest validation loss. Early stopping is off, so every run completes its schedule. Of
+the 567,606 training spectra, `ai.py` samples all but 5,000 (`train_tmt_ms2.py` passes
+`--ms2_max_test_samples 5000`) and adds 50 spectra drawn again for each of the four modifications,
+so it trains on 562,806 rows; it validates on the 2,619 spectra left out of the sample whose
+sequence is not among the training rows. The training loop batches each peptide length
+separately, so at batch size 512 an epoch has 1,123 steps.
 
 ### Tuning
 
@@ -140,18 +146,18 @@ the 28,453 of them inside the default range.
 held-out metric, so the choice did not depend on the held-out set. Its settings (60 epochs, peak
 learning rate 2e-4) combine the two changes that each helped on their own: a longer schedule (B) and
 a higher learning rate (C). The gain over the first settings (A) is modest, +0.0033 SA and 1.8
-points more spectra above SA 0.9. Training loss is above validation loss in 59 of the 60 epochs,
-which is expected because dropout is active only while training; the validation loss, measured on
-2,619 spectra, is noisier and rises above it once, at epoch 21.
+points more spectra above SA 0.9. Training loss is above validation loss in 59 of the 60 epochs;
+the validation loss, measured on 2,619 spectra, rises above it once, at epoch 21.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="loss_curve_dark.png">
-  <img alt="Training and validation loss of run D over 60 epochs on a log scale, falling steeply for five epochs and then slowly, with one validation spike at epoch 21 and the lowest validation loss at epoch 58; below it, the learning rate rising linearly to 2e-4 over five epochs and decaying to 0 by epoch 60." src="loss_curve_light.png" width="720">
+  <img alt="Training and validation loss of run D over 60 epochs on a log scale, both falling steeply from epoch 1 to epoch 2 and then slowly, with one validation spike at epoch 21 and the lowest validation loss at epoch 58; below it, the learning rate rising linearly to 2e-4 over five epochs and decaying to 0 by epoch 60." src="loss_curve_light.png" width="720">
 </picture>
 
 `plot_loss_curve.py --run sweep/D --out loss_curve --title "Shipped model (run D): training history"`
 draws this figure from the run's `ms2_history.tsv` (step 9 of `run_ms2hcd.sh`). "Validation" is
-`ai.py`'s internal split, not the held-out test set.
+`ai.py`'s internal split, not the held-out test set. The learning-rate panel plots the `lr` that
+`ai.py` records after each epoch, which is the rate set for the next epoch (epoch 1 trains at 0).
 
 ### Why train on every spectrum (control D0)
 
@@ -171,8 +177,9 @@ or not):
 | length above 35 | 348 | 0.8994 | 0.8459 |
 | length below 7 | 406 | 0.9542 | 0.9469 |
 
-Training on the spectra outside the default range costs nothing inside it and makes
-the model usable beyond it, for example with a wider `-max_pep_charge` or `-maxLength`.
+Training on the spectra outside the default range did not lower the median SA inside it (0.9410
+against 0.9409) and raised it in every row outside it, which matters for libraries built with, for
+example, a wider `-max_pep_charge` or `-maxLength`.
 
 ### Shipped model
 
@@ -197,23 +204,21 @@ of their own (`evaluate_heldout.py --nce`):
 | NCE 27 (Carafe's default) | 0.8574 | 0.8883-0.9437 | 0.7593-0.7614 |
 
 The model file is not kept in git. The build copies `models/ms2tmt.pt` into the distribution
-(`target/carafe-<version>/models/`), where `-ms2_model tmt` finds it, and it is published as a
-release asset.
+(`target/carafe-<version>/models/`), where `-ms2_model tmt` finds it.
 
-## Comparison with Prosit TMT
+## Comparison with Prosit_2020_intensity_TMT (Koina)
 
-`compare_prosit_tmt.py` scores Prosit_2020_intensity_TMT, served by the public
-[Koina](https://koina.wilhelmlab.org) server, on the same held-out set (step 10). Koina's Prosit
-takes peptides of up to 30 residues at precursor charge 1-6, so all models are compared on the
-29,020 held-out spectra inside that range (it accepted the shortest peptides too, including 406
-spectra of 6-residue peptides). Every model is scored on the same four columns (b and y at
+`compare_prosit_tmt.py` scores Prosit_2020_intensity_TMT (called Prosit below), served by the
+public [Koina](https://koina.wilhelmlab.org) server, on the same held-out set (step 10). Koina
+accepts peptides of up to 30 residues at precursor charge 1-6 for this model, so all models are
+compared on the 29,020 held-out spectra inside that range (it accepted the shortest peptides too,
+including 406 spectra of 6-residue peptides). Every model is scored on the same four columns (b and y at
 fragment charge 1-2, the ions the held-out set holds); Prosit's fragment-charge-3 outputs are
 dropped. SA and COS are computed exactly as above; PCC and SPC here leave out the all-zero
 neutral-loss columns that `evaluate_heldout.py` also counts, so they differ slightly from the
 tables above.
 
-Prosit expects a calibrated collision energy, which need not equal the NCE recorded in the file. It
-is therefore scored twice: at each spectrum's recorded NCE, and at the recorded NCE plus one offset
+Prosit is scored twice: at each spectrum's recorded NCE, and at the recorded NCE plus one offset
 per instrument, chosen from -6 to +6 by median SA on 1,000 training spectra per instrument (never on
 the held-out set):
 
@@ -222,9 +227,8 @@ the held-out set):
 | Lumos | 0.6617 | 0.6773 | 0.6989 | 0.7272 | 0.7539 | 0.7730 | 0.7845 | 0.7975 | **0.8051** | 0.7964 | 0.7805 | 0.7668 | 0.7494 |
 | Q Exactive | 0.5625 | 0.5784 | 0.5964 | 0.6171 | 0.6460 | 0.6695 | 0.6869 | 0.7058 | 0.7248 | 0.7564 | 0.7879 | 0.8047 | **0.8070** |
 
-For Q Exactive the best offset is at the edge of the searched range, still rising slightly, so a
-larger offset might score a little higher; the Q Exactive figures for calibrated Prosit below may
-slightly understate it.
+For Q Exactive the best offset, +6, is at the edge of the searched range, and median SA was still
+rising there (0.8047 at +5, 0.8070 at +6); larger offsets were not tried.
 
 On the held-out spectra (median SA; Carafe models at the recorded NCE, which is what they were
 trained on):
@@ -244,9 +248,9 @@ trained on):
 
 (The 7 held-out spectra at precursor charge 1 are left out of this table.)
 
-The shipped model was trained on spectra from the same library (not on these peptides), while
-Prosit was trained on other data, so part of the gap is the match between training and test data
-rather than the model.
+The shipped model was trained on spectra from the same library as the held-out set (not on the
+held-out peptides). We have not checked whether the model Koina serves as Prosit_2020_intensity_TMT
+is the model described in the Prosit-TMT paper, or what it was trained on.
 
 Four held-out spectra, one per precursor charge 2-5, picked at random with a fixed seed. The top of
 each panel is the observed spectrum with every peak from the library; the bottom is the prediction:
@@ -285,22 +289,23 @@ Wall-clock time of each step: download, check and unpack 2 min (the download 54 
 evaluation 11 s; training as listed above (the whole sweep, including scoring, 2 h 38 min);
 predicting and scoring the held-out set takes 2-3 s per model; the fixed-NCE scores and the figure
 for the selected run 53 s; the Prosit comparison about 10 min, almost all of it waiting for Koina
-(calibration 2 min, held-out predictions 7 min, four requests at a time), which depends on the
-load of the public server.
+(calibration 2 min, held-out predictions 7 min, four requests at a time).
 
 ## Reproduce
 
 ```bash
-WORK=/path/to/workdir PY=/path/to/python ./run_ms2hcd.sh     # ~10 GB in $WORK
+WORK=/path/to/workdir PY=/path/to/python ./run_ms2hcd.sh     # about 11 GB in $WORK
 ```
 
 `PY` is a Python with PyTorch, peptdeep and alphabase (the environment Carafe uses for its models)
 and matplotlib (for the figures). Step 10 sends the held-out peptides and 2,000 training peptides
-(all public library entries) to the public Koina server, so it needs internet access. Every step that takes more than a few seconds
-is skipped when its output is complete, so an interrupted run resumes; recording the environment,
-drawing the loss curve and the model checksum are quick and always re-run. `SWEEP_ONLY=A` trains
-only some rows of `tune_configs.tsv`; `SELECTED=D` names the run scored at fixed NCEs, plotted and
-compared with Prosit (the default); `DEVICE=cpu` works without a GPU but is much slower.
+(all public library entries) to the public Koina server, so it needs internet access. The archive
+is downloaded and extracted only if missing; steps 2-5, 7 and 10, each finished run of step 8 and
+each fixed-NCE score of step 9 are skipped when their output is complete, so an interrupted run
+resumes; the archive's SHA-256, recording the environment, drawing the loss curve and the model
+checksum always re-run. `SWEEP_ONLY=A` trains only some rows of `tune_configs.tsv`; `SELECTED=D`
+names the run scored at fixed NCEs, plotted and compared with Prosit (the default); `DEVICE`
+(default `gpu`) is passed to training and scoring as `--device`.
 
 On Windows, a CUDA process started seconds after another one exits occasionally died at start-up
 with a native error (0xC0000409) and no Python traceback. `run_sweep.py` therefore waits 15 s
@@ -320,20 +325,22 @@ the same data and seeds, so it redoes the same work.
 | `tune_configs.tsv`, `run_sweep.py` | the tuning runs, with timing and held-out scores |
 | `evaluate_heldout.py` | scores any model on the held-out set, optionally at one fixed NCE |
 | `plot_loss_curve.py` | draws `loss_curve_light.png` / `loss_curve_dark.png` from a run's history |
-| `compare_prosit_tmt.py` | Prosit TMT via Koina: NCE calibration, held-out scores, `mirror_light.png` / `mirror_dark.png` |
+| `compare_prosit_tmt.py` | Prosit_2020_intensity_TMT via Koina: NCE calibration, held-out scores, `mirror_light.png` / `mirror_dark.png` |
 | `environment.py` | records hardware and software |
 | `test_ms2hcd_tools.py` | unit tests (`python -m pytest test_ms2hcd_tools.py`) |
 
 ## Limitations
 
-- **HCD, Orbitrap MS/MS only**, at NCE 30, 31, 32, 37 and 38. Predictions at other energies are
-  extrapolations; Carafe warns when the bundled model is used outside 30-38.
+- **HCD, Orbitrap MS/MS only**, at NCE 30, 31, 32, 37 and 38; the model was not trained at other
+  energies. When `-ms2_model` names the bundled model, Carafe warns at library prediction time if
+  the NCE is outside 30-38 (unless the model directory holds a fine-tuned `ms2_model.pt`).
 - **Fragment intensities only.** The library has no retention times, so no TMT retention-time
   model can be trained from it.
-- **Selected spectra.** NIST keeps the best-scoring spectrum per peptide ion, which favours clean
-  spectra.
-- **TMT6plex/TMT11 data.** TMTpro peptides are predicted by the same model with TMTpro masses.
+- **Selected spectra.** The library holds a single spectrum for each peptide ion, which NIST
+  selected based on score and its number of a, b and y ion assignments.
+- **TMT6plex only.** The model was trained on TMT6plex-labelled peptides only; for TMTpro, the same
+  model is used with TMTpro as the modification.
 - **Few very highly charged spectra.** Precursor charge 5 and above is 2.9% of the library (17,394
-  spectra), so the model is weaker there (median SA 0.8879 at charge 6).
+  spectra), and the held-out median SA is lower there (0.9040 at charge 5, 0.8879 at charge 6).
 - Fragment ions above charge 2 (2.5% of the library's clean backbone ions), neutral losses, a ions,
   internal and immonium ions and reporter ions are not modelled.

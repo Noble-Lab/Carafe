@@ -82,6 +82,12 @@ def main(argv=None):
         action="store_true",
         help="Random initialization. Not recommended: starting from the generic model converges faster.",
     )
+    parser.add_argument(
+        "--valid-dir",
+        default=None,
+        help="Optional validation set (psm_pdv.txt + fragment_intensity_df.tsv). Then ai.py trains on "
+        "all of --in-dir and validates on this set, instead of splitting --in-dir itself.",
+    )
     parser.add_argument("--no-early-stop", action="store_true")
     parser.add_argument(
         "--force-use-finetuned",
@@ -95,10 +101,11 @@ def main(argv=None):
 
     if not os.path.exists(args.ai_py):
         raise SystemExit(f"ai.py not found at {args.ai_py}")
-    for required in ("psm_pdv.txt", "fragment_intensity_df.tsv"):
-        path = os.path.join(args.in_dir, required)
-        if not os.path.exists(path):
-            raise SystemExit(f"missing training input {path}")
+    for directory in [args.in_dir] + ([args.valid_dir] if args.valid_dir else []):
+        for required in ("psm_pdv.txt", "fragment_intensity_df.tsv"):
+            path = os.path.join(directory, required)
+            if not os.path.exists(path):
+                raise SystemExit(f"missing training input {path}")
     # ai.py skips a starting checkpoint that does not exist and trains from the generic model
     # instead, without an error; a typo here would otherwise go unnoticed.
     if args.ms2_model and not os.path.isfile(args.ms2_model):
@@ -133,6 +140,8 @@ def main(argv=None):
         cmd += ["--threads", str(args.threads)]
     if args.ms2_model:
         cmd += ["--ms2_model", args.ms2_model]
+    if args.valid_dir:
+        cmd += ["--valid_dir", args.valid_dir]
     if args.from_scratch:
         cmd.append("--from_scratch")
 
