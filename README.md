@@ -2,6 +2,8 @@
 
 ![Downloads](https://img.shields.io/github/downloads/Noble-Lab/Carafe/total.svg) ![Release](https://img.shields.io/github/release/Noble-Lab/Carafe.svg)![Downloads](https://img.shields.io/github/downloads/Noble-Lab/Carafe/latest/total)
 
+<img src="src/main/resources/carafe-icon.png" alt="FDRBench" width="20%">
+
 **Carafe2** is a deep learning-based tool for generating experiment-specific *in silico* spectral libraries for DIA data analysis. It does this by directly training retention time (RT), fragment ion intensity, and, for timsTOF DIA, ion mobility prediction models on DIA data acquired under the experimental conditions of interest. Carafe2 has been tested on DIA data generated from Thermo Fisher Scientific, SCIEX, and Bruker MS instruments. More details about how Carafe2 works are provided in the following manuscript:
 
 Wen, B., Hsu, C., Shteynberg, D. et al. [Carafe enables high quality *in silico* spectral library generation for data-independent acquisition proteomics](https://doi.org/10.1038/s41467-025-64928-4). **Nat Commun** 16, 9815 (2025). 
